@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local-only E2E update feed. mode: corrupt, valid, unavailable, malformed.
+"""Local-only E2E update feed. mode: corrupt, valid, current, unavailable, malformed.
 With regular Voicemore quit, launch the prepared fixture; check/install from Home.
 Corrupt must fail without changing the installed binary. Set mode to valid and
 retry: the client must install the signed real build and restart as that version.
@@ -22,6 +22,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         manifest = json.loads(MANIFEST.read_text())
         if self.path == '/update-darwin-arm64.json':
+            if mode == 'current':
+                manifest['version'] = '0.2.9'
             manifest['url'] = 'http://127.0.0.1:48139/archive.tar.gz'
             body = b'not json' if mode == 'malformed' else json.dumps(manifest).encode()
             self.send_response(200)
@@ -41,7 +43,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                             data = bytes([data[0] ^ 1]) + data[1:]
                         first = False
                         self.wfile.write(data)
-                        time.sleep(0.03)
+                        time.sleep(0.3)
             except (BrokenPipeError, ConnectionResetError):
                 pass  # Expected when the user cancels a transfer.
         else:

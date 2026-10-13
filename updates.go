@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,6 +38,7 @@ func (a *app) startUpdates(dir string) {
 	mygo.App.OnNotificationClick(func(id string) {
 		if id == "voicemore-update" {
 			a.main.goTo("home")
+			a.main.updateOpen = true
 			a.main.show()
 		}
 	})
@@ -195,40 +197,110 @@ exec /usr/bin/open -n "$bundle"
 	mygo.App.Quit()
 }
 
+// updatePresentation keeps the header short; explanations belong in the popover.
+func (m *mainWindow) updatePresentation() (string, string, string) {
+	u := &m.a.updates
+	switch {
+	case u.status == "updateRestarting":
+		return T("updateRestartShort"), T("updateRestartShort"), T("updateRestarting")
+	case u.installing && u.total > 0 && u.downloaded >= u.total:
+		return T("updateVerifyShort"), T("updateVerifyShort"), T("updateVerifyNote")
+	case u.installing:
+		label := T("updateDownloadShort")
+		if u.total > 0 {
+			label = fmt.Sprintf("%s %d%%", label, min(int64(99), 100*u.downloaded/u.total))
+		}
+		return label, T("updateDownloadShort"), T("updatePauseNote")
+	case u.checking:
+		return "", T("updateChecking"), T("updateAutoNote")
+	case u.status == "updateCheckFailed" || u.status == "updateInstallFailed" || u.status == "updateRestartFailed":
+		return T("updateAttention"), T("updateAttention"), T(u.status)
+	case u.available != nil:
+		detail := T("updateReadyNote")
+		if m.a.updateBusy() {
+			detail = T("updateBusy")
+		}
+		if u.status == "updateCancelled" {
+			detail = T("updateCancelled")
+		}
+		return T("updateNewShort"), T("updateFound", u.available.Version), detail
+	case u.status == "updateUnavailable":
+		return "", T("updateCheck"), T("updateUnavailable")
+	case u.status == "updateCurrent":
+		return "", T("updateCurrent"), T("updateAutoNote")
+	default:
+		return "", T("updateCheck"), T("updateAutoNote")
+	}
+}
+
 func (m *mainWindow) updateView(c *ui.Context) {
 	u := &m.a.updates
 	t := c.Theme()
-	ui.Column(c.Key("updates")).Gap(8).Children(func() {
-		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-			ui.Text(c, "Voicemore "+mygo.App.Version()).FontSize(13).TextColor(t.TextMuted).Grow(1)
-			if u.available != nil {
-				ui.Text(c, T("updateFound", u.available.Version)).FontSize(13).FontWeight(600)
-				if ui.Button(c.Key("install"), T("updateInstall")).Disabled(u.installing || u.checking || m.a.updateBusy()).Clicked() {
+	label, title, note := m.updatePresentation()
+	color := t.TextMuted
+	if u.available != nil || u.installing {
+		color = t.Accent
+	}
+	if u.detail != "" {
+		color = t.Warning
+	}
+	anchor := ui.Button(c.Key("update-trigger"), "").Label(T("updateCheck")).Tooltip(title).
+		Padding(5, 9).Radius(8).BorderWidth(0).TextColor(color).Children(func() {
+		if u.checking || u.installing {
+			ui.Spinner(c).Size(14, 14)
+		} else {
+			ui.Icon(c, icRefresh).FontSize(14).TextColor(color)
+		}
+		if label != "" {
+			ui.Text(c, label).FontSize(12).TextColor(color).SingleLine()
+		}
+	})
+	if anchor.Clicked() {
+		m.updateOpen = !m.updateOpen
+	}
+	ui.Popover(c.Key("update-panel"), anchor, &m.updateOpen, func() {
+		ui.Column(c).Width(300).Gap(14).Padding(8).Children(func() {
+			ui.Row(c).AlignItems(ui.Center).Children(func() {
+				ui.Text(c, title).FontSize(15).FontWeight(600).Grow(1)
+				if iconButton(c, icClear, T("updateClose")).Clicked() {
+					m.updateOpen = false
+				}
+			})
+			ui.Text(c, T("updateVersion", mygo.App.Version())).FontSize(11).TextColor(t.TextMuted)
+			ui.Text(c, note).FontSize(12).TextColor(t.TextMuted)
+			if u.installing && u.status != "updateRestarting" {
+				progress := -1.0
+				if u.total > 0 {
+					progress = min(1.0, float64(u.downloaded)/float64(u.total))
+				}
+				ui.Progress(c, progress)
+			}
+			if u.detail != "" {
+				// Technical diagnostics remain available without crowding the main page.
+				ui.Text(c, T("updateErrorDetails")).FontSize(11).TextColor(t.TextMuted).Tooltip(u.detail)
+			}
+			switch {
+			case u.status == "updateRestartFailed":
+				if ui.PrimaryButton(c, T("updateRestartAction")).Clicked() {
+					u.installing, u.status, u.detail = true, "updateRestarting", ""
+					m.a.bindTrigger()
+					m.a.restartAfterUpdate()
+				}
+			case u.installing:
+				if u.cancel != nil && (u.total <= 0 || u.downloaded < u.total) {
+					if ui.Button(c, T("updateCancel")).Clicked() {
+						u.cancel()
+					}
+				}
+			case u.available != nil && u.status != "updateCheckFailed":
+				if ui.PrimaryButton(c, T("updateInstall")).Disabled(u.checking || m.a.updateBusy()).Clicked() {
 					m.a.installUpdate()
 				}
-			} else {
-				if ui.Button(c.Key("check"), T("updateCheck")).Disabled(u.checking || u.installing).Clicked() {
+			default:
+				if ui.Button(c, T("updateCheck")).Disabled(u.checking).Clicked() {
 					m.a.checkUpdates()
 				}
 			}
 		})
-		if u.status != "" && u.status != "updateAvailable" {
-			status := T(u.status)
-			if u.status == "updateDownloading" && u.total > 0 {
-				status = T("updateProgress", 100*u.downloaded/u.total)
-			}
-			ui.Text(c, status).FontSize(12).TextColor(t.TextMuted)
-		}
-		if u.available != nil && !u.installing && m.a.updateBusy() {
-			ui.Text(c, T("updateBusy")).FontSize(12).TextColor(t.TextMuted)
-		}
-		if u.detail != "" {
-			ui.Text(c, u.detail).FontSize(11).TextColor(t.TextMuted)
-		}
-		if u.installing && u.cancel != nil {
-			if ui.Button(c.Key("cancel"), T("updateCancel")).Clicked() {
-				u.cancel()
-			}
-		}
 	})
 }

@@ -85,8 +85,6 @@ func (m *mainWindow) homeView(c *ui.Context) {
 				ui.Box(c).Size(146, 34).Draw(drawPillPreview)
 			})
 
-			m.updateView(c)
-
 			// What is set up; each row opens its part of the settings.
 			ui.Column(c.Key("setup")).Children(func() {
 				ui.Text(c, T("homeSetup")).FontSize(12).FontWeight(600).TextColor(t.TextMuted).Padding(0, 0, 4)

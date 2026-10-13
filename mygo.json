@@ -1,7 +1,7 @@
 {
   "name": "Voicemore",
   "identifier": "dev.steve.voice-input",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "out": "build",
   "macos": {
     "infoPlist": {

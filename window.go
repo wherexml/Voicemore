@@ -13,13 +13,14 @@ import (
 // dictionary. Settings are a window of their own (prefs.go), opened from
 // the rail's last icon. Its fields are read and written on the main thread.
 type mainWindow struct {
-	a        *app
-	win      *mygo.Window
-	page     string      // "home", "history" or "dict"
-	loadErrs [][2]string // what could not be read at launch: text key, cause
-	status   func() string
-	busy     func() string // the rerun in progress, if any
-	starting bool          // the 3-second countdown before a dictation
+	a          *app
+	win        *mygo.Window
+	page       string      // "home", "history" or "dict"
+	loadErrs   [][2]string // what could not be read at launch: text key, cause
+	status     func() string
+	busy       func() string // the rerun in progress, if any
+	updateOpen bool
+	starting   bool // the 3-second countdown before a dictation
 
 	// History.
 	query       string
@@ -164,9 +165,12 @@ func (m *mainWindow) view(c *ui.Context) {
 		})
 
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			// The header is the page's title, and nothing else.
-			ui.Row(c).Height(52).Padding(0, 28).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).DragWindow().Children(func() {
-				ui.Text(c, T(pageTitles[m.page])).FontSize(15).FontWeight(600)
+			// Update details live in a popover so the page stays focused.
+			ui.Row(c).Height(52).Padding(0, 28).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).AlignItems(ui.Center).Children(func() {
+				ui.Row(c).Grow(1).Height(52).AlignItems(ui.Center).DragWindow().Children(func() {
+					ui.Text(c, T(pageTitles[m.page])).FontSize(15).FontWeight(600)
+				})
+				m.updateView(c)
 			})
 			m.problems(c)
 			ui.Column(c.Key("page-" + m.page)).Grow(1).MinHeight(0).Children(func() {

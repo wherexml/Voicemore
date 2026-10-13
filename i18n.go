@@ -123,6 +123,19 @@ func rootCause(err error) string {
 // Simplified Chinese. The keys of internal/session's messages are here
 // under the same names.
 var texts = map[string][3]string{
+	"updateNewShort":      {"Update available", "有新版本", "有新版本"},
+	"updateDownloadShort": {"Downloading", "下載中", "下载中"},
+	"updateVerifyShort":   {"Installing", "安裝中", "安装中"},
+	"updateVerifyNote":    {"Download complete. Verifying and installing the update…", "下載完成，正在驗證並安裝更新…", "下载完成，正在验证并安装更新…"},
+	"updateRestartShort":  {"Restarting", "正在重新啟動", "正在重启"},
+	"updateRestartAction": {"Restart now", "立即重新啟動", "立即重启"},
+	"updateAttention":     {"Update needs attention", "更新遇到問題", "更新遇到问题"},
+	"updateAutoNote":      {"Voicemore checks automatically and lets you know when an update is available.", "Voicemore 會自動檢查，有新版本時會在此提醒。", "Voicemore 会自动检查，有新版本时会在此提醒。"},
+	"updateReadyNote":     {"Install with one click. Voicemore will restart automatically; your settings and history stay with you.", "一鍵安裝後會自動重新啟動，保留設定與歷史記錄。", "一键安装后会自动重启，保留设置与历史记录。"},
+	"updatePauseNote":     {"Dictation is paused during the update. Voicemore will restart when it is ready.", "更新期間暫停聽寫，完成後會自動重新啟動。", "更新期间暂停听写，完成后会自动重启。"},
+	"updateVersion":       {"Current version %s", "目前版本 %s", "当前版本 %s"},
+	"updateClose":         {"Close update panel", "關閉更新面板", "关闭更新面板"},
+	"updateErrorDetails":  {"Hover for error details", "移至此處查看錯誤詳情", "悬停查看错误详情"},
 	"updateRestartFailed": {"Update installed. Quit and reopen Voicemore to finish.", "更新已安裝，請退出並重新開啟 Voicemore。", "更新已安装，请退出并重新打开 Voicemore。"},
 	"updateCheck":         {"Check for Updates", "檢查更新", "检查更新"},
 	"updateInstall":       {"Update & Restart", "更新並重新啟動", "一键更新并重启"},

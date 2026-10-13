@@ -417,7 +417,12 @@ func (a *app) setMenu() {
 			a.setMenu()
 		}},
 		mygo.Separator(),
-		{Label: T("updateCheck"), Click: func(*mygo.MenuItem, *mygo.Window) { a.main.goTo("home"); a.main.show(); a.checkUpdates() }},
+		{Label: T("updateCheck"), Click: func(*mygo.MenuItem, *mygo.Window) {
+			a.main.goTo("home")
+			a.main.updateOpen = true
+			a.main.show()
+			a.checkUpdates()
+		}},
 		{Label: T("trayOpen"), Click: func(*mygo.MenuItem, *mygo.Window) { a.main.show() }},
 		mygo.Separator(),
 		{Role: mygo.RoleQuit},
