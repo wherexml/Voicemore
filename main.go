@@ -29,6 +29,7 @@ import (
 // app is the state of the process. The windows' views read it on the main
 // thread; goroutines change what the views read through Window.Update.
 type app struct {
+	updates  updateState
 	localASR *localasr.Manager
 	settings *config.Store
 	vault    *secrets.Store
@@ -195,7 +196,15 @@ func main() {
 		return // the instance already running keeps the trigger key
 	}
 	mygo.App.OnWindowAllClosed(func() {}) // closing the window leaves dictation running
-	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { a.quitting = true })
+	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
+		if a.updates.installing && !a.updates.restarting {
+			e.PreventDefault()
+			a.main.goTo("home")
+			a.main.show()
+			return
+		}
+		a.quitting = true
+	})
 	mygo.App.WhenReady(a.ready)
 	if err := mygo.App.Run(); err != nil {
 		log.Fatal(err)
@@ -284,6 +293,7 @@ func (a *app) ready() {
 		a.tray.Destroy()
 	})
 
+	a.startUpdates(dir)
 	a.purge()
 	go func() {
 		for range time.Tick(6 * time.Hour) {
@@ -364,6 +374,9 @@ func (a *app) bindTrigger() {
 		a.stopHotkey = nil
 	}
 	a.triggerErr = ""
+	if a.updates.installing {
+		return
+	}
 	key := a.settings.Get().TriggerKey
 	if macos.IsModifierKey(key) {
 		macos.InputMonitoringGranted(true)
@@ -394,12 +407,17 @@ func (a *app) bindTrigger() {
 // setMenu builds the tray's menu, again whenever what it shows changes.
 func (a *app) setMenu() {
 	a.tray.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
-		{Label: T("trayToggle"), Click: func(*mygo.MenuItem, *mygo.Window) { go a.ctrl.Toggle() }},
+		{Label: T("trayToggle"), Click: func(*mygo.MenuItem, *mygo.Window) {
+			if !a.updates.installing {
+				go a.ctrl.Toggle()
+			}
+		}},
 		{Label: T("trayCleanup"), Type: mygo.MenuItemCheckbox, Checked: a.ctrl.CleanupNext(), Click: func(*mygo.MenuItem, *mygo.Window) {
 			a.ctrl.SetCleanupNext(!a.ctrl.CleanupNext())
 			a.setMenu()
 		}},
 		mygo.Separator(),
+		{Label: T("updateCheck"), Click: func(*mygo.MenuItem, *mygo.Window) { a.main.goTo("home"); a.main.show(); a.checkUpdates() }},
 		{Label: T("trayOpen"), Click: func(*mygo.MenuItem, *mygo.Window) { a.main.show() }},
 		mygo.Separator(),
 		{Role: mygo.RoleQuit},

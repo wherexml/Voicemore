@@ -22,6 +22,7 @@ app="$install_dir/Voicemore.app"
 codesign --verify --deep --strict "$app" 2> "$evidence/signature.txt"
 [ "$(lipo -archs "$app/Contents/MacOS/Voicemore")" = arm64 ]
 [ "$(plutil -extract CFBundleName raw "$app/Contents/Info.plist")" = Voicemore ]
+[ "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$(plutil -extract version raw mygo.json)" ]
 [ "$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")" = 26.2 ]
 expected=$(tr -d '\r\n' < internal/localasr/assets/runtime.sha256)
 actual=$(shasum -a 256 "$app/Contents/Resources/local-asr/runtime.tar.gz" | awk '{print $1}')

@@ -123,6 +123,22 @@ func rootCause(err error) string {
 // Simplified Chinese. The keys of internal/session's messages are here
 // under the same names.
 var texts = map[string][3]string{
+	"updateRestartFailed": {"Update installed. Quit and reopen Voicemore to finish.", "更新已安裝，請退出並重新開啟 Voicemore。", "更新已安装，请退出并重新打开 Voicemore。"},
+	"updateCheck":         {"Check for Updates", "檢查更新", "检查更新"},
+	"updateInstall":       {"Update & Restart", "更新並重新啟動", "一键更新并重启"},
+	"updateFound":         {"Version %s available", "有新版本 %s", "发现新版本 %s"},
+	"updateChecking":      {"Checking for updates…", "正在檢查更新…", "正在检查更新…"},
+	"updateCurrent":       {"You are up to date.", "已是最新版本。", "已是最新版本。"},
+	"updateUnavailable":   {"Install the app in a writable Applications folder to enable updates. Development builds cannot update.", "請將應用安裝到可寫入的應用程式資料夾。開發版本不支援更新。", "请将应用安装到可写入的 Applications 文件夹。开发版本不支持更新。"},
+	"updateCheckFailed":   {"Could not check for updates. Try again.", "無法檢查更新，請重試。", "无法检查更新，请重试。"},
+	"updateBusy":          {"Finish dictation or model setup before updating.", "請在聽寫或模型部署完成後更新。", "请在听写或模型部署完成后更新。"},
+	"updateDownloading":   {"Downloading and verifying update… Dictation is paused.", "正在下載並驗證更新…聽寫已暫停。", "正在下载并验证更新…听写已暂停。"},
+	"updateProgress":      {"Downloading update: %d%% · Dictation paused", "正在下載更新：%d%% · 聽寫已暫停", "正在下载更新：%d%% · 听写已暂停"},
+	"updateInstallFailed": {"Update failed. Your current app is still available; retry below.", "更新失敗，目前版本仍可使用，請重試。", "更新失败，当前版本仍可使用，请重试。"},
+	"updateCancelled":     {"Update cancelled.", "已取消更新。", "已取消更新。"},
+	"updateRestarting":    {"Update installed. Restarting when current tasks finish…", "更新已安裝，待目前工作完成後重新啟動…", "更新已安装，当前任务完成后将自动重启…"},
+	"updateCancel":        {"Cancel Update", "取消更新", "取消更新"},
+
 	"builtinAsr":        {"On-device speech", "本機語音模型", "本地语音模型"},
 	"builtinNote":       {"Copy an existing model or download it here. Voicemore manages the runtime and starts it with the app. Works offline after setup.", "複製現有模型或在此下載。Voicemore 管理執行環境，隨軟體啟動，部署後可離線使用。", "复制现有模型或在此下载。Voicemore 管理运行环境，随软件启动，部署后可离线使用。"},
 	"builtinSize":       {"Model: %.2f GB · runtime needs about 0.65 GB more", "模型：%.2f GB · 執行環境另需約 0.65 GB", "模型：%.2f GB · 运行环境另需约 0.65 GB"},

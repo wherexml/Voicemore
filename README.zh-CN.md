@@ -1,7 +1,7 @@
 <p align="center"><img src="resources/icon.png" width="112" alt="Voicemore 图标"></p>
 <h1 align="center">Voicemore</h1>
 <p align="center">自然说话，文字落在光标所在处。</p>
-<p align="center"><a href="README.md">English</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.2.0">下载 Apple Silicon 版</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.0">下载 Apple Silicon 版</a></p>
 
 Voicemore 是原生 macOS 语音输入工具。按下 **Fn** 开始说话，再按一次 **Fn**，识别结果就会写入当前输入框。支持本地识别、云端服务，以及按需使用语言模型整理表达。
 
@@ -9,15 +9,23 @@ Voicemore 是原生 macOS 语音输入工具。按下 **Fn** 开始说话，再�
 
 **需要 Apple Silicon（M 系列）芯片及 macOS 26.2 或更新系统。** 此安装包不支持 Intel Mac。最低系统版本由内置 MLX 运行库决定；已在 macOS 27.0 arm64 验证，其他符合最低要求的系统尚未逐一完成端到端验证。
 
-1. 从 [v0.2.0 发布页](https://github.com/wherexml/Voicemore/releases/tag/v0.2.0)下载 **Voicemore.0.2.0.arm64.dmg**。
+1. 从 [v0.3.0 发布页](https://github.com/wherexml/Voicemore/releases/tag/v0.3.0)下载 **Voicemore-0.3.0-arm64.dmg**。
 2. 打开 DMG，将 **Voicemore 拖到 Applications（应用程序）**。
 3. 推出磁盘映像，从“应用程序”启动 Voicemore。
 4. 在“系统设置 → 隐私与安全性”授予**麦克风、辅助功能、输入监控**权限；授予键盘相关权限后重启应用。
 5. 在“设置 → 模型”管理本地语音模型，选择下载部署；显示“已就绪”后即可在文本编辑器中尝试听写。
 
-**预览版说明：** v0.2.0 使用开发签名，尚未完成 Developer ID 发布签名和 Apple 公证。其他 Mac 首次打开可能被系统拦截。确认下载来源后，可使用系统提供的“隐私与安全性 → 仍要打开”单应用放行流程；不要全局关闭 Gatekeeper。DMG 已支持拖拽安装，但不代表已实现无提示的首次启动。
+**预览版说明：** v0.3.0 使用开发签名，尚未完成 Developer ID 发布签名和 Apple 公证。其他 Mac 首次打开可能被系统拦截。确认下载来源后，可使用系统提供的“隐私与安全性 → 仍要打开”单应用放行流程；不要全局关闭 Gatekeeper。DMG 已支持拖拽安装，但不代表已实现无提示的首次启动。
 
 DMG **包含推理运行环境，不包含模型权重**。首次本地部署会下载约 **2.47 GB** 模型文件，并解压约 **0.65 GB** 运行环境。下载时需要联网，完成后本地识别可离线使用；也可复制已有的兼容模型。云端识别需要自行配置服务商账号、凭证并保持联网。
+
+## 客户端更新
+
+从 **0.3.0** 起，应用会在启动约 10 秒后及运行期间每小时检查 GitHub Release。发现新版时，首页和菜单栏悬停提示会显示版本；每个版本尝试发送一次系统通知，是否展示取决于 macOS 通知权限。
+
+点击首页的 **一键更新并重启**，即可下载更新包、验证 Ed25519 签名、替换应用并自动重启。支持取消下载和失败重试；安装期间暂停听写，避免打断正在进行的听写或模型部署。设置、模型、历史及凭证均保留。应用需要安装在可写入的 Applications 位置，不能直接从只读 DMG 内更新。
+
+**0.2.0 用户需要手动安装一次 0.3.0。** 后续发布必须包含签名更新包及清单，单独上传 DMG 不会触发客户端更新。详见[更新发布流程](docs/public/UPDATES.md)。
 
 ## 功能
 
@@ -62,6 +70,6 @@ SIGNING_IDENTITY=- ./scripts/build-macos.sh
 
 ## 当前状态
 
-这是早期预览版。已在本机验证 DMG 结构、复制安装后的签名、arm64 架构、运行环境校验值和原生应用启动。跨 Mac 的 Gatekeeper／公证、Intel 支持、自动更新及更广泛的应用兼容性尚未完成。
+这是早期预览版。已在本机验证 DMG 结构、复制安装后的签名、arm64 架构、运行环境校验值和原生应用启动。跨 Mac 的 Gatekeeper／公证、Intel 支持及更广泛的应用兼容性尚未完成。
 
 欢迎[提交问题](https://github.com/wherexml/Voicemore/issues)，附上 macOS 版本、芯片和复现步骤。分享日志前请移除录音、转录文字与 API 密钥。

@@ -5,21 +5,21 @@
 ```sh
 ./scripts/fetch-asr-runtime.sh
 SIGNING_IDENTITY='Your full signing identity' ./scripts/build-macos.sh
-./scripts/verify-dmg.sh 'build/darwin-arm64/Voicemore 0.2.0 arm64.dmg'
+./scripts/verify-dmg.sh 'build/darwin-arm64/Voicemore 0.3.0 arm64.dmg'
 ```
 
-Output: `build/darwin-arm64/Voicemore 0.2.0 arm64.dmg` and `SHA256SUMS.txt`.
+Output: `build/darwin-arm64/Voicemore 0.3.0 arm64.dmg` and `SHA256SUMS.txt`.
 The disk image contains `Voicemore.app`, an `/Applications` shortcut, and a Finder icon layout. Drag the app onto that shortcut, eject the image, and launch from Applications.
 
 The verification script mounts the finished DMG read-only, copies the app to a temporary installation directory, checks its signature and arm64 architecture, checks product/minimum-system metadata and the bundled runtime hash, and writes repeatable evidence under `artifacts/dmg-verification/`. It then unmounts the image and removes only its temporary directories. It does not grant permissions, run the app, or access personal settings.
 
-For native end-to-end acceptance, launch the copied app on an Apple Silicon Mac, grant the three documented permissions, deploy the local model, dictate into TextEdit, check history and replay, quit and relaunch. Test the downloaded/quarantined asset on a separate Mac before claiming Gatekeeper acceptance. v0.2.0 has only local native launch validation, not cross-Mac notarized distribution validation.
+For native end-to-end acceptance, launch the copied app on an Apple Silicon Mac, grant the three documented permissions, deploy the local model, dictate into TextEdit, check history and replay, quit and relaunch. Test the downloaded/quarantined asset on a separate Mac before claiming Gatekeeper acceptance. v0.3.0 has only local native launch validation, not cross-Mac notarized distribution validation.
 
 ## Signing
 
 The repository deliberately contains no personal signing identity or notarization credentials. `SIGNING_IDENTITY=-` is an explicit local-only ad-hoc build; a successful signature check does not mean Gatekeeper will accept a public download.
 
-v0.2.0 is an **unnotarized, development-signed preview**. Production distribution needs a usable Developer ID Application identity, hardened-runtime-compatible nested binaries, and a successful Apple notarization/stapling pass. The bundled Python runtime archive is opaque to ordinary app-bundle signing; its extracted executable/native modules must also be audited and signed for a future notarized release. Do not claim notarization based on an app-only signature.
+v0.3.0 is an **unnotarized, development-signed preview**. Production distribution needs a usable Developer ID Application identity, hardened-runtime-compatible nested binaries, and a successful Apple notarization/stapling pass. The bundled Python runtime archive is opaque to ordinary app-bundle signing; its extracted executable/native modules must also be audited and signed for a future notarized release. Do not claim notarization based on an app-only signature.
 
 ## Runtime
 
@@ -40,3 +40,7 @@ This copies the base Python installation and installed packages without changing
 - 当前版本需要 macOS 26.2+，仅在 macOS 27.0 arm64 完成当前本机验收。
 - 当前为开发签名预览版，未完成 Developer ID 签名与 Apple 公证；首次下载后的系统放行不等于签名校验通过。
 - 不把私人验收材料、密钥、配置、录音和模型权重加入 Git。大型运行环境以 Release 附件提供。
+
+## Client updates
+
+From 0.3.0, signed archives and a manifest support in-app updates. See [publishing and E2E acceptance](UPDATES.md). The runtime dependency remains pinned to its original v0.2.0 Release asset.

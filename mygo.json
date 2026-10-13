@@ -1,7 +1,7 @@
 {
   "name": "Voicemore",
   "identifier": "dev.steve.voice-input",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "out": "build",
   "macos": {
     "infoPlist": {
@@ -10,5 +10,10 @@
     "entitlements": "resources/VoiceInput.entitlements",
     "minimumSystemVersion": "26.2"
   },
-  "icon": "resources/icon.png"
+  "icon": "resources/icon.png",
+  "updates": {
+    "publicKey": "HAhH3K2LVrW3z1RllwzPRnQDKsw7sZnKqnaHQLj5IA0=",
+    "github": "wherexml/Voicemore",
+    "deltas": 0
+  }
 }
