@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1
+
+- Move updates to a compact top-right header control on every page.
+- Remove persistent update/version text from the Home body.
+- Add a dismissible panel for available versions, download progress, verification and installation, cancellation, restart and retry.
+- Open update details from system notifications and the menu-bar check action.
+
+更新入口移至右上角，首页不再常驻版本提示。新增紧凑浮层，展示新版本、下载进度、安装、取消、重启及失败重试等状态。
+
 ## 0.3.0
 
 - Check for signed updates at startup and hourly while running.
