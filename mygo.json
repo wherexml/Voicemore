@@ -1,0 +1,14 @@
+{
+  "name": "Voicemore",
+  "identifier": "dev.steve.voice-input",
+  "version": "0.2.0",
+  "out": "build",
+  "macos": {
+    "infoPlist": {
+      "NSMicrophoneUsageDescription": "Voicemore records your speech when you dictate and sends it to the speech recognition service chosen in Settings: the local one on this Mac by default, or a cloud provider you set up and select."
+    },
+    "entitlements": "resources/VoiceInput.entitlements",
+    "minimumSystemVersion": "26.2"
+  },
+  "icon": "resources/icon.png"
+}

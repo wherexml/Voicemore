@@ -1,0 +1,23 @@
+# Builds, local evidence and historical private documentation
+/build/
+/.mygo/
+/artifacts/
+/voiceinput
+/Voicemore
+/mock/
+/docs/*
+!/docs/public/
+# Runtime is a checksummed Release asset, not a Git blob.
+/resources/local-asr/*.tar.gz
+.DS_Store
+.env
+.env.*
+*.pem
+*.p12
+*.p8
+*.key
+*.cer
+credentials/
+settings.json
+history.json
+dictionary.json

@@ -1,0 +1,407 @@
+// Voicemore is a local dictation tool for macOS: the Fn key starts a
+// recording in any app, the local ASR service transcribes it, and the text
+// goes where the keyboard focus was. See docs/requirements.md for what it
+// is to do and docs/implementation.md for what this version does.
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/egoist/mygo"
+
+	"voiceinput/internal/asr"
+	"voiceinput/internal/cleanup"
+	"voiceinput/internal/config"
+	"voiceinput/internal/dict"
+	"voiceinput/internal/localasr"
+	"voiceinput/internal/macos"
+	"voiceinput/internal/providers"
+	"voiceinput/internal/secrets"
+	"voiceinput/internal/session"
+	"voiceinput/internal/store"
+)
+
+// app is the state of the process. The windows' views read it on the main
+// thread; goroutines change what the views read through Window.Update.
+type app struct {
+	localASR *localasr.Manager
+	settings *config.Store
+	vault    *secrets.Store
+	history  *store.Store
+	dict     *dict.Dict
+	ctrl     *session.Controller
+
+	tray     *mygo.Tray
+	overlay  *overlay
+	main     *mainWindow
+	quitting bool
+
+	// stopHotkey ends the current trigger, and triggerErr says why there
+	// is none.
+	stopHotkey func()
+	triggerErr string
+
+	// The credentials, as read from the app's encrypted local store: the local
+	// cleanup key and those of the providers, by account. They are held
+	// here for the life of the process and persisted only in that encrypted store.
+	keyMu      sync.Mutex
+	cleanupKey string
+	secrets    map[string]string
+	keyErr     string // why the key is not in the encrypted credential store, if it is not
+
+	prefs *prefsWindow
+}
+
+// secret returns the credential of an encrypted credential store account, or "".
+func (a *app) secret(account string) string {
+	a.keyMu.Lock()
+	defer a.keyMu.Unlock()
+	if account == cleanupKeyAccount {
+		return a.cleanupKey
+	}
+	return a.secrets[account]
+}
+
+// setSecret stores a credential in the encrypted credential store, or removes it when empty.
+// If the encrypted credential store refuses, the value still serves until the app quits, and
+// the error says it was not stored. Nothing is written to settings.json.
+func (a *app) setSecret(account, value string) error {
+	if account == cleanupKeyAccount {
+		return a.storeKey(value)
+	}
+	var err error
+	if value == "" {
+		err = a.vault.Delete(account)
+	} else {
+		err = a.vault.Set(account, value)
+	}
+	a.keyMu.Lock()
+	if a.secrets == nil {
+		a.secrets = map[string]string{}
+	}
+	a.secrets[account] = value
+	a.keyMu.Unlock()
+	return err
+}
+
+// loadSecrets reads the providers' credentials. A failure to read one
+// leaves it empty: its provider then shows as not configured.
+func (a *app) loadSecrets() {
+	found := map[string]string{}
+	for _, account := range providers.Accounts(a.settings.Get()) {
+		if v, err := a.vault.Get(account); err == nil && v != "" {
+			found[account] = v
+		}
+	}
+	a.keyMu.Lock()
+	if a.secrets == nil {
+		a.secrets = map[string]string{}
+	}
+	for k, v := range found {
+		if _, typed := a.secrets[k]; !typed {
+			a.secrets[k] = v
+		}
+	}
+	a.keyMu.Unlock()
+	a.refreshAll()
+}
+
+// refreshAll redraws both windows, from any goroutine.
+func (a *app) refreshAll() {
+	a.main.refresh()
+	a.prefs.refresh()
+}
+
+// cleanupKeyAccount names the app's one encrypted credential store item.
+const cleanupKeyAccount = providers.LocalKeyAccount
+
+func (a *app) key() string {
+	a.keyMu.Lock()
+	defer a.keyMu.Unlock()
+	return a.cleanupKey
+}
+
+// storeKey puts the cleanup key in the encrypted credential store, or removes it when empty.
+// If the encrypted credential store refuses, the key still serves until the app quits, and
+// the error says it was not stored. It is never written to settings.json.
+func (a *app) storeKey(value string) error {
+	var err error
+	if value == "" {
+		err = a.vault.Delete(cleanupKeyAccount)
+	} else {
+		err = a.vault.Set(cleanupKeyAccount, value)
+	}
+	a.keyMu.Lock()
+	a.cleanupKey = value
+	a.keyMu.Unlock()
+	return err
+}
+
+// loadKey reads the key from the encrypted credential store, and moves a plaintext key of an
+// earlier version there. The plaintext is only removed from settings.json
+// once the encrypted credential store holds the same key and gives it back.
+func (a *app) loadKey() {
+	stored, err := a.vault.Get(cleanupKeyAccount)
+	legacy := a.settings.Get().CleanupAPIKey
+	problem := ""
+	switch {
+	case err != nil:
+		problem = T("errKeyRead", err.Error())
+		stored = legacy // serve the dictation with what there is
+	case legacy != "" && stored == "":
+		if err := a.vault.Set(cleanupKeyAccount, legacy); err != nil {
+			problem = T("errKeyMigrate", err.Error())
+		} else if back, err := a.vault.Get(cleanupKeyAccount); err != nil || back != legacy {
+			problem = T("errKeyMigrate", "read-back failed")
+		}
+		stored = legacy
+		fallthrough
+	case legacy != "":
+		if problem == "" {
+			// The encrypted credential store has a key: the plaintext copy can go.
+			s := a.settings.Get()
+			s.CleanupAPIKey = ""
+			if err := a.settings.Set(s); err != nil {
+				problem = T("notSaved", err.Error())
+			}
+		}
+	}
+	a.keyMu.Lock()
+	a.cleanupKey, a.keyErr = stored, problem
+	a.keyMu.Unlock()
+	a.main.refresh()
+}
+
+func main() {
+	a := &app{}
+	mygo.App.SetName("Voicemore")
+	// Keep the existing data location across the product rename: models,
+	// encrypted credentials, history and window state must remain available.
+	dataRoot, err := mygo.App.Path(mygo.PathAppData)
+	if err != nil {
+		log.Fatal("app data directory: ", err)
+	}
+	mygo.App.SetPath(mygo.PathUserData, filepath.Join(dataRoot, "Voice Input"))
+	// An ordinary app: it has a Dock icon and takes part in app switching.
+	// The menu bar item and the trigger key work whether or not its window
+	// is open.
+	mygo.App.SetActivationPolicy(mygo.ActivationPolicyRegular)
+	if !mygo.App.RequestSingleInstanceLock() {
+		return // the instance already running keeps the trigger key
+	}
+	mygo.App.OnWindowAllClosed(func() {}) // closing the window leaves dictation running
+	mygo.App.OnBeforeQuit(func(*mygo.QuitEvent) { a.quitting = true })
+	mygo.App.WhenReady(a.ready)
+	if err := mygo.App.Run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (a *app) ready() {
+	macos.OnMain = mygo.RunOnMain
+
+	// History, audio, dictionary and settings live in the app's data
+	// directory (~/Library/Application Support/…), never in the project.
+	dir, err := mygo.App.Path(mygo.PathUserData)
+	if err == nil {
+		err = os.MkdirAll(dir, 0o700)
+	}
+	if err != nil {
+		setLang(langFor(mygo.App.Locale()))
+		mygo.Dialog.Error("Voicemore", T("errDataDir", err.Error()))
+		mygo.App.Quit()
+		return
+	}
+	// The load errors are kept as keys: the window shows them in the
+	// language current when it draws.
+	var loadErrs [][2]string
+	note := func(what string, err error) {
+		if err != nil {
+			loadErrs = append(loadErrs, [2]string{what, err.Error()})
+		}
+	}
+	a.settings, err = config.Open(dir)
+	note("fileSettings", err)
+	a.vault, err = secrets.Open(dir)
+	note("fileSecrets", err)
+	a.history, err = store.Open(dir)
+	note("fileHistory", err)
+	a.dict, err = dict.Open(dir)
+	note("fileDict", err)
+	a.applyLanguage()
+
+	a.ctrl = &session.Controller{Settings: a.settings, History: a.history, Dict: a.dict}
+	a.ctrl.CopyText = func(s string) { mygo.Clipboard.WriteText(s) }
+	a.ctrl.Tr, a.ctrl.Explain, a.ctrl.CleanupKey = T, explain, a.key
+	// The defaults of Settings → Models decide where a dictation connects.
+	a.ctrl.ResolveASR = func(s config.Settings) (asr.Dialer, error) {
+		if s.ASRAssign.Provider == providers.Local && s.ASRManaged {
+			state := a.localASR.Snapshot()
+			if state.Phase != "ready" {
+				return nil, fmt.Errorf("本地语音模型尚未就绪，请到设置 → 模型启动：%s", state.Detail)
+			}
+			s.ASRURL = localasr.URL
+		}
+		return providers.ASR(s, a.secret)
+	}
+	a.ctrl.ResolveCleanup = func(s config.Settings) (cleanup.Options, error) { return providers.CleanupOptions(s, a.secret) }
+
+	a.tray, err = mygo.NewTray(mygo.TrayOptions{Icon: trayIcon(), IconIsTemplate: true, ToolTip: "Voicemore"})
+	if err != nil {
+		log.Fatal("tray: ", err)
+	}
+	executable, _ := os.Executable()
+	archive := filepath.Join(filepath.Dir(executable), "../Resources/local-asr/runtime.tar.gz")
+	a.localASR = localasr.New(filepath.Join(dir, "local-asr"), archive)
+	a.overlay = newOverlay(a)
+	a.main = newMainWindow(a)
+	a.prefs = newPrefsWindow(a)
+	a.localASR.Changed = a.refreshAll
+	// A click on the Dock icon, or reopening the app, brings the window
+	// back; a second launch does the same in the instance already running.
+	mygo.App.OnActivate(func(bool) { a.main.show() })
+	mygo.App.OnSecondInstance(func([]string, string) { mygo.RunOnMain(a.main.show) })
+	a.ctrl.OnChange = func() {
+		a.overlay.sync()
+		a.main.refresh()
+	}
+	// Local file reads finish before the user can edit credentials.
+	a.loadKey()
+	a.loadSecrets()
+	a.ctrl.OnHistory = a.main.refresh
+	a.setMenu()
+	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
+		a.ctrl.Cancel()
+		a.localASR.Close()
+		if a.stopHotkey != nil {
+			a.stopHotkey()
+		}
+		a.tray.Destroy()
+	})
+
+	a.purge()
+	go func() {
+		for range time.Tick(6 * time.Hour) {
+			a.purge()
+		}
+	}()
+
+	// Always show the control window on launch, including first launch.
+	// A hidden tray-only app otherwise looks as if it failed to start.
+	a.main.show()
+	log.Printf("ready: data=%s", dir)
+	a.bindTrigger()
+	if a.settings.Get().ASRManaged && a.localASR.Snapshot().Installed {
+		a.localASR.Start()
+	}
+	if len(loadErrs) > 0 || a.triggerErr != "" {
+		// Something needs the user: say it in the window.
+		a.main.loadErrs = loadErrs
+		a.main.show()
+	}
+}
+
+// applyLanguage sets the language of the settings, or the system's when
+// none was chosen.
+func (a *app) applyLanguage() {
+	id := a.settings.Get().Language
+	if id == "" {
+		id = mygo.App.Locale()
+	}
+	setLang(langFor(id))
+}
+
+// setLanguage saves the user's choice and redraws everything that shows
+// text, the tray's menu included.
+func (a *app) setLanguage(i int) error {
+	s := a.settings.Get()
+	s.Language = langIDs[i]
+	err := a.settings.Set(s)
+	setLang(i)
+	a.setMenu()
+	a.overlay.sync()
+	a.refreshAll()
+	return err
+}
+
+// setCleanup turns text cleanup on or off, for the next dictations and as
+// the saved default, and brings the tray's menu and both windows in line.
+func (a *app) setCleanup(on bool) {
+	s := a.settings.Get()
+	s.CleanupDefault = on
+	if err := a.settings.Set(s); err != nil {
+		log.Println("settings:", err)
+	}
+	a.ctrl.SetCleanupNext(on)
+	a.setMenu()
+	a.refreshAll()
+}
+
+// purge applies the retention periods of the settings.
+func (a *app) purge() {
+	s := a.settings.Get()
+	if !s.SaveAudio && s.TextRetentionDays == 0 {
+		return
+	}
+	if err := a.history.Purge(s.AudioRetentionDays, s.TextRetentionDays, time.Now()); err != nil {
+		log.Println("purge:", err)
+	}
+	a.main.refresh()
+}
+
+// bindTrigger registers the trigger key of the settings: a modifier key
+// through the event tap, anything else as a global shortcut, which only
+// toggles. A failure is kept for the window to show; no other key is
+// taken in its place, and no system setting is changed.
+func (a *app) bindTrigger() {
+	if a.stopHotkey != nil {
+		a.stopHotkey()
+		a.stopHotkey = nil
+	}
+	a.triggerErr = ""
+	key := a.settings.Get().TriggerKey
+	if macos.IsModifierKey(key) {
+		macos.InputMonitoringGranted(true)
+		stop, err := macos.StartHotkey(key, a.ctrl.KeyDown, a.ctrl.KeyUp, a.ctrl.Cancel)
+		if err != nil {
+			a.triggerErr = err.Error()
+			return
+		}
+		a.stopHotkey = stop
+		return
+	}
+	if err := mygo.GlobalShortcut.Register(key, func() { go a.ctrl.Toggle() }); err != nil {
+		a.triggerErr = T("errShortcut", key, err.Error())
+		return
+	}
+	stopEscape, err := macos.StartHotkey("", nil, nil, a.ctrl.Cancel)
+	if err != nil {
+		a.triggerErr = err.Error()
+	}
+	a.stopHotkey = func() {
+		mygo.GlobalShortcut.Unregister(key)
+		if stopEscape != nil {
+			stopEscape()
+		}
+	}
+}
+
+// setMenu builds the tray's menu, again whenever what it shows changes.
+func (a *app) setMenu() {
+	a.tray.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
+		{Label: T("trayToggle"), Click: func(*mygo.MenuItem, *mygo.Window) { go a.ctrl.Toggle() }},
+		{Label: T("trayCleanup"), Type: mygo.MenuItemCheckbox, Checked: a.ctrl.CleanupNext(), Click: func(*mygo.MenuItem, *mygo.Window) {
+			a.ctrl.SetCleanupNext(!a.ctrl.CleanupNext())
+			a.setMenu()
+		}},
+		mygo.Separator(),
+		{Label: T("trayOpen"), Click: func(*mygo.MenuItem, *mygo.Window) { a.main.show() }},
+		mygo.Separator(),
+		{Role: mygo.RoleQuit},
+	}))
+}
