@@ -9,7 +9,7 @@ Voicemore is a native macOS dictation app. Press **Fn**, speak, and press **Fn**
 
 **Apple Silicon (M-series), macOS 26.2 or later.** Intel Macs are not supported by this package. The current bundled MLX runtime sets the minimum OS requirement. Tested on macOS 27.0 arm64; older supported versions have not yet been tested end to end.
 
-1. Download **Voicemore 0.2.0 arm64.dmg** from [v0.2.0 Releases](https://github.com/wherexml/Voicemore/releases/tag/v0.2.0).
+1. Download **Voicemore.0.2.0.arm64.dmg** from [v0.2.0 Releases](https://github.com/wherexml/Voicemore/releases/tag/v0.2.0).
 2. Open the disk image and drag **Voicemore** onto **Applications**.
 3. Eject the disk image, then open Voicemore from Applications.
 4. Grant **Microphone**, **Accessibility**, and **Input Monitoring** in System Settings → Privacy & Security. Restart after granting keyboard permissions.

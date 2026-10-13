@@ -9,7 +9,7 @@ Voicemore 是原生 macOS 语音输入工具。按下 **Fn** 开始说话，再�
 
 **需要 Apple Silicon（M 系列）芯片及 macOS 26.2 或更新系统。** 此安装包不支持 Intel Mac。最低系统版本由内置 MLX 运行库决定；已在 macOS 27.0 arm64 验证，其他符合最低要求的系统尚未逐一完成端到端验证。
 
-1. 从 [v0.2.0 发布页](https://github.com/wherexml/Voicemore/releases/tag/v0.2.0)下载 **Voicemore 0.2.0 arm64.dmg**。
+1. 从 [v0.2.0 发布页](https://github.com/wherexml/Voicemore/releases/tag/v0.2.0)下载 **Voicemore.0.2.0.arm64.dmg**。
 2. 打开 DMG，将 **Voicemore 拖到 Applications（应用程序）**。
 3. 推出磁盘映像，从“应用程序”启动 Voicemore。
 4. 在“系统设置 → 隐私与安全性”授予**麦克风、辅助功能、输入监控**权限；授予键盘相关权限后重启应用。
