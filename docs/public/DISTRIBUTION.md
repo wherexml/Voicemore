@@ -19,7 +19,7 @@ On a separate Apple Silicon Mac running macOS 26.2, the GitHub DMG checksum matc
 
 `scripts/build-macos.sh` retains the fixed development identity required by AGENTS.md. Do not replace it with Developer ID, ad-hoc signing or another team for local builds.
 
-`scripts/publish-release.sh` currently builds development artifacts only. It now refuses its default invocation; `--development-preview` explicitly publishes a **prerelease**, never the stable/latest release. This prevents repeating the stable-feed mistake; it does not make the preview pass Gatekeeper.
+`scripts/publish-release.sh` defaults to the Developer ID and Apple notarization pipeline. Only explicit `--development-preview` builds a development **prerelease**, never stable/latest. Stable publication fails closed on missing/rejected notarization, invalid tickets, mismatched app/DMG contents, changed candidate source, incomplete cross-Mac E2E, or an incorrect updater key. Existing release assets are never overwritten.
 
 ## Runtime audit (2026-10-14)
 
@@ -68,3 +68,21 @@ MyGo 0.4.8 embeds PNG data in the `icp4` / `icp5` entries of its generated AppIc
 ## Text cleanup acceptance
 
 A clean installation has no preselected cleanup URL/model. The bundled ASR model does not install oMLX or a text model. Enabling cleanup (home, settings, or tray) checks the selected provider and its model list asynchronously before saving the enabled state. Missing configuration, unreachable service, missing model, timeout, or a changed assignment keeps cleanup off without a modal. The home switch stays disabled until background readiness checks pass, and its hover hint explains that the text cleanup model is not configured. The adjacent chevron opens Models directly and clears stale provider dialogs. The redundant on/off text is omitted. Visible switches recheck readiness every 15 seconds and after configuration changes. Previously saved enabled state is rechecked at launch. Listing a model is a connectivity check, not a guarantee that inference succeeds; runtime errors must still preserve original text.
+
+## Default stable release commands
+
+1. Bump `mygo.json` and add release notes in `CHANGELOG.md`.
+2. Run `./scripts/publish-release.sh`. This signs the runtime and app, submits both to Apple, staples the accepted app, builds/signs/notarizes/staples its DMG, and verifies the exact DMG contents. The candidate stays local. Python requires `cryptography` for update signing at publication.
+3. Complete the native acceptance above using that exact DMG. Keep screenshots and reports under `artifacts/`. The JSON report must include `version`, `host`, `dmg_sha256`, and `checks` with true values for `quarantine`, `gatekeeper`, `installed_app_matches`, `launch`, `permissions`, `model`, `dictation`, `history`, and `relaunch`. Record only observed passes and retain the supporting evidence.
+4. Commit the exact candidate source and documentation, then run `./scripts/publish-release.sh --candidate /absolute/candidate-workspace --publish --e2e /absolute/report.json`. This compares the candidate against the committed source (including its file inventory), rechecks Apple status, verifies distribution, packages the final stapled app into the update archive, validates its extracted signature/ticket, signs its digest with the original Ed25519 key, creates a draft GitHub Release and downloads all uploaded assets to compare checksums before setting stable/latest.
+5. Check the public release and latest update manifest. Never publish first and backfill acceptance. If an upload fails, inspect the draft and recover deliberately; do not overwrite a public release.
+
+Transient Apple timestamp failures are retried up to five times without removing the timestamp requirement. An interrupted signing workspace can be resumed with `build-distribution.py --output-parent /absolute/parent --resume /absolute/workspace`; completed candidates cannot be rebuilt in place.
+
+## v0.3.4 distribution acceptance (2026-10-14)
+
+The release app uses committed client source from `33c4b89`, with the version changed to 0.3.4 and distribution-only signing/runtime changes. Concurrent uncommitted client features are excluded. Apple accepted the separately signed runtime, app and DMG; the app and DMG have validated stapled tickets.
+
+On the second Apple Silicon Mac (macOS 26.2), Chrome downloaded the final DMG over HTTPS with its normal quarantine attribute. Finder drag-install replaced the old app. Strict signature verification, Gatekeeper, app/DMG tickets and byte-for-byte installed-app comparison all passed. Gatekeeper remained enabled. The existing local model loaded using the new signed runtime. BlackHole 2ch supplied a synthetic Chinese speech fixture to the real microphone capture path; the transcript was automatically inserted into an empty TextEdit document. History, playback progress, permissions and relaunch were verified. This test used the tray start/stop command, not a physical microphone or a physical Fn key. It reused existing model weights and permissions rather than testing a fresh model download or first-time permission grants.
+
+The exact DMG SHA-256 is `c90fd16ae149f3a6d012c9dffc299e17bbdc4f8745de408971c3309f7f1481c4`. Repeatable steps, native screenshots, browser quarantine evidence, verification logs and the publication gate report are kept locally under `artifacts/release-0.3.4/` and are not committed. The three static website language pages are updated; no production website has been deployed.

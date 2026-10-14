@@ -50,11 +50,11 @@
       "description": "A native macOS dictation app. Press Fn, speak, and press Fn again to insert the transcript into the focused text field. Run speech recognition locally, connect a cloud provider, and optionally tidy your words with a language model.",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "macOS 26.2 or later (Apple Silicon)",
-      "softwareVersion": "0.3.1",
+      "softwareVersion": "0.3.4",
       "inLanguage": "en",
       "image": "assets/icon.png",
-      "downloadUrl": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.1",
-      "releaseNotes": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.1",
+      "downloadUrl": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.4",
+      "releaseNotes": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.4",
       "sameAs": "https://github.com/wherexml/Voicemore"
     },
     {
@@ -71,10 +71,10 @@
         },
         {
           "@type": "Question",
-          "name": "What if macOS blocks the app the first time?",
+          "name": "Is the app notarized by Apple?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "The current preview is development-signed and has not completed Developer ID signing or Apple notarization. After confirming where you downloaded it, use “Open Anyway” in System Settings → Privacy & Security to allow this one app. Do not turn Gatekeeper off globally."
+            "text": "v0.3.4 is Developer ID signed and notarized by Apple. Drag the app to Applications and launch it. Upgrading from a development-signed version may require confirming microphone, Accessibility and Input Monitoring permissions again."
           }
         },
         {
@@ -148,15 +148,15 @@
 
   <section class="hero" id="top">
     <div class="wrap">
-      <p class="eyebrow">A focused, native Mac dictation app · Early preview</p>
+      <p class="eyebrow">A focused, native Mac dictation app · Early release</p>
       <h1>Speak naturally.<br>Text lands at your <em>cursor</em>.</h1>
       <p class="lede">Press <kbd>Fn</kbd> and speak. Press it again, and the transcript is inserted into the field you are using. Voicemore does dictation and nothing else, and it can do all of it on this Mac.</p>
       <ul class="pillars" aria-label="Key points"><li>Offline local recognition once the model is downloaded</li><li>Text cleanup is optional and off by default</li><li>Dictionary corrections apply only after you confirm</li></ul>
       <div class="cta">
-        <a class="btn" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.1" rel="noopener">Download for Apple Silicon</a>
+        <a class="btn" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.4" rel="noopener">Download for Apple Silicon</a>
         <a class="btn ghost" href="#demo">See the demo</a>
       </div>
-      <p class="fine">Early preview v0.3.1 · Requires an M-series chip and macOS 26.2 or later</p>
+      <p class="fine">Early release v0.3.4 · Requires an M-series chip and macOS 26.2 or later</p>
     </div>
   </section>
 
@@ -266,7 +266,7 @@
           <h3>Voicemore</h3>
           <p class="stance">Focused, native Mac dictation</p>
           <ul><li>Offline local recognition once the model is downloaded</li><li>Or connect your own cloud provider account</li><li>Text cleanup is optional and off by default</li><li>Dictionary corrections apply only after you confirm</li></ul>
-          <p class="src">Early preview; Apple Silicon and macOS 26.2 or later only.</p>
+          <p class="src">Early release; Apple Silicon and macOS 26.2 or later only.</p>
         </article>
         <article>
           <h3>Typeless</h3>
@@ -327,8 +327,8 @@
           <p>An Apple Silicon (M-series) chip and macOS 26.2 or later. The current package does not support Intel Macs. The minimum system version is set by the bundled MLX runtime.</p>
         </details>
         <details>
-          <summary>What if macOS blocks the app the first time?</summary>
-          <p>The current preview is development-signed and has not completed Developer ID signing or Apple notarization. After confirming where you downloaded it, use “Open Anyway” in System Settings → Privacy & Security to allow this one app. Do not turn Gatekeeper off globally.</p>
+          <summary>Is the app notarized by Apple?</summary>
+          <p>v0.3.4 is Developer ID signed and notarized by Apple. Drag the app to Applications and launch it. Upgrading from a development-signed version may require confirming microphone, Accessibility and Input Monitoring permissions again.</p>
         </details>
         <details>
           <summary>Do I need an internet connection?</summary>
@@ -358,13 +358,13 @@
     <div class="wrap">
       <img src="assets/icon.png" width="104" height="104" alt="Voicemore app icon" loading="lazy">
       <h2 id="download-title">Say it. It’s typed.</h2>
-      <p>Download <strong>Voicemore-0.3.1-arm64.dmg</strong>, open it, drag Voicemore to Applications, then launch it from Applications.</p>
+      <p>Download <strong>Voicemore-0.3.4-arm64.dmg</strong>, open it, drag Voicemore to Applications, then launch it from Applications.</p>
       <div class="cta">
-        <a class="btn" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.1" rel="noopener">Download from the v0.3.1 release page</a>
+        <a class="btn" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.4" rel="noopener">Download from the v0.3.4 release page</a>
         <a class="btn ghost" href="https://github.com/wherexml/Voicemore" rel="noopener">View source</a>
       </div>
       <ul class="req" aria-label="Requirements"><li>Apple Silicon (M-series)</li><li>macOS 26.2 or later</li><li>No Intel Mac support</li></ul>
-      <p class="preview"><strong>Preview notice:</strong> v0.3.1 is development-signed and not yet notarized by Apple, so macOS may block it the first time on another Mac. Gatekeeper validation across Macs and broader app compatibility are still in progress.</p>
+      <p class="preview"><strong>Signing and notarization:</strong> v0.3.4 is Developer ID signed and Apple-notarized, with stapled notarization tickets. Requires Apple Silicon and macOS 26.2 or later.</p>
     </div>
   </section>
 
@@ -372,7 +372,7 @@
 
 <footer class="site-foot">
   <div class="wrap">
-    <span>Voicemore · Early preview v0.3.1</span>
+    <span>Voicemore · Early release v0.3.4</span>
     <nav aria-label="Footer">
       <a href="https://github.com/wherexml/Voicemore" rel="noopener">GitHub</a>
       <a href="https://github.com/wherexml/Voicemore/releases" rel="noopener">All releases</a>

@@ -8,10 +8,20 @@ import argparse
 import json
 from pathlib import Path
 import subprocess
+import time
 
 IDENTITY = 'Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)'
 
 def run(*args, **kwargs):
+    if args[0] == 'codesign' and '--timestamp' in args:
+        for attempt in range(5):
+            result = subprocess.run([str(arg) for arg in args], capture_output=True, text=True)
+            print(result.stderr, end='')
+            if result.returncode == 0:
+                return result
+            if not any(message in result.stderr for message in ('timestamp service is not available', 'timestamp was expected but was not found')) or attempt == 4:
+                raise subprocess.CalledProcessError(result.returncode, result.args)
+            time.sleep(3 * (attempt + 1))
     return subprocess.run([str(arg) for arg in args], check=True, **kwargs)
 
 def main():
