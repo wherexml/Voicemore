@@ -6,9 +6,13 @@ Voicemore uses MyGo's native updater with a pinned Ed25519 public key. The produ
 
 The app checks after launch and hourly. The bottom-left rail above Settings shows a quiet icon when current, an indigo download icon when available, a mint progress ring during transfer, and a retry icon on failure. Click an available update to start downloading immediately; click during a download or after a failure for details and actions; the Home body stays free of update notices. Escape or an outside click dismisses the panel. Clicking the available-update icon downloads and authenticates the archive before replacement, then relaunches through the normal shutdown path. The app's data directory is separate and never replaced. In-app notices work even when macOS notifications are denied. Update checks need GitHub access; offline failures allow manual retry.
 
+## Publish a stable release
+
+Run `./scripts/publish-release.sh` for the default signed/notarized candidate workflow, complete cross-Mac E2E, then publish that verified candidate. Full commands and required evidence are in [DISTRIBUTION.md](DISTRIBUTION.md). Both the DMG and update archive come from the final stapled app. No stable release is allowed without Apple notarization.
+
 ## Publish a development preview
 
-Stable distribution is blocked until the Developer ID and notarization workflow is complete. See [distribution requirements](DISTRIBUTION.md). The following command intentionally publishes a prerelease, which existing clients do not receive through the stable feed.
+Stable distribution requires the Developer ID and notarization workflow. See [distribution requirements](DISTRIBUTION.md). The following command intentionally publishes a prerelease, which existing clients do not receive through the stable feed.
 
 1. Change `version` in `mygo.json` and add a matching `## x.y.z` section in `CHANGELOG.md`.
 2. Complete acceptance, commit all changes, and make sure the working tree is clean.
@@ -23,7 +27,7 @@ The script builds the DMG and signed archive, verifies packaging, pushes the mat
 
 Required assets: `Voicemore-x.y.z-arm64.dmg`, `voicemore-x.y.z-darwin-arm64.tar.gz`, `update-darwin-arm64.json`, `SHA256SUMS.txt`.
 
-The private signing key stays outside Git and is required for all future updates. Keep a secure backup. Archive authentication is separate from macOS signing/notarization: current distribution still uses a development signature and is not Apple-notarized.
+The private signing key stays outside Git and is required for all future updates. Keep a secure backup. Archive authentication is separate from macOS signing/notarization: stable distribution additionally requires Developer ID signing, Apple notarization and stapled tickets.
 
 ## Repeat the native E2E acceptance
 
@@ -46,6 +50,6 @@ Save AX snapshots, screenshots, before/after hashes and process/bundle versions 
 
 ## 中文
 
-当前发布脚本只允许显式的 `--development-preview`，发布为 prerelease 且不设为 latest。正式通道须先完成 Developer ID 签名、公证与跨 Mac 安装验收，见 DISTRIBUTION.md。GitHub draft/prerelease 不参与当前更新通道。
+当前发布脚本默认执行正式签名和 Apple 公证流程；正式通道必须通过票据校验与跨 Mac 安装验收后才能发布，见 DISTRIBUTION.md。只有显式的 `--development-preview` 才允许开发签名，并限制为 prerelease、不设为 latest。GitHub draft/prerelease 不参与当前更新通道。
 
 0.2.0 没有更新功能，需手动安装一次 0.3.0。此后左下角设置上方的更新入口可一键更新并自动重启。更新包经过独立签名验证；下载取消、验签失败不会替换原应用。录音或模型部署时暂不可开始更新；安装时暂停快捷键听写。安装目录不可写时提示移动到可写位置，不索取管理员密码或修改目录权限。

@@ -1,11 +1,9 @@
 #!/bin/sh
-# This pipeline builds development-signed previews, not public distribution builds.
+# Stable releases require notarization by default; previews are explicit.
 set -eu
-if [ "$#" -ne 1 ] || [ "$1" != --development-preview ]; then
- echo 'Stopped: this pipeline uses Apple Development signing and does not notarize.' >&2
- echo 'For an explicitly intended prerelease, use --development-preview.' >&2
- echo 'Stable distribution requires the separate Developer ID/notarization workflow in docs/public/DISTRIBUTION.md.' >&2
- exit 1
+project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+if [ "${1:-}" != --development-preview ]; then
+ exec python3 "$project_dir/scripts/release-stable.py" "$@"
 fi
 : "${SIGNING_IDENTITY:?Set the macOS signing identity}"
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)

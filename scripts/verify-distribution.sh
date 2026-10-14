@@ -39,6 +39,6 @@ codesign -d --verbose=4 "$image" > "$evidence/dmg-signature-details.txt" 2>&1
 grep -q '^TeamIdentifier=T695TT4HT9$' "$evidence/dmg-signature-details.txt"
 xcrun stapler validate "$image" > "$evidence/dmg-ticket.txt" 2>&1
 spctl --assess --type open --context context:primary-signature --verbose=4 "$image" > "$evidence/dmg-gatekeeper.txt" 2>&1
-# These checks assess supplied artifacts individually; the installation E2E must
-# establish that the downloaded DMG contains this exact accepted app.
+# Compare every sealed file and symlink with the app actually inside the DMG.
+python3 "$(dirname "$0")/verify-distribution-content.py" "$app" "$image" > "$evidence/dmg-content.txt" 2>&1
 passed=true

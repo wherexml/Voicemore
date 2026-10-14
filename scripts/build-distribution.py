@@ -13,12 +13,27 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import time
 
 IDENTITY = 'Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)'
 MAGIC = {bytes.fromhex(x) for x in ('feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca')}
 ROOT = Path(__file__).resolve().parent.parent
 
 def run(*args, **kwargs):
+    if args[0] == 'codesign' and '--timestamp' in args:
+        # Apple occasionally returns a transient timestamp-service error.
+        # Retry only that error; never drop the secure timestamp requirement.
+        for attempt in range(5):
+            result = subprocess.run([str(a) for a in args], capture_output=True, text=True)
+            for name in ('stdout', 'stderr'):
+                if kwargs.get(name):
+                    kwargs[name].write(getattr(result, name))
+                    kwargs[name].flush()
+            if result.returncode == 0:
+                return result
+            if not any(message in result.stderr for message in ('timestamp service is not available', 'timestamp was expected but was not found')) or attempt == 4:
+                raise subprocess.CalledProcessError(result.returncode, result.args)
+            time.sleep(3 * (attempt + 1))
     return subprocess.run([str(a) for a in args], check=True, **kwargs)
 
 def digest(path):
@@ -31,6 +46,7 @@ def digest(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-parent', type=Path, required=True)
+    parser.add_argument('--resume', type=Path, help='Resume an interrupted signing workspace')
     args = parser.parse_args()
     identities = subprocess.check_output(['security', 'find-identity', '-v', '-p', 'codesigning'], text=True)
     if f'"{IDENTITY}"' not in identities:
@@ -40,14 +56,18 @@ def main():
     if digest(archive) != expected:
         raise SystemExit('Source runtime checksum mismatch.')
     args.output_parent.mkdir(parents=True, exist_ok=True)
-    work = Path(tempfile.mkdtemp(prefix='voicemore-distribution-', dir=args.output_parent.resolve()))
+    work = args.resume.resolve() if args.resume else Path(tempfile.mkdtemp(prefix='voicemore-distribution-', dir=args.output_parent.resolve()))
+    if args.resume and (work / 'candidate.json').exists():
+        raise SystemExit('Completed candidates cannot be rebuilt in place.')
     print(f'Candidate workspace: {work}', flush=True)
     source = work / 'source'
-    source.mkdir()
+    if args.resume and not (work / 'source-sha256.json').exists():
+        raise SystemExit('Resume requires an existing source inventory.')
+    source.mkdir(exist_ok=True)
     # Explicit source/resource scope avoids copying .git, credentials or user data.
     names = subprocess.check_output(['git', 'ls-files', '-co', '--exclude-standard', '-z'], cwd=ROOT).split(b'\0')
     inventory = {}
-    for raw in sorted(set(names)):
+    for raw in ([] if args.resume else sorted(set(names))):
         if not raw:
             continue
         rel = Path(os.fsdecode(raw))
@@ -62,9 +82,16 @@ def main():
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(original, dest)
         inventory[str(rel)] = digest(original)
-    (work / 'source-sha256.json').write_text(json.dumps(inventory, indent=2))
+    if args.resume:
+        inventory = json.loads((work / 'source-sha256.json').read_text())
+        for rel, checksum in inventory.items():
+            # These two files are rewritten only inside the distribution copy.
+            if rel not in ('mygo.json', 'internal/localasr/assets/runtime.sha256') and digest(source / rel) != checksum:
+                raise SystemExit('Resume source changed: ' + rel)
+    else:
+        (work / 'source-sha256.json').write_text(json.dumps(inventory, indent=2))
     runtime_stage = work / 'runtime-stage'
-    runtime_stage.mkdir()
+    runtime_stage.mkdir(exist_ok=True)
     # Verify paths and symlinks before extracting this already checksummed archive.
     with tarfile.open(archive) as tar:
         for member in tar.getmembers():
@@ -77,7 +104,9 @@ def main():
                 target = (runtime_stage / rel.parent / member.linkname).resolve()
                 if not target.is_relative_to(runtime_stage / 'runtime'):
                     raise SystemExit(f'Unsafe runtime symlink: {member.name}')
-        if hasattr(tarfile, 'data_filter'):
+        if args.resume:
+            pass  # Preserve successfully timestamped files from this workspace.
+        elif hasattr(tarfile, 'data_filter'):
             tar.extractall(runtime_stage, filter='data')
         else:
             tar.extractall(runtime_stage)  # Paths/types/links validated above.
@@ -91,7 +120,10 @@ def main():
                 magic = f.read(4)
             if magic not in MAGIC:
                 continue
-            run('codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', IDENTITY, path, stdout=log, stderr=log)
+            metadata = subprocess.run(['codesign', '-d', '--verbose=4', str(path)], capture_output=True, text=True)
+            valid = subprocess.run(['codesign', '--verify', '--strict', str(path)], capture_output=True).returncode == 0
+            if not (valid and ('Authority=' + IDENTITY) in metadata.stderr and 'Timestamp=' in metadata.stderr and 'runtime' in metadata.stderr):
+                run('codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', IDENTITY, path, stdout=log, stderr=log)
             run('codesign', '--verify', '--strict', path, stdout=log, stderr=log)
             signed.append(str(path.relative_to(runtime_stage)))
         for path in files:
@@ -115,7 +147,15 @@ def main():
     config.get('updates', {}).pop('privateKey', None)
     config_path.write_text(json.dumps(config, indent=2) + '\n')
     with (work / 'build.log').open('w') as log:
-        run('go', 'tool', 'mygo', 'build', '-platform', 'darwin/arm64', '-sign', IDENTITY, cwd=source, env=env, stdout=log, stderr=log)
+        for attempt in range(5):
+            result = subprocess.run(['go', 'tool', 'mygo', 'build', '-platform', 'darwin/arm64', '-skip-dmg', '-sign', IDENTITY], cwd=source, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+            log.write(result.stdout)
+            log.flush()
+            if result.returncode == 0:
+                break
+            if not any(message in result.stdout for message in ('timestamp service is not available', 'timestamp was expected but was not found')) or attempt == 4:
+                raise subprocess.CalledProcessError(result.returncode, result.args)
+            time.sleep(3 * (attempt + 1))
     app = work / 'build/darwin-arm64/Voicemore.app'
     with (work / 'app-signature.txt').open('w') as log:
         run('codesign', '--verify', '--deep', '--strict', app, stdout=log, stderr=log)

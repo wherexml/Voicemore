@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.4
+
+- Ship Developer ID signed, Apple-notarized app and DMG with stapled tickets.
+- Require notarization, Gatekeeper checks and native cross-Mac acceptance before stable publication.
+- Add remote desktop input preferences and refine cleanup readiness and update navigation.
+
+首次提供完成 Developer ID 正式签名与 Apple 公证的安装包，正式发布强制通过公证、Gatekeeper 与跨 Mac 验收；新增远程桌面输入配置，优化文字整理就绪检查及更新入口。由开发签名旧版升级后，可能需要重新确认系统权限。
+
 ## 0.3.3
 
 - Add an indigo dictation capsule with live transcript expansion, animated status, and recovery actions; keep the classic capsule available in Settings.

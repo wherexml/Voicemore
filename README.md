@@ -1,7 +1,7 @@
 <p align="center"><img src="resources/icon.png" width="112" alt="Voicemore icon"></p>
 <h1 align="center">Voicemore</h1>
 <p align="center">Speak naturally. Write where your cursor is.</p>
-<p align="center"><a href="README.zh-CN.md">简体中文</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.3">Download for Apple Silicon</a></p>
+<p align="center"><a href="README.zh-CN.md">简体中文</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.4">Download for Apple Silicon</a></p>
 
 Voicemore is a native macOS dictation app. Press **Fn**, speak, and press **Fn** again to insert the transcript into the focused text field. Run speech recognition locally, connect a cloud provider, and optionally tidy your words with a language model.
 
@@ -29,15 +29,15 @@ Run speech recognition on your Mac, or configure a cloud provider. Choose a sepa
 
 ## Download and install
 
-**Apple Silicon (M-series), macOS 26.2 or later.** Intel Macs are not supported by this package. The current bundled MLX runtime sets the minimum OS requirement. Tested on macOS 27.0 arm64; older supported versions have not yet been tested end to end.
+**Apple Silicon (M-series), macOS 26.2 or later.** Intel Macs are not supported by this package. The current bundled MLX runtime sets the minimum OS requirement. Native installation and local dictation have been verified on macOS 26.2 arm64; local development was also verified on macOS 27.0 arm64.
 
-1. Download **Voicemore-0.3.3-arm64.dmg** from [v0.3.3 Releases](https://github.com/wherexml/Voicemore/releases/tag/v0.3.3).
+1. Download **Voicemore-0.3.4-arm64.dmg** from [v0.3.4 Releases](https://github.com/wherexml/Voicemore/releases/tag/v0.3.4).
 2. Open the disk image and drag **Voicemore** onto **Applications**.
 3. Eject the disk image, then open Voicemore from Applications.
 4. Grant **Microphone**, **Accessibility**, and **Input Monitoring** in System Settings → Privacy & Security. Restart after granting keyboard permissions.
 5. In **Settings → Models**, open the local speech model and choose download/deploy. Wait until it is ready, then try dictation in a text editor.
 
-**Preview release:** v0.3.3 is development-signed, not Developer ID signed or notarized. macOS may block its first launch on another Mac. After checking the download source, use Apple's per-app **Privacy & Security → Open Anyway** flow if offered. Do not disable Gatekeeper globally. A fully notarized distribution is still pending; drag-to-Applications packaging does not remove this limitation.
+**Signed and notarized:** v0.3.4 uses Developer ID signing and Apple notarization, with stapled app and DMG tickets. Upgrading from a development-signed preview may require confirming microphone, Accessibility and Input Monitoring permissions again.
 
 The DMG includes the inference runtime, but **not model weights**. Initial local setup downloads roughly **2.47 GB** of model files and extracts roughly **0.65 GB** of runtime. Internet access is needed for the download; local recognition works offline after setup. You can also copy a compatible existing model. Cloud recognition needs your own provider credentials and network access.
 
@@ -96,4 +96,4 @@ The runtime archive is a Release asset rather than a Git blob. Python dependenci
 
 ## Project status
 
-This is an early preview. The DMG's structure, copied bundle signature, architecture, runtime checksum and native app launch are verified locally. Cross-Mac Gatekeeper/notarization, Intel support, and broad target-app compatibility are not completed. [Report an issue](https://github.com/wherexml/Voicemore/issues) with your macOS version, chip and reproduction steps; remove recordings, transcripts and API keys before sharing logs.
+This is an early release. Stable builds require Developer ID signing, Apple notarization, Gatekeeper checks and native installation/dictation acceptance. Intel support and broad target-app compatibility remain outside the verified scope. [Report an issue](https://github.com/wherexml/Voicemore/issues) with your macOS version, chip and reproduction steps; remove recordings, transcripts and API keys before sharing logs.
