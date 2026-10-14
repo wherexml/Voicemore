@@ -4,7 +4,7 @@ Voicemore uses MyGo's native updater with a pinned Ed25519 public key. The produ
 
 `https://github.com/wherexml/Voicemore/releases/latest/download/update-darwin-arm64.json`
 
-The app checks after launch and hourly. The top-right header shows a quiet icon when current, a blue update badge when available, download progress during transfer, installation/restart status, and an amber badge on failure. Click it for version details and actions; the Home body stays free of update notices. Escape or an outside click dismisses the panel. Clicking Update & Restart downloads and authenticates the archive before replacement, then relaunches through the normal shutdown path. The app's data directory is separate and never replaced. In-app notices work even when macOS notifications are denied. Update checks need GitHub access; offline failures allow manual retry.
+The app checks after launch and hourly. The bottom-left rail above Settings shows a quiet icon when current, an indigo download icon when available, a mint progress ring during transfer, and a retry icon on failure. Click an available update to start downloading immediately; click during a download or after a failure for details and actions; the Home body stays free of update notices. Escape or an outside click dismisses the panel. Clicking the available-update icon downloads and authenticates the archive before replacement, then relaunches through the normal shutdown path. The app's data directory is separate and never replaced. In-app notices work even when macOS notifications are denied. Update checks need GitHub access; offline failures allow manual retry.
 
 ## Publish a development preview
 
@@ -48,4 +48,4 @@ Save AX snapshots, screenshots, before/after hashes and process/bundle versions 
 
 当前发布脚本只允许显式的 `--development-preview`，发布为 prerelease 且不设为 latest。正式通道须先完成 Developer ID 签名、公证与跨 Mac 安装验收，见 DISTRIBUTION.md。GitHub draft/prerelease 不参与当前更新通道。
 
-0.2.0 没有更新功能，需手动安装一次 0.3.0。此后右上角更新面板可一键更新并自动重启。更新包经过独立签名验证；下载取消、验签失败不会替换原应用。录音或模型部署时暂不可开始更新；安装时暂停快捷键听写。安装目录不可写时提示移动到可写位置，不索取管理员密码或修改目录权限。
+0.2.0 没有更新功能，需手动安装一次 0.3.0。此后左下角设置上方的更新入口可一键更新并自动重启。更新包经过独立签名验证；下载取消、验签失败不会替换原应用。录音或模型部署时暂不可开始更新；安装时暂停快捷键听写。安装目录不可写时提示移动到可写位置，不索取管理员密码或修改目录权限。

@@ -32,6 +32,7 @@ type prefsWindow struct {
 	bundlePath string // exact running bundle, never a backup or guessed install path
 	audioDays  float64
 	fnConflict string // what the system does on Fn
+	remoteApps []macos.Application
 	mics       []macos.InputDevice
 	micsAt     time.Time // when mics was read: microphones come and go
 
@@ -83,6 +84,7 @@ func newPrefsWindow(a *app) *prefsWindow {
 	p.audioDays = float64(a.settings.Get().AudioRetentionDays)
 	p.fnConflict = macos.FnKeyConflict()
 	p.bundlePath = runningAppBundle()
+	p.remoteApps = macos.RunningApplications()
 	p.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:           T("navSettings"),
 		Width:           980,
@@ -446,6 +448,7 @@ func (p *prefsWindow) general(c *ui.Context) {
 	})
 	p.audio(c)
 	p.dictation(c)
+	p.remoteInput(c)
 }
 
 // loginItem is the app's entry in System Settings → Login Items. macOS
