@@ -282,6 +282,13 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 	}
 	current := CaptureTarget()
 	res.Target = current
+	if remote, handled, err := insertRemote(text, o, current); handled {
+		if err != nil {
+			current.Release()
+			remote.Target = nil
+		}
+		return remote, err
+	}
 	var saved []clipboardItem
 	var change int
 	var cancelled error

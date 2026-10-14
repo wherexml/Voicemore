@@ -153,7 +153,8 @@ type Settings struct {
 	// applies from the next dictation.
 	CapsuleStyle string `json:"capsuleStyle,omitempty"`
 
-	ClipboardRestoreDelayMs int `json:"clipboardRestoreDelayMs"`
+	ClipboardRestoreDelayMs int           `json:"clipboardRestoreDelayMs"`
+	RemoteInputs            []RemoteInput `json:"remoteInputs,omitempty"`
 
 	// ObserveEdits reads the target field back after an insertion to
 	// propose dictionary candidates. Off by default: it reads text of
@@ -279,12 +280,14 @@ func (st *Store) Get() Settings {
 	defer st.mu.Unlock()
 	s := st.s
 	s.Providers = s.Providers.Clone()
+	s.RemoteInputs = append([]RemoteInput(nil), s.RemoteInputs...)
 	return s
 }
 
 func (st *Store) Set(s Settings) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	s.RemoteInputs = append([]RemoteInput(nil), s.RemoteInputs...)
 	st.s = s
 	return WriteJSON(st.path, s)
 }

@@ -952,7 +952,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		c.done(r, "")
 		return
 	}
-	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs})
+	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs, RemoteInputs: s.RemoteInputs})
 	if errors.Is(err, context.Canceled) {
 		r.release()
 		return
@@ -978,10 +978,13 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		return
 	}
 	detail := c.tr("detailPasted", res.Target.AppName)
-	if !res.FocusVerified {
+	if res.Remote {
+		detail = c.tr("detailRemote", res.Target.AppName)
+	}
+	if !res.FocusVerified && !res.Remote {
 		detail += "; " + c.tr("detailNoElement")
 	}
-	if !res.ClipboardRestored {
+	if !res.ClipboardRestored && !res.Remote {
 		detail += "; " + c.tr("detailClipboard")
 	}
 	c.update(r, func(rec *store.Record) {
@@ -989,7 +992,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		rec.Status, rec.StatusDetail, rec.InsertedText = store.StatusInserted, detail, text
 		rec.Timing.FinalToInsertMs = time.Since(r.finalAt).Milliseconds()
 	})
-	if s.ObserveEdits {
+	if s.ObserveEdits && !res.Remote {
 		c.mu.Lock()
 		r.observing = true
 		c.mu.Unlock()

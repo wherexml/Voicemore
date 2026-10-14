@@ -55,3 +55,5 @@ func LoginItemStatus() string     { return "unavailable" }
 func SetLoginItem(bool) error     { return errUnsupported }
 func OpenLoginItemsSettings()     {}
 func SetDockIcon(bool)            {}
+
+func RunningApplications() []Application { return nil }

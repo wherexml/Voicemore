@@ -43,9 +43,9 @@ The DMG includes the inference runtime, but **not model weights**. Initial local
 
 ## Updates
 
-From **0.3.0**, Voicemore checks GitHub Releases about 10 seconds after launch and every hour while running. New versions appear in the top-right update control on every page and in the menu-bar tooltip; macOS notifications are attempted once per version and depend on system notification permissions.
+From **0.3.0**, Voicemore checks GitHub Releases about 10 seconds after launch and every hour while running. New versions appear in the bottom-left update control above Settings on every page and in the menu-bar tooltip; macOS notifications are attempted once per version and depend on system notification permissions.
 
-Open the top-right update panel and click **Update & Restart** to download, verify the Ed25519-signed archive, replace the application, and restart automatically. You can cancel the download or retry a failed update. Dictation is paused during installation; updates wait for active dictation/model setup to finish. Settings, models, history and credentials are preserved. The app must be installed in a writable Applications location, not running from a read-only DMG.
+Click the indigo update icon above Settings to download, verify the Ed25519-signed archive, replace the application, and restart automatically. You can cancel the download or retry a failed update. Dictation is paused during installation; updates wait for active dictation/model setup to finish. Settings, models, history and credentials are preserved. The app must be installed in a writable Applications location, not running from a read-only DMG.
 
 **0.2.0 users must install 0.3.0 manually once.** Future releases must include the signed update archive and manifest; uploading only a DMG does not notify existing clients. See [publishing updates](docs/public/UPDATES.md).
 
@@ -60,6 +60,10 @@ Open the top-right update panel and click **Update & Restart** to download, veri
 - **Native interface:** Dock app, menu-bar controls, and English, Simplified Chinese, and Traditional Chinese UI.
 
 Input behavior depends on the target app and macOS permissions. TextEdit dictation has been exercised; some editors and protected fields may behave differently. Fn can also trigger macOS's own action: set “Press 🌐 key to” to “Do Nothing”, or choose another shortcut.
+
+## Module documentation
+
+Remote desktop profiles in Settings → General select a running client, paste shortcut, and clipboard sync delay. Profiles start disabled; text stays on the clipboard and remote insertion is unverified. See the [remote input specification](docs/public/REMOTE-INPUT.md). Cleanup supports filler removal, explicit corrections, and spoken lists; see its [behavior and protection limits](internal/cleanup/README.md). The [module index](docs/public/README.md) links specifications and acceptance procedures. These describe the current source, not necessarily the downloadable release.
 
 ## Privacy and storage
 

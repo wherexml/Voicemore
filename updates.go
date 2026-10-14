@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -197,7 +198,7 @@ exec /usr/bin/open -n "$bundle"
 	mygo.App.Quit()
 }
 
-// updatePresentation keeps the header short; explanations belong in the popover.
+// updatePresentation supplies the rail tooltip and the optional details panel.
 func (m *mainWindow) updatePresentation() (string, string, string) {
 	u := &m.a.updates
 	switch {
@@ -210,7 +211,7 @@ func (m *mainWindow) updatePresentation() (string, string, string) {
 		if u.total > 0 {
 			label = fmt.Sprintf("%s %d%%", label, min(int64(99), 100*u.downloaded/u.total))
 		}
-		return label, T("updateDownloadShort"), T("updatePauseNote")
+		return label, label, T("updatePauseNote")
 	case u.checking:
 		return "", T("updateChecking"), T("updateAutoNote")
 	case u.status == "updateCheckFailed" || u.status == "updateInstallFailed" || u.status == "updateRestartFailed":
@@ -237,28 +238,78 @@ func (m *mainWindow) updateView(c *ui.Context) {
 	u := &m.a.updates
 	t := c.Theme()
 	label, title, note := m.updatePresentation()
-	color := t.TextMuted
-	if u.available != nil || u.installing {
-		color = t.Accent
+	// Scope the brand accent to the updater; other controls keep their palette.
+	brand := *t
+	brand.Accent = ui.Hex("#343b85")
+	brand.AccentHover = ui.Hex("#454e9c")
+	brand.AccentPressed = ui.Hex("#252d67")
+	brand.AccentText = ui.Hex("#f7faff")
+	c.SetTheme(&brand)
+	defer c.SetTheme(t)
+	active := u.available != nil || u.installing || u.checking
+	attention := u.detail != ""
+	tooltip := title
+	if label != "" {
+		tooltip = label
 	}
-	if u.detail != "" {
-		color = t.Warning
+	if u.available != nil && !u.installing && !u.checking && m.a.updateBusy() {
+		tooltip = T("updateBusy")
 	}
-	anchor := ui.Button(c.Key("update-trigger"), "").Label(T("updateCheck")).Tooltip(title).
-		Padding(5, 9).Radius(8).BorderWidth(0).TextColor(color).Children(func() {
-		if u.checking || u.installing {
-			ui.Spinner(c).Size(14, 14)
-		} else {
-			ui.Icon(c, icRefresh).FontSize(14).TextColor(color)
+	anchor := ui.ButtonBase(c.Key("update-trigger")).Size(44, 44).Radius(22).
+		Justify(ui.Center).AlignItems(ui.Center).Label(tooltip)
+	if anchor.Hovered() || m.updateOpen {
+		anchor.Background(railHover(t))
+	}
+	anchor.Children(func() {
+		color := t.TextMuted
+		face := ui.Box(c).Size(36, 36).Radius(18).Justify(ui.Center).AlignItems(ui.Center)
+		if active || attention {
+			face.Background(brand.Accent)
+			color = brand.AccentText
 		}
-		if label != "" {
-			ui.Text(c, label).FontSize(12).TextColor(color).SingleLine()
-		}
+		face.Children(func() {
+			switch {
+			case u.installing || u.checking:
+				progress := -1.0
+				if u.installing && u.status == "updateDownloading" && u.total > 0 && u.downloaded < u.total {
+					progress = max(0.0, float64(u.downloaded)/float64(u.total))
+				}
+				angle := -math.Pi / 2
+				if progress < 0 && !c.Preferences().ReduceMotion {
+					angle += float64(c.Now().UnixMilli()%1200) / 1200 * 2 * math.Pi
+					c.After(30 * time.Millisecond)
+				}
+				ui.Box(c).Size(24, 24).Draw(func(p *ui.Painter, r ui.Rect) { drawUpdateRing(p, r, progress, angle) })
+			case attention:
+				ui.Icon(c, icRefresh).FontSize(22).TextColor(color)
+			case u.available != nil:
+				ui.Icon(c, icImport).FontSize(24).TextColor(color)
+			default:
+				ui.Icon(c, icRefresh).FontSize(22).TextColor(color)
+			}
+		})
 	})
-	if anchor.Clicked() {
-		m.updateOpen = !m.updateOpen
+	if !m.updateOpen {
+		ui.TooltipBase(c.Key("update-tooltip"), anchor, func(tip ui.Element) {
+			tip.AttachTo(anchor, ui.AnchorRight, ui.AnchorLeft).Margin(0, 0, 0, 8).
+				Padding(8, 12).Radius(9).Background(ui.Hex("#30312d")).Children(func() {
+				ui.Text(c, tooltip).FontSize(13).TextColor(ui.Hex("#ffffff")).SingleLine()
+			})
+		})
 	}
-	ui.Popover(c.Key("update-panel"), anchor, &m.updateOpen, func() {
+	if anchor.Clicked() {
+		if u.available != nil && !u.installing && !u.checking && !attention && !m.a.updateBusy() {
+			m.updateOpen = false
+			m.a.installUpdate()
+		} else {
+			m.updateOpen = !m.updateOpen
+		}
+	}
+
+	ui.PopoverBase(c.Key("update-panel"), anchor, &m.updateOpen, func(panel ui.Element) {
+		panel.AttachTo(anchor, ui.AnchorRight, ui.AnchorLeft).Margin(0, 0, 0, 8).
+			Padding(8).Radius(12).Background(t.Background).Border(1, t.Border).
+			Shadow(0, 6, 20, 0, ui.RGBA(0, 0, 0, 0.18))
 		ui.Column(c).Width(300).Gap(14).Padding(8).Children(func() {
 			ui.Row(c).AlignItems(ui.Center).Children(func() {
 				ui.Text(c, title).FontSize(15).FontWeight(600).Grow(1)
@@ -305,82 +356,30 @@ func (m *mainWindow) updateView(c *ui.Context) {
 	})
 }
 
-// updateCard is the updater on Home: one slim card at the top of the page
-// with the version, one action, and what is happening under them. It shows
-// the same state as updateView, which is the earlier header popover and is
-// kept for reference; the main window draws this card instead.
-func (m *mainWindow) updateCard(c *ui.Context) {
-	u := &m.a.updates
-	t := c.Theme()
-	downloading := u.installing && u.status == "updateDownloading"
-	verifying := downloading && u.total > 0 && u.downloaded >= u.total
-	current := u.status == "updateCurrent" && u.available == nil
-	ui.Column(c.Key("update-card")).Radius(12).Background(cardColor(t)).Border(1, t.Border).Padding(8, 12).Gap(8).Children(func() {
-		ui.Row(c).Gap(9).MinHeight(30).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(22, 22).Draw(drawAppMark)
-			ui.Text(c, "Voicemore "+mygo.App.Version()).FontSize(12.5).FontWeight(500).TextColor(softText(t)).SingleLine()
-			if current {
-				// Up to date is said beside the version, quietly, and nowhere else.
-				ui.Icon(c, icCheck).FontSize(13).TextColor(t.Success)
-				ui.Text(c, T("updateCurrent")).FontSize(12).TextColor(t.TextMuted).SingleLine()
+// drawUpdateRing renders determinate download progress or a rotating arc while
+// checking, verifying, installing and restarting. Reduced motion freezes the arc.
+func drawUpdateRing(p *ui.Painter, r ui.Rect, progress, angle float64) {
+	cx, cy, radius := r.X+r.W/2, r.Y+r.H/2, float64(r.W/2-2)
+	arc := func(start, sweep float64, color ui.Color) {
+		var path ui.Path
+		steps := max(2, int(math.Ceil(sweep*16)))
+		for i := 0; i <= steps; i++ {
+			a := start + sweep*float64(i)/float64(steps)
+			x, y := cx+float32(math.Cos(a)*radius), cy+float32(math.Sin(a)*radius)
+			if i == 0 {
+				path.MoveTo(x, y)
+			} else {
+				path.LineTo(x, y)
 			}
-			ui.Spacer(c)
-			switch {
-			case u.status == "updateRestartFailed":
-				if ui.PrimaryButton(c.Key("restart"), T("updateRestartAction")).Clicked() {
-					u.installing, u.status, u.detail = true, "updateRestarting", ""
-					m.a.bindTrigger()
-					m.a.restartAfterUpdate()
-				}
-			case u.available != nil:
-				ui.Text(c, T("updateFound", u.available.Version)).FontSize(12.5).FontWeight(500).TextColor(infoText(t)).SingleLine()
-				if ui.PrimaryButton(c.Key("install"), T("updateInstall")).Disabled(u.installing || u.checking || m.a.updateBusy()).Clicked() {
-					m.a.installUpdate()
-				}
-			default:
-				if ui.Button(c.Key("check"), T("updateCheck")).Disabled(u.checking || u.installing).Clicked() {
-					m.a.checkUpdates()
-				}
-			}
-		})
-		status := ""
-		switch {
-		case verifying:
-			status = T("updateVerifyNote")
-		case downloading && u.total > 0:
-			status = T("updateProgress", 100*u.downloaded/u.total)
-		case u.status != "" && u.status != "updateAvailable" && !current:
-			status = T(u.status)
 		}
-		if status != "" {
-			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
-				if u.checking || verifying {
-					ui.Spinner(c)
-				}
-				ui.Text(c, status).FontSize(12).TextColor(softText(t))
-			})
-		}
-		if downloading {
-			progress := -1.0
-			if u.total > 0 {
-				progress = min(1.0, float64(u.downloaded)/float64(u.total))
-			}
-			ui.Progress(c, progress)
-		}
-		if u.available != nil && !u.installing && m.a.updateBusy() && u.status != "updateBusy" {
-			ui.Text(c, T("updateBusy")).FontSize(12).TextColor(softText(t))
-		}
-		if u.detail != "" {
-			ui.Text(c, u.detail).FontSize(11.5).TextColor(t.TextMuted).Selectable()
-		}
-		if downloading && !verifying && u.cancel != nil {
-			ui.Row(c).Children(func() {
-				if ui.Button(c.Key("cancel"), T("updateCancel")).Clicked() {
-					u.cancel()
-				}
-			})
-		}
-	})
+		p.StrokePath(&path, 2.5, color)
+	}
+	arc(0, 2*math.Pi, ui.RGBA(247, 250, 255, 0.25))
+	sweep := 0.28 * 2 * math.Pi
+	if progress >= 0 {
+		sweep = max(0.035, min(1, progress)) * 2 * math.Pi
+	}
+	arc(angle, sweep, ui.Hex("#69e7c3"))
 }
 
 // drawAppMark paints the app's mark small: the indigo tile of

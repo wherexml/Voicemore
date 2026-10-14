@@ -38,6 +38,7 @@ var messages = map[string]string{
 	"busy":            "A recording or transcription is in progress. Try again in a moment.",
 	"detailPasted":    "pasted into %s",
 	"detailNoElement": "the app exposed no focused element, so only the app could be checked",
+	"detailRemote":    "paste shortcut sent to %s; remote insertion is unverified; clipboard kept for synchronization",
 	"detailClipboard": "the clipboard changed meanwhile and was left as it is",
 	"detailCancelled": "cancelled before insertion",
 	"detailNoSpeech":  "the recognizer returned no speech",

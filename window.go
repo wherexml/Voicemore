@@ -176,6 +176,8 @@ func (m *mainWindow) view(c *ui.Context) {
 				}
 			})
 			ui.Spacer(c)
+			m.updateView(c)
+			ui.Box(c).Height(10)
 			// Settings is not a page: it opens the settings window, and
 			// the page here stays as it is.
 			if railButton(c, "settings", railSettings, T("navSettings"), m.a.prefs.visible()) {
@@ -186,7 +188,7 @@ func (m *mainWindow) view(c *ui.Context) {
 
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
 			// The header is the page's title. Home has none, and no rule
-			// under it: its first thing is the update card (updates.go).
+			// under it. Updates stay in the rail on every page.
 			header := ui.Row(c).Height(52).Padding(0, 28).AlignItems(ui.Center)
 			if m.page != "home" {
 				header.BorderWidth(0, 0, 1, 0).BorderColor(t.Border)

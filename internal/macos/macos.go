@@ -7,6 +7,7 @@ package macos
 
 import (
 	"context"
+	"voiceinput/internal/config"
 )
 
 // OnMain runs a function on the main thread and waits for it; the app sets
@@ -38,15 +39,21 @@ type InsertOptions struct {
 	// RestoreDelayMs is how long the text stays on the clipboard before
 	// the earlier content is put back.
 	RestoreDelayMs int
+	RemoteInputs   []config.RemoteInput
 }
 
 // InsertResult says what could be checked about an insertion.
 type InsertResult struct {
 	ClipboardOnly bool
-	Target        *Target
+	// Remote reports a shortcut dispatched without remote readback.
+	Remote bool
+	Target *Target
 	// FocusVerified means the current focus was verified as editable.
 	FocusVerified bool
 	// ClipboardRestored is false when the user copied something new in
 	// the meantime, which was left alone.
 	ClipboardRestored bool
 }
+
+// Application identifies a selectable running desktop client.
+type Application struct{ Name, BundleID string }

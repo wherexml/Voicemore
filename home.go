@@ -70,9 +70,6 @@ func (m *mainWindow) homeView(c *ui.Context) {
 	key := keyName(s.TriggerKey)
 	ui.Scroll(c).Fill().Padding(0, 28, 20).AlignItems(ui.Center).Children(func() {
 		ui.Column(c).FillWidth().MaxWidth(860).Children(func() {
-			// The updater, first: one slim card.
-			m.updateCard(c)
-
 			// Dictation is the page: the key, what pressing it brings up,
 			// and one sentence. No frame; the space around it is the emphasis.
 			ui.Column(c.Key("hero")).FillWidth().AlignItems(ui.Center).Padding(64, 16, 60).Children(func() {
