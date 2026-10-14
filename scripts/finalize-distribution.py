@@ -54,9 +54,9 @@ def main():
         raise SystemExit('DMG notarization is not Accepted; stopping.')
     run('xcrun', 'stapler', 'staple', image)
     run(Path(__file__).with_name('verify-distribution.sh'), app, image, work / 'evidence')
-    candidate.update(status='notarized-local-gate-passed-e2e-pending', dmg=str(image))
+    candidate.update(status='notarized-local-gate-passed', dmg=str(image))
     (work / 'final-candidate.json').write_text(json.dumps(candidate, indent=2) + '\n')
-    print('Notarized candidate ready for cross-Mac E2E; not published:', image)
+    print('Notarized candidate verified; not published:', image)
 
 if __name__ == '__main__':
     main()

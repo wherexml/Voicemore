@@ -13,7 +13,7 @@ The disk image contains `Voicemore.app`, an `/Applications` shortcut, and a Find
 
 The verification script mounts the finished DMG read-only, copies the app to a temporary installation directory, checks its signature and arm64 architecture, checks product/minimum-system metadata and the bundled runtime hash, and writes repeatable evidence under `artifacts/dmg-verification/`. It then unmounts the image and removes only its temporary directories. It does not grant permissions, run the app, or access personal settings.
 
-For native end-to-end acceptance, launch the copied app on an Apple Silicon Mac, grant the three documented permissions, deploy the local model, dictate into TextEdit, check history and replay, quit and relaunch. Test the downloaded/quarantined asset on a separate Mac before claiming Gatekeeper acceptance. Stable releases require cross-Mac Gatekeeper and native acceptance of the exact final DMG, in addition to local validation.
+For native end-to-end acceptance, launch the copied app on an Apple Silicon Mac, grant the three documented permissions, deploy the local model, dictate into TextEdit, check history and replay, quit and relaunch. Test the downloaded/quarantined asset on a separate Mac before claiming Gatekeeper acceptance. Stable releases require automatic signature, notarization, ticket, Gatekeeper and exact final DMG checks. Repeat native/cross-Mac acceptance for relevant runtime, permissions, installation or updater changes; it is not mandatory for every routine release.
 
 ## Signing
 
@@ -37,7 +37,7 @@ This copies the base Python installation and installed packages without changing
 
 - 运行上述构建脚本得到 arm64 DMG，可拖到 Applications 安装。
 - 运行验收脚本，会挂载成品并复制应用，校验签名、架构、最低系统版本和运行环境哈希，并保存报告。
-- 当前版本需要 macOS 26.2+，仅在 macOS 27.0 arm64 完成当前本机验收。
+- 当前版本需要 macOS 26.2+，已在 macOS 26.2 arm64 完成 v0.3.4 跨机验收，本地开发也在 macOS 27.0 arm64 验证。
 - 正式发布默认要求 Developer ID 签名、Apple 公证与票据校验；开发预览版仅能显式发布为 prerelease。首次下载后的系统放行不等于签名校验通过。
 - 不把私人验收材料、密钥、配置、录音和模型权重加入 Git。大型运行环境以 Release 附件提供。
 

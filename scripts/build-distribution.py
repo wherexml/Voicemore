@@ -2,7 +2,7 @@
 """Prepare a Developer ID candidate in an isolated source copy; never publish.
 
 The fixed local-development configuration and runtime are not modified.
-A candidate is NOT approved for distribution until notarization and E2E pass.
+A candidate is NOT approved for distribution until notarization and final-artifact checks pass.
 """
 import argparse
 import hashlib
@@ -14,6 +14,7 @@ import subprocess
 import tarfile
 import tempfile
 import time
+import distribution_cache as runtime_cache
 
 IDENTITY = 'Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)'
 MAGIC = {bytes.fromhex(x) for x in ('feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca')}
@@ -47,6 +48,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output-parent', type=Path, required=True)
     parser.add_argument('--resume', type=Path, help='Resume an interrupted signing workspace')
+    parser.add_argument('--cache-dir', type=Path, default=runtime_cache.DEFAULT_CACHE)
     args = parser.parse_args()
     identities = subprocess.check_output(['security', 'find-identity', '-v', '-p', 'codesigning'], text=True)
     if f'"{IDENTITY}"' not in identities:
@@ -92,51 +94,60 @@ def main():
         (work / 'source-sha256.json').write_text(json.dumps(inventory, indent=2))
     runtime_stage = work / 'runtime-stage'
     runtime_stage.mkdir(exist_ok=True)
-    # Verify paths and symlinks before extracting this already checksummed archive.
-    with tarfile.open(archive) as tar:
-        for member in tar.getmembers():
-            rel = Path(member.name)
-            if rel.is_absolute() or '..' in rel.parts or not rel.parts or rel.parts[0] != 'runtime':
-                raise SystemExit(f'Unsafe runtime entry: {member.name}')
-            if member.isdev() or member.isfifo() or member.islnk():
-                raise SystemExit(f'Unsupported runtime entry: {member.name}')
-            if member.issym():
-                target = (runtime_stage / rel.parent / member.linkname).resolve()
-                if not target.is_relative_to(runtime_stage / 'runtime'):
-                    raise SystemExit(f'Unsafe runtime symlink: {member.name}')
-        if args.resume:
-            pass  # Preserve successfully timestamped files from this workspace.
-        elif hasattr(tarfile, 'data_filter'):
-            tar.extractall(runtime_stage, filter='data')
-        else:
-            tar.extractall(runtime_stage)  # Paths/types/links validated above.
-    signed = []
-    files = sorted(runtime_stage.rglob('*'), key=lambda p: len(p.parts), reverse=True)
-    with (work / 'runtime-signing.log').open('w') as log:
-        for path in files:
-            if path.is_symlink() or not path.is_file():
-                continue
-            with path.open('rb') as f:
-                magic = f.read(4)
-            if magic not in MAGIC:
-                continue
-            metadata = subprocess.run(['codesign', '-d', '--verbose=4', str(path)], capture_output=True, text=True)
-            valid = subprocess.run(['codesign', '--verify', '--strict', str(path)], capture_output=True).returncode == 0
-            if not (valid and ('Authority=' + IDENTITY) in metadata.stderr and 'Timestamp=' in metadata.stderr and 'runtime' in metadata.stderr):
-                run('codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', IDENTITY, path, stdout=log, stderr=log)
-            run('codesign', '--verify', '--strict', path, stdout=log, stderr=log)
-            signed.append(str(path.relative_to(runtime_stage)))
-        for path in files:
-            if path.is_dir() and not path.is_symlink() and path.suffix in ('.app', '.framework', '.xpc', '.bundle'):
-                if any((runtime_stage / rel).is_relative_to(path) for rel in signed):
-                    run('codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', IDENTITY, path, stdout=log, stderr=log)
-    (work / 'runtime-signed-files.json').write_text(json.dumps(signed, indent=2))
     target = source / 'resources/local-asr/runtime.tar.gz'
     target.parent.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, COPYFILE_DISABLE='1')
-    # Never generate an updater manifest from this not-yet-notarized candidate.
     env.pop('MYGO_UPDATER_PRIVATE_KEY', None)
-    run('tar', '-czf', target, '-C', runtime_stage, 'runtime', env=env)
+    spec = runtime_cache.specification(expected)
+    cached = None if args.resume else runtime_cache.restore(
+        args.cache_dir, spec, runtime_stage, target, work / 'runtime-notary.json')
+    if cached is None:
+        print('Runtime cache MISS/resume: signing runtime.', flush=True)
+        # Verify paths and symlinks before extracting this already checksummed archive.
+        with tarfile.open(archive) as tar:
+            for member in tar.getmembers():
+                rel = Path(member.name)
+                if rel.is_absolute() or '..' in rel.parts or not rel.parts or rel.parts[0] != 'runtime':
+                    raise SystemExit(f'Unsafe runtime entry: {member.name}')
+                if member.isdev() or member.isfifo() or member.islnk():
+                    raise SystemExit(f'Unsupported runtime entry: {member.name}')
+                if member.issym():
+                    target = (runtime_stage / rel.parent / member.linkname).resolve()
+                    if not target.is_relative_to(runtime_stage / 'runtime'):
+                        raise SystemExit(f'Unsafe runtime symlink: {member.name}')
+            if args.resume:
+                pass  # Preserve successfully timestamped files from this workspace.
+            elif hasattr(tarfile, 'data_filter'):
+                tar.extractall(runtime_stage, filter='data')
+            else:
+                tar.extractall(runtime_stage)  # Paths/types/links validated above.
+        signed = []
+        files = sorted(runtime_stage.rglob('*'), key=lambda p: len(p.parts), reverse=True)
+        with (work / 'runtime-signing.log').open('w') as log:
+            for path in files:
+                if path.is_symlink() or not path.is_file():
+                    continue
+                with path.open('rb') as f:
+                    magic = f.read(4)
+                if magic not in MAGIC:
+                    continue
+                metadata = subprocess.run(['codesign', '-d', '--verbose=4', str(path)], capture_output=True, text=True)
+                valid = subprocess.run(['codesign', '--verify', '--strict', str(path)], capture_output=True).returncode == 0
+                if not (valid and ('Authority=' + IDENTITY) in metadata.stderr and 'Timestamp=' in metadata.stderr and 'runtime' in metadata.stderr):
+                    run('codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', IDENTITY, path, stdout=log, stderr=log)
+                run('codesign', '--verify', '--strict', path, stdout=log, stderr=log)
+                signed.append(str(path.relative_to(runtime_stage)))
+            for path in files:
+                if path.is_dir() and not path.is_symlink() and path.suffix in ('.app', '.framework', '.xpc', '.bundle'):
+                    if any((runtime_stage / rel).is_relative_to(path) for rel in signed):
+                        run('codesign', '--force', '--options', 'runtime', '--timestamp', '--sign', IDENTITY, path, stdout=log, stderr=log)
+        (work / 'runtime-signed-files.json').write_text(json.dumps(signed, indent=2))
+        target = source / 'resources/local-asr/runtime.tar.gz'
+        target.parent.mkdir(parents=True, exist_ok=True)
+        env = dict(os.environ, COPYFILE_DISABLE='1')
+        # Never generate an updater manifest from this not-yet-notarized candidate.
+        env.pop('MYGO_UPDATER_PRIVATE_KEY', None)
+        run('tar', '-czf', target, '-C', runtime_stage, 'runtime', env=env)
     runtime_hash = digest(target)
     (source / 'internal/localasr/assets/runtime.sha256').write_text(runtime_hash + '\n')
     config_path = source / 'mygo.json'
@@ -160,7 +171,7 @@ def main():
     with (work / 'app-signature.txt').open('w') as log:
         run('codesign', '--verify', '--deep', '--strict', app, stdout=log, stderr=log)
         run('codesign', '-d', '-r-', '--verbose=4', app, stdout=log, stderr=log)
-    (work / 'candidate.json').write_text(json.dumps({'status': 'signed-not-notarized', 'app': str(app), 'runtime_sha256': runtime_hash, 'identity': IDENTITY, 'version': config['version'], 'source_sha256': inventory}, indent=2))
+    (work / 'candidate.json').write_text(json.dumps({'status': 'signed-not-notarized', 'app': str(app), 'runtime_sha256': runtime_hash, 'identity': IDENTITY, 'version': config['version'], 'source_sha256': inventory, 'runtime_cache_spec': spec, 'runtime_cache_hit': cached is not None}, indent=2))
     print(f'Signed candidate ready, NOT notarized or published: {app}', flush=True)
 
 if __name__ == '__main__':

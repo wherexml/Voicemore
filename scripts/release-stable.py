@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Prepare notarized releases, or publish a verified candidate after native E2E.
+"""Prepare notarized releases, then publish with automatic artifact verification.
 
 Fail closed on missing tickets, mismatched app/DMG, changed source, failed E2E,
 wrong updater key, or existing release. Compare against committed source so
@@ -15,6 +15,7 @@ import shutil
 import subprocess
 import tarfile
 import tempfile
+import distribution_cache as runtime_cache
 from datetime import datetime, timezone
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -53,34 +54,51 @@ def main():
     p.add_argument('--output-parent', type=Path, default=Path.home() / 'Library/Caches/voicemore-release')
     p.add_argument('--keychain-profile', default='voicemore-skylance')
     p.add_argument('--publish', action='store_true')
-    p.add_argument('--e2e', type=Path)
+    p.add_argument('--e2e', type=Path, help='Optional native E2E report for this exact DMG')
+    p.add_argument('--full-e2e', action='store_true', help='Require a complete native cross-Mac report')
+    p.add_argument('--verify-only', action='store_true', help='Verify existing candidate without publishing')
+    p.add_argument('--cache-dir', type=Path, default=runtime_cache.DEFAULT_CACHE)
     a = p.parse_args()
+    if a.verify_only and (not a.candidate or a.publish):
+        p.error('--verify-only requires --candidate and cannot publish')
+    if a.full_e2e and not a.e2e and (a.publish or a.verify_only):
+        p.error('--full-e2e publication requires --e2e')
     os.chdir(ROOT)
     if a.candidate:
         work = a.candidate.resolve()
     else:
         if a.publish:
-            p.error('--publish requires --candidate and --e2e')
+            # Fail before signing/uploading when the build would include WIP.
+            changed = subprocess.check_output(['git', 'diff', '--name-only', 'HEAD', '-z']).split(b'\0')
+            changed += subprocess.check_output(['git', 'ls-files', '--others', '--exclude-standard', '-z']).split(b'\0')
+            pending = [os.fsdecode(n) for n in changed if n and (n.endswith(b'.go') or n in (b'go.mod', b'go.sum', b'mygo.json') or n.startswith((b'internal/', b'resources/')))]
+            if pending:
+                raise SystemExit('Commit the intended release source before automatic publication; pending: ' + ', '.join(sorted(set(pending))))
         a.output_parent.mkdir(parents=True, exist_ok=True)
         before = set(a.output_parent.glob('voicemore-distribution-*'))
-        run('python3', ROOT / 'scripts/build-distribution.py', '--output-parent', a.output_parent)
+        run('python3', ROOT / 'scripts/build-distribution.py', '--output-parent', a.output_parent, '--cache-dir', a.cache_dir)
         created = set(a.output_parent.glob('voicemore-distribution-*')) - before
         if len(created) != 1:
             raise SystemExit('Cannot uniquely identify candidate.')
         work = created.pop().resolve()
     c = read(work / 'candidate.json')
     app = Path(c['app'])
-    if not a.publish:
+    prepared = False
+    if not (work / 'final-candidate.json').exists():
+        if a.verify_only:
+            raise SystemExit('Final candidate missing; verification never builds.')
         for name, folder in [('runtime', work / 'runtime-stage/runtime'), ('app', app)]:
             archive = work / (name + '-notary.zip')
-            if not archive.exists():
+            if not archive.exists() and not (work / (name + '-notary.json')).exists():
                 run('ditto', '-c', '-k', '--keepParent', folder, archive)
             submit(work, name, archive, a.keychain_profile)
+            if name == 'runtime':
+                runtime_cache.store(work, a.cache_dir, a.keychain_profile)
         run('python3', ROOT / 'scripts/finalize-distribution.py', work, '--keychain-profile', a.keychain_profile)
-        print('Complete native cross-Mac E2E, then publish with --candidate', work, '--publish --e2e /absolute/report.json')
+        prepared = True
+    if not (a.publish or a.verify_only):
+        print('Notarized candidate ready. Publish with --candidate', work, '--publish; use --full-e2e --e2e REPORT when native retesting is needed.')
         return
-    if not a.e2e:
-        p.error('--publish requires --e2e')
     final = read(work / 'final-candidate.json')
     dmg = Path(final['dmg'])
     version = c['version']
@@ -99,16 +117,24 @@ def main():
         raise SystemExit('Committed source inventory differs from candidate.')
     if sha(app / 'Contents/Resources/local-asr/runtime.tar.gz') != c['runtime_sha256']:
         raise SystemExit('Bundled runtime differs from signed candidate.')
-    report = read(a.e2e)
+    report = read(a.e2e) if a.e2e else None
+    if a.e2e and not isinstance(report, dict):
+        raise SystemExit('Native E2E report must be a JSON object.')
     required = ('quarantine', 'gatekeeper', 'installed_app_matches', 'launch', 'permissions', 'model', 'dictation', 'history', 'relaunch')
-    if report.get('dmg_sha256') != sha(dmg) or report.get('version') != version or not report.get('host') or any(report.get('checks', {}).get(k) is not True for k in required):
+    if report is not None and (report.get('dmg_sha256') != sha(dmg) or report.get('version') != version or not report.get('host') or any(report.get('checks', {}).get(k) is not True for k in required)):
         raise SystemExit('Native E2E report missing, failed, or for a different artifact.')
     for name in ('app', 'runtime', 'dmg'):
         result = read(work / (name + '-notary.json'))
-        live = json.loads(subprocess.check_output(['xcrun', 'notarytool', 'info', result['id'], '--keychain-profile', a.keychain_profile, '--output-format', 'json']))
+        live = result if prepared else json.loads(subprocess.check_output(['xcrun', 'notarytool', 'info', result['id'], '--keychain-profile', a.keychain_profile, '--output-format', 'json']))
         if live.get('status') != 'Accepted':
             raise SystemExit(name + ' notarization not accepted.')
-    run(ROOT / 'scripts/verify-distribution.sh', app, dmg, work / 'publish-evidence')
+    if not prepared:
+        run(ROOT / 'scripts/verify-distribution.sh', app, dmg, work / 'publish-evidence')
+    verification = dict(version=version, dmg_sha256=sha(dmg), status='passed', mode='full-e2e' if report else 'artifact', runtime_cache_hit=c.get('runtime_cache_hit', False))
+    (work / 'verification.json').write_text(json.dumps(verification, indent=2) + '\n')
+    if a.verify_only:
+        print('PASS: automatic release verification; no publication performed.')
+        return
     tag = 'v' + version
     if subprocess.run(['gh', 'release', 'view', tag, '--repo', REPO], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
         raise SystemExit('Release exists; never overwrite published assets.')
@@ -164,7 +190,7 @@ def main():
     run('gh', 'release', 'edit', tag, '--repo', REPO, '--draft=false', '--prerelease=false', '--latest')
     receipt = dict(status='published', version=version, commit=head,
                    url=f'https://github.com/{REPO}/releases/tag/{tag}',
-                   dmg_sha256=sha(dmg), e2e_report_sha256=sha(a.e2e))
+                   dmg_sha256=sha(dmg), acceptance_mode=verification['mode'], e2e_report_sha256=sha(a.e2e) if a.e2e else None)
     (work / 'published-release.json').write_text(json.dumps(receipt, indent=2) + '\n')
     print('Published notarized stable release:', tag)
 

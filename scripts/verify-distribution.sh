@@ -10,7 +10,7 @@ evidence=$(mktemp -d "$evidence_root/distribution.XXXXXX")
 passed=false
 finish() {
  if [ "$passed" = true ]; then
-  echo 'PASS: supplied app and DMG pass distribution checks; cross-Mac installation and runtime E2E still required.' > "$evidence/result.txt"
+  echo 'PASS: supplied app and DMG pass distribution checks; native regression testing is selected by change scope.' > "$evidence/result.txt"
  else
   echo 'FAIL: artifact is not approved for stable distribution; inspect the evidence files.' > "$evidence/result.txt"
  fi
