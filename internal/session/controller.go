@@ -123,6 +123,10 @@ type run struct {
 	inserted  bool // an insertion was attempted: never a second one
 	viaHold   bool
 	cleanup   bool
+	// holdCopied keeps "copied to the clipboard" up until it is dismissed,
+	// as the V2 capsule has it; the classic one hides it after a while.
+	// Read from the settings when the dictation starts.
+	holdCopied bool
 
 	pcm      []byte
 	more     chan struct{} // signals new samples to the sender
@@ -278,6 +282,7 @@ func (c *Controller) startWithSink(viaHold bool, sink func(string)) {
 	r := &run{
 		id: store.NewID(), started: time.Now(), ctx: ctx, stop: stop,
 		confirm: make(chan struct{}), ready: make(chan struct{}), lost: make(chan struct{}), more: make(chan struct{}, 1), viaHold: viaHold,
+		holdCopied: s.CapsuleStyle != config.CapsuleClassic,
 	}
 	if c.cleanupNext != nil {
 		r.cleanup = *c.cleanupNext
@@ -1005,6 +1010,9 @@ func (c *Controller) done(r *run, message string) {
 	c.view = View{Phase: Done, Message: message}
 	c.mu.Unlock()
 	c.changed()
+	if r.holdCopied && message == c.tr("copiedFallback") {
+		return // until the cross, Escape or the next dictation
+	}
 	wait := 900 * time.Millisecond
 	if message != "" {
 		wait = 2200 * time.Millisecond

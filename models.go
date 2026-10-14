@@ -598,7 +598,7 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 		labelled(c, "resource", T("volcResource"), "", func() {
 			resources := []string{cloudasr.VolcHourly, cloudasr.VolcConcurrent, cloudasr.VolcClassicHourly}
 			i := slices.Index(resources, providers.VolcResource(s))
-			if ui.Segmented(c.Key("seg"), &i, T("vHourly"), T("vConcurrent"), T("vClassicHourly")).Changed() {
+			if segmented(c.Key("seg"), &i, T("vHourly"), T("vConcurrent"), T("vClassicHourly")).Changed() {
 				p.change(func(s *config.Settings) {
 					s.Providers.VolcResource = resources[i]
 				})

@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
+	"voiceinput/internal/config"
 	"voiceinput/internal/session"
 )
 
@@ -55,10 +56,16 @@ type overlay struct {
 	fadeID           uint64
 	levels           [session.Levels]float32
 	levelAt          time.Time
+	// classic is the renderer of this dictation, read from the settings
+	// when it starts, so a change of style never lands mid-dictation.
+	classic bool
+	width   int
+	v2      v2State
 }
 
 func newOverlay(a *app) *overlay {
 	o := &overlay{a: a}
+	o.classic = a.settings.Get().CapsuleStyle == config.CapsuleClassic
 	o.win = mygo.NewFlyout(mygo.FlyoutOptions{
 		Tray:    a.tray,
 		Width:   overlayW,
@@ -113,6 +120,9 @@ func (o *overlay) sync() {
 			// dictation ends.
 			o.area = mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
 			o.height = 0
+			// A new dictation: the style chosen in Settings applies now.
+			o.classic = o.a.settings.Get().CapsuleStyle == config.CapsuleClassic
+			o.v2 = v2State{}
 		}
 		o.place()
 		if !o.win.IsVisible() {
@@ -138,20 +148,27 @@ func (o *overlay) fade(to float32) {
 // Below the capsule the window keeps room for its shadow, taken from the
 // offset to the bottom of the screen, so the capsule itself does not move.
 func (o *overlay) place() {
-	h := compactH
+	h, w := compactH, overlayW
+	if !o.classic {
+		w = overlayV2W
+	}
 	if k := o.panelKind(); k != panelNone {
-		h += panelHeight(k) + 8
+		if o.classic {
+			h += panelHeight(k) + 8
+		} else {
+			h += o.v2PanelHeight(k) + v2PanelGap
+		}
 	}
 	offset := max(0, o.a.settings.Get().OverlayBottomOffset)
 	o.room = min(shadowRoom, offset)
-	if h+o.room == o.height {
+	if h+o.room == o.height && w == o.width {
 		return
 	}
-	o.height = h + o.room
+	o.height, o.width = h+o.room, w
 	o.win.SetBounds(mygo.Rectangle{
-		X:      o.area.X + (o.area.Width-overlayW)/2,
+		X:      o.area.X + (o.area.Width-w)/2,
 		Y:      o.area.Y + o.area.Height - h - offset,
-		Width:  overlayW,
+		Width:  w,
 		Height: h + o.room,
 	})
 }
@@ -202,6 +219,15 @@ func panelHeight(kind int) int {
 }
 
 func (o *overlay) view(c *ui.Context) {
+	if !o.classic {
+		o.viewV2(c)
+		return
+	}
+	o.viewClassic(c)
+}
+
+// viewClassic is the black capsule, kept as the setting's Classic style.
+func (o *overlay) viewClassic(c *ui.Context) {
 	c.Root().Background(ui.Transparent)
 	v := o.v
 	ctrl := o.a.ctrl

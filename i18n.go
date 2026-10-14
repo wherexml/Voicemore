@@ -418,7 +418,7 @@ var texts = map[string][3]string{
 	"gGeneral":          {"General", "一般", "通用"},
 	"gTriggerClean":     {"Trigger and text cleanup", "觸發與文字整理", "触发与文字整理"},
 	"gModels":           {"Models", "模型", "模型"},
-	"gPrivacy":          {"Privacy settings", "隱私設定", "隐私设置"},
+	"gPrivacy":          {"Privacy", "隱私", "隐私"},
 	"pMic":              {"Microphone", "麥克風", "麦克风"},
 	"pAx":               {"Accessibility (insert text)", "輔助使用（寫入文字）", "辅助功能（写入文字）"},
 	"pInput":            {"Input Monitoring (trigger key)", "輸入監控（觸發鍵）", "输入监控（触发键）"},

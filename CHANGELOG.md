@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.3
+
+- Add an indigo dictation capsule with live transcript expansion, animated status, and recovery actions; keep the classic capsule available in Settings.
+- Keep copied-text feedback visible until dismissed in the new capsule.
+- Refine Settings controls, shortcut labels, Home navigation, and the dictionary card layout.
+- Include the onboarding, microphone, transcription, and packaging improvements documented in 0.3.2.
+
+新增靛蓝听写胶囊，支持实时转写展开、状态动画与失败恢复操作；设置中可切回经典样式。复制反馈保留至主动关闭，优化设置控件、快捷键标识、首页导航和词典卡片布局。本次同时包含 0.3.2 的首次使用引导、麦克风和转写改进。
+
 ## 0.3.2
 
 - Add first-run onboarding with a safe dictation practice flow.

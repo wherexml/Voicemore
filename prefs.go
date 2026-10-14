@@ -392,7 +392,7 @@ func (p *prefsWindow) general(c *ui.Context) {
 	card(c, "general", func() {
 		setting(c, "lang", nil, T("language"), "", func() {
 			i := int(langIndex.Load())
-			if ui.Segmented(c.Key("seg"), &i, langNames...).Changed() {
+			if segmented(c.Key("seg"), &i, langNames...).Changed() {
 				if err := p.a.setLanguage(i); err != nil {
 					p.say("notSaved", err.Error())
 				}
@@ -409,10 +409,22 @@ func (p *prefsWindow) general(c *ui.Context) {
 					i = k
 				}
 			}
-			if ui.Segmented(c.Key("seg"), &i, T("apLight"), T("apDark"), T("apAuto")).Changed() {
+			if segmented(c.Key("seg"), &i, T("apLight"), T("apDark"), T("apAuto")).Changed() {
 				appearance = modes[i]
 				p.change(func(s *config.Settings) { s.Appearance = modes[i] })
 				p.a.refreshAll()
+			}
+		})
+		// The dictation capsule: the indigo one, or the classic black one
+		// to go back to. The overlay reads it when a dictation starts.
+		setting(c, "capsule", nil, T("sCapsule"), T("sCapsuleHint"), func() {
+			styles := []string{config.CapsuleV2, config.CapsuleClassic}
+			i := 0
+			if p.a.settings.Get().CapsuleStyle == config.CapsuleClassic {
+				i = 1
+			}
+			if segmented(c.Key("seg"), &i, T("capV2"), T("capClassic")).Changed() {
+				p.change(func(s *config.Settings) { s.CapsuleStyle = styles[i] })
 			}
 		})
 		p.loginItem(c)
@@ -686,7 +698,7 @@ func (p *prefsWindow) dictation(c *ui.Context) {
 				mode = 1
 			}
 			// A custom shortcut reports no release: it can only toggle.
-			seg := ui.Segmented(c.Key("seg"), &mode, T("mToggle"), T("mHold")).Disabled(!macos.IsModifierKey(s.TriggerKey))
+			seg := segmented(c.Key("seg"), &mode, T("mToggle"), T("mHold")).Disabled(!macos.IsModifierKey(s.TriggerKey))
 			if seg.Changed() {
 				p.change(func(s *config.Settings) {
 					s.TriggerMode = []string{config.TriggerToggle, config.TriggerHold}[mode]
@@ -730,7 +742,10 @@ func (p *prefsWindow) dictation(c *ui.Context) {
 // settings.json stays selected and is shown as such.
 func (p *prefsWindow) triggerKey(c *ui.Context, s config.Settings) {
 	keys := []string{macos.KeyFn, macos.KeyRightOption, macos.KeyRightCommand, macos.KeyRightControl}
-	names := []string{"Fn", T("rOption"), T("rCommand"), T("rControl")}
+	names := make([]string, len(keys))
+	for i, key := range keys {
+		names[i] = keyName(key)
+	}
 	if !macos.IsModifierKey(s.TriggerKey) {
 		keys = append(keys, s.TriggerKey)
 		names = append(names, T("customKey", s.TriggerKey))

@@ -112,3 +112,35 @@ func okTint(t *ui.Theme) ui.Color {
 	}
 	return ui.RGBA(4, 120, 87, 0.12)
 }
+
+// segmented keeps the native radio-group behavior while giving the selected
+// option a soft neutral fill and a defined edge in both appearances.
+func segmented(c *ui.Context, selected *int, labels ...string) ui.Element {
+	t := c.Theme()
+	parts := ui.SegmentedBase(c, selected, len(labels))
+	track := parts.Track
+	track.AlignItems(ui.Stretch).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
+		Radius(t.Radius).Background(pick(t, "#fafafa", "#202020")).Border(1, t.Border)
+	track.Children(func() {
+		for i, label := range labels {
+			segment := parts.Segment(i)
+			segment.Padding(t.Space(1), t.Space(3)).Radius(max(t.Radius-t.Space(0.5), 0))
+			bg, fg := ui.Transparent, t.TextMuted
+			border := ui.Transparent
+			if i == *selected {
+				bg, fg = pick(t, "#e7e7e9", "#38383c"), t.Text
+				border = pick(t, "#c9c9ce", "#5c5c63")
+			} else if !segment.IsDisabled() {
+				if segment.Pressed() {
+					bg = t.SurfacePressed
+				} else if segment.Hovered() {
+					bg = hoverColor(t)
+				}
+			}
+			segment.Background(bg).Border(1, border).TextColor(fg).Children(func() {
+				ui.Text(c, label).SingleLine()
+			})
+		}
+	})
+	return track
+}

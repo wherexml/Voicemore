@@ -148,6 +148,10 @@ type Settings struct {
 	// OverlayBottomOffset is the gap between the capsule and the bottom of
 	// the work area of the display the recording started on.
 	OverlayBottomOffset int `json:"overlayBottomOffset"`
+	// CapsuleStyle is how the dictation capsule looks: empty is the indigo
+	// capsule (CapsuleV2), CapsuleClassic the earlier black one. A change
+	// applies from the next dictation.
+	CapsuleStyle string `json:"capsuleStyle,omitempty"`
 
 	ClipboardRestoreDelayMs int `json:"clipboardRestoreDelayMs"`
 
@@ -176,6 +180,11 @@ type Settings struct {
 	// here: macOS holds it (System Settings → Login Items).
 	ShowInDock bool `json:"showInDock"`
 }
+
+const (
+	CapsuleV2      = ""
+	CapsuleClassic = "classic"
+)
 
 func Defaults() Settings {
 	return Settings{

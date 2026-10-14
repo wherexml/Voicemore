@@ -27,7 +27,8 @@ func keyName(key string) string {
 		return "fn"
 	}
 	if k, ok := keyNames[key]; ok {
-		return T(k)
+		symbol := map[string]string{macos.KeyRightOption: "⌥", macos.KeyRightCommand: "⌘", macos.KeyRightControl: "⌃"}[key]
+		return symbol + " " + T(k)
 	}
 	return key
 }
@@ -192,7 +193,11 @@ func (m *mainWindow) setupRow(c *ui.Context, key string, svg *ui.SVG, label, val
 		if control != nil {
 			control()
 		}
-		if iconButton(c.Key("open"), icChevron, T("openIn", label)).Clicked() {
+		open := ui.ButtonBase(c.Key("open")).Label(T("openIn", label)).Tooltip(T("openIn", label)).
+			Size(26, 26).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+			ui.Icon(c, icChevron).FontSize(14).TextColor(t.TextMuted)
+		})
+		if open.Clicked() {
 			m.a.prefs.open(category)
 		}
 	})
