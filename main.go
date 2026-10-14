@@ -5,6 +5,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -37,10 +38,15 @@ type app struct {
 	dict     *dict.Dict
 	ctrl     *session.Controller
 
-	tray     *mygo.Tray
-	overlay  *overlay
-	main     *mainWindow
-	quitting bool
+	tray            *mygo.Tray
+	overlay         *overlay
+	main            *mainWindow
+	quitting        bool
+	cleanupCheck    uint64
+	cleanupChecking bool
+	cleanupReady    bool
+	cleanupOptions  cleanup.Options
+	cleanupChecked  time.Time
 
 	// stopHotkey ends the current trigger, and triggerErr says why there
 	// is none.
@@ -56,6 +62,8 @@ type app struct {
 	keyErr     string // why the key is not in the encrypted credential store, if it is not
 
 	prefs *prefsWindow
+	// onboard is the first-run guide, a window of its own (onboarding.go).
+	onboard *onboardWindow
 }
 
 // secret returns the credential of an encrypted credential store account, or "".
@@ -116,6 +124,7 @@ func (a *app) loadSecrets() {
 func (a *app) refreshAll() {
 	a.main.refresh()
 	a.prefs.refresh()
+	a.onboard.refresh()
 }
 
 // cleanupKeyAccount names the app's one encrypted credential store item.
@@ -236,6 +245,13 @@ func (a *app) ready() {
 	}
 	a.settings, err = config.Open(dir)
 	note("fileSettings", err)
+	// A saved preference is not proof that a service is available on this Mac.
+	wantedCleanup := a.settings.Get().CleanupDefault
+	if wantedCleanup {
+		s := a.settings.Get()
+		s.CleanupDefault = false
+		note("fileSettings", a.settings.Set(s))
+	}
 	a.vault, err = secrets.Open(dir)
 	note("fileSecrets", err)
 	a.history, err = store.Open(dir)
@@ -243,6 +259,7 @@ func (a *app) ready() {
 	a.dict, err = dict.Open(dir)
 	note("fileDict", err)
 	a.applyLanguage()
+	appearance = a.settings.Get().Appearance // light, dark, or the system's (theme.go)
 
 	a.ctrl = &session.Controller{Settings: a.settings, History: a.history, Dict: a.dict}
 	a.ctrl.CopyText = func(s string) { mygo.Clipboard.WriteText(s) }
@@ -270,6 +287,7 @@ func (a *app) ready() {
 	a.overlay = newOverlay(a)
 	a.main = newMainWindow(a)
 	a.prefs = newPrefsWindow(a)
+	a.onboard = newOnboardWindow(a)
 	a.localASR.Changed = a.refreshAll
 	// A click on the Dock icon, or reopening the app, brings the window
 	// back; a second launch does the same in the instance already running.
@@ -278,12 +296,20 @@ func (a *app) ready() {
 	a.ctrl.OnChange = func() {
 		a.overlay.sync()
 		a.main.refresh()
+		a.onboard.refresh() // its first-dictation step follows the dictation
 	}
 	// Local file reads finish before the user can edit credentials.
 	a.loadKey()
 	a.loadSecrets()
-	a.ctrl.OnHistory = a.main.refresh
+	a.ctrl.OnHistory = func() {
+		a.main.refresh()
+		a.onboard.refresh()
+	}
 	a.setMenu()
+	// Without the Dock icon the menu bar item is the way in.
+	if !a.settings.Get().ShowInDock {
+		macos.SetDockIcon(false)
+	}
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		a.ctrl.Cancel()
 		a.localASR.Close()
@@ -303,9 +329,28 @@ func (a *app) ready() {
 
 	// Always show the control window on launch, including first launch.
 	// A hidden tray-only app otherwise looks as if it failed to start.
-	a.main.show()
+	//
+	// A new installation opens on the first-run guide instead. Whoever
+	// already uses the app is never sent through it: settings saved by an
+	// earlier version are marked as having left it (config.migrate), and a
+	// history that is not empty says the same when no settings were saved.
+	if ob := a.settings.Get().Onboarding; !ob.Left && len(a.history.List("")) > 0 {
+		s := a.settings.Get()
+		s.Onboarding.Left = true
+		if err := a.settings.Set(s); err != nil {
+			log.Printf("settings: %v", err)
+		}
+	}
+	if a.settings.Get().Onboarding.Left {
+		a.main.show()
+	} else {
+		a.onboard.open()
+	}
 	log.Printf("ready: data=%s", dir)
 	a.bindTrigger()
+	if wantedCleanup {
+		a.setCleanup(true)
+	}
 	if a.settings.Get().ASRManaged && a.localASR.Snapshot().Installed {
 		a.localASR.Start()
 	}
@@ -339,13 +384,85 @@ func (a *app) setLanguage(i int) error {
 	return err
 }
 
-// setCleanup turns text cleanup on or off, for the next dictations and as
-// the saved default, and brings the tray's menu and both windows in line.
+// ensureCleanupReady checks in the background, including after model edits.
+func (a *app) ensureCleanupReady() {
+	opts, err := providers.CleanupOptions(a.settings.Get(), a.secret)
+	if err != nil {
+		if a.cleanupReady || a.cleanupChecking || a.settings.Get().CleanupDefault {
+			a.cleanupCheck++
+			a.cleanupChecking = false
+			a.cleanupUnavailable()
+		}
+		return
+	}
+	if opts == a.cleanupOptions && (a.cleanupChecking || time.Since(a.cleanupChecked) < 15*time.Second) {
+		return
+	}
+	a.checkCleanup(false)
+}
+
 func (a *app) setCleanup(on bool) {
+	if on {
+		a.checkCleanup(true)
+		return
+	}
+	a.cleanupCheck++
+	a.cleanupChecking = false
+	a.saveCleanup(false)
+}
+
+func (a *app) checkCleanup(enable bool) {
+	a.cleanupCheck++
+	request := a.cleanupCheck
+	a.cleanupChecking = false
+	s := a.settings.Get()
+	opts, err := providers.CleanupOptions(s, a.secret)
+	if err != nil {
+		a.cleanupUnavailable()
+		return
+	}
+	a.cleanupOptions = opts
+	a.cleanupReady = false
+	a.cleanupChecking = true
+	a.refreshAll()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		result, err := cleanup.Check(ctx, opts)
+		mygo.RunOnMain(func() {
+			if request != a.cleanupCheck {
+				return
+			}
+			a.cleanupChecking = false
+			a.cleanupChecked = time.Now()
+			current, currentErr := providers.CleanupOptions(a.settings.Get(), a.secret)
+			if err != nil || !result.Listed || currentErr != nil || current != opts {
+				a.cleanupUnavailable()
+				return
+			}
+			a.cleanupReady = true
+			if enable {
+				a.saveCleanup(true)
+			} else {
+				a.setMenu()
+				a.refreshAll()
+			}
+		})
+	}()
+	return
+}
+
+func (a *app) cleanupUnavailable() {
+	a.cleanupReady = false
+	a.saveCleanup(false)
+}
+
+func (a *app) saveCleanup(on bool) {
 	s := a.settings.Get()
 	s.CleanupDefault = on
 	if err := a.settings.Set(s); err != nil {
 		log.Println("settings:", err)
+		return
 	}
 	a.ctrl.SetCleanupNext(on)
 	a.setMenu()
@@ -412,9 +529,8 @@ func (a *app) setMenu() {
 				go a.ctrl.Toggle()
 			}
 		}},
-		{Label: T("trayCleanup"), Type: mygo.MenuItemCheckbox, Checked: a.ctrl.CleanupNext(), Click: func(*mygo.MenuItem, *mygo.Window) {
-			a.ctrl.SetCleanupNext(!a.ctrl.CleanupNext())
-			a.setMenu()
+		{Label: T("trayCleanup"), Type: mygo.MenuItemCheckbox, Disabled: !a.cleanupReady && !a.ctrl.CleanupNext(), Checked: a.ctrl.CleanupNext(), Click: func(*mygo.MenuItem, *mygo.Window) {
+			a.setCleanup(!a.ctrl.CleanupNext())
 		}},
 		mygo.Separator(),
 		{Label: T("updateCheck"), Click: func(*mygo.MenuItem, *mygo.Window) {

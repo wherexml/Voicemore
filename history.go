@@ -93,7 +93,7 @@ func (m *mainWindow) selectRecord(r store.Record) {
 	m.selected = r.ID
 	m.revBase = r.Transcript()
 	m.revText = m.revBase
-	m.reviseOpen, m.detailsOpen = false, false
+	m.reviseOpen, m.detailsPeek = false, "" // "Details" stays as the user left it
 	m.status = nil
 }
 
@@ -124,13 +124,23 @@ func (m *mainWindow) openPlayer(r store.Record) error {
 	return nil
 }
 
-// searchInput is the search field of a list. MyGo v0.4.8's ui.SearchField
-// always shows the English "Search" while empty: it sets that placeholder
-// on its inner input, and Placeholder on the field it returns does not
-// reach it. A plain text input takes Placeholder, so the visible prompt
-// follows the language; the label names it for assistive technology.
-func searchInput(c *ui.Context, query *string) ui.Element {
-	return ui.TextInput(c, query).Placeholder(T("search")).Label(T("search"))
+// searchInput is the search field of a list: a magnifying glass and a
+// text input inside one bordered field. MyGo v0.4.8's ui.SearchField always
+// shows the English "Search" while empty, so the input is a plain one whose
+// placeholder follows the language; its label names it for assistive
+// technology, and the icon is decoration. The key is the input's.
+func searchInput(c *ui.Context, key string, query *string, width float32) ui.Element {
+	t := c.Theme()
+	var in ui.Element
+	field := ui.Row(c).Gap(6).Padding(0, 9).Radius(8).AlignItems(ui.Center).Background(t.Surface).Border(1, strongLine(t))
+	if width > 0 {
+		field.Width(width)
+	}
+	field.Children(func() {
+		ui.Icon(c, icSearch).FontSize(14).TextColor(t.TextMuted)
+		in = ui.TextInput(c.Key(key), query).Placeholder(T("search")).Label(T("search")).Grow(1).MinWidth(0).BorderWidth(0).Background(ui.Transparent)
+	})
+	return in
 }
 
 func (m *mainWindow) historyView(c *ui.Context) {
@@ -151,21 +161,22 @@ func (m *mainWindow) historyView(c *ui.Context) {
 	}
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
 		ui.Column(c).Width(290).BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
-			ui.Column(c).Padding(12).Children(func() {
-				if searchInput(c.Key("history-search"), &m.query).Changed() {
+			ui.Column(c).Padding(14, 12, 12).Children(func() {
+				if searchInput(c, "history-search", &m.query, 0).Changed() {
 					m.hPage = 1 // a search starts at its first page
 				}
 			})
 			if len(records) == 0 {
 				ui.Text(c, T("noRecords")).Padding(24).TextColor(t.TextMuted)
 			}
-			ui.Scroll(c).Grow(1).Padding(0, 8, 12).Gap(2).Children(func() {
+			// Rows are separate surfaces, 11 px apart, on the search field's inset.
+			ui.Scroll(c).Grow(1).Padding(2, 12, 16).Gap(11).Children(func() {
 				for _, r := range visible {
 					bg := ui.Transparent
 					if r.ID == m.selected {
 						bg = t.Selection
 					}
-					row := ui.Column(c.Key(r.ID)).Padding(9, 10).Radius(8).Gap(3).Background(bg).Cursor(ui.CursorPointer)
+					row := ui.Column(c.Key(r.ID)).Padding(12, 12).Radius(8).Gap(7).Background(bg).Cursor(ui.CursorPointer)
 					row.Children(func() {
 						ui.Row(c).Gap(6).Children(func() {
 							// The time on the left and duration at the edge.
@@ -177,7 +188,7 @@ func (m *mainWindow) historyView(c *ui.Context) {
 						if text == "" {
 							text = T("emptyText")
 						}
-						ui.Text(c, text).FontSize(14).LineHeight(1.65).MaxLines(2)
+						ui.Text(c, text).FontSize(13).LineHeight(1.55).TextColor(softText(t)).MaxLines(2)
 					})
 					if row.Clicked() {
 						m.selectRecord(r)
@@ -192,7 +203,7 @@ func (m *mainWindow) historyView(c *ui.Context) {
 				ui.Text(c, T("pickRecord")).Padding(40, 26).TextColor(t.TextMuted)
 				return
 			}
-			ui.Scroll(c.Key("detail-"+r.ID)).Fill().Padding(22, 26).Gap(14).Children(func() { m.detailView(c, r) })
+			ui.Scroll(c.Key("detail-"+r.ID)).Fill().Padding(28, 36).Gap(20).Children(func() { m.detailView(c, r) })
 		})
 	})
 }
@@ -275,7 +286,7 @@ func (m *mainWindow) detailView(c *ui.Context, r store.Record) {
 	if primary == "" {
 		ui.Text(c, T("emptyText")).FontSize(15).TextColor(t.TextMuted)
 	} else {
-		ui.Text(c, primary).FontSize(14).LineHeight(1.65).Selectable()
+		ui.Text(c, primary).FontSize(15).LineHeight(1.75).Selectable()
 	}
 
 	// The essential actions; the rest is in the menu.
@@ -295,13 +306,13 @@ func (m *mainWindow) detailView(c *ui.Context, r store.Record) {
 			Menu(func(menu *ui.Menu) {
 				if menu.Item(T("retranscribe")).Disabled(!r.HasAudio() || working).Chosen() {
 					m.do("retranscribing", func() error { return m.a.ctrl.Retranscribe(id) }, "versionAdded")
-					m.detailsOpen = true
+					m.detailsPeek = id // the new version shows, without changing the saved preference
 				}
 				// Re-cleanup uses the cleanup model of the settings, as
 				// the dictation's own cleanup does.
 				if menu.Item(T("reclean")).Disabled(base == "" || working).Chosen() {
 					m.do("recleaning", func() error { return m.a.ctrl.Recleanup(id, base) }, "versionAdded")
-					m.detailsOpen = true
+					m.detailsPeek = id
 				}
 				menu.Separator()
 				if menu.Item(T("del")).Chosen() {
@@ -342,10 +353,14 @@ func (m *mainWindow) detailView(c *ui.Context, r store.Record) {
 	}
 
 	ui.Divider(c)
-	ui.Collapsible(c.Key("details"), T("details"), &m.detailsOpen, func() {
+	// "Details" is a preference: open or closed as the user last left it,
+	// for every record and across launches. Only the user's own toggle
+	// changes it; a rerun opens it for its record alone.
+	open := m.detailsOpen || m.detailsPeek == r.ID
+	details := ui.Collapsible(c.Key("details"), T("details"), &open, func() {
 		ui.Column(c).Gap(12).Padding(8, 0, 0).Children(func() {
 			m.textBlock(c, "raw", T("raw"), r.RawText, T("emptyText"))
-			if r.CorrectedText != "" {
+			if r.Corrected || r.CorrectedText != "" {
 				m.textBlock(c, "corrected", T("corrected")+" · "+strings.Join(r.AppliedRules, ", "), r.CorrectedText, "")
 			}
 			title := T("cleaned")
@@ -383,4 +398,12 @@ func (m *mainWindow) detailView(c *ui.Context, r store.Record) {
 			ui.Text(c, T("timing", r.Timing.FirstPartialMs, r.Timing.StopToFinalMs, r.Timing.CleanupMs, r.Timing.FinalToInsertMs)).FontSize(11).TextColor(t.TextMuted)
 		})
 	})
+	if details.Changed() {
+		m.detailsOpen, m.detailsPeek = open, ""
+		st := m.a.settings.Get()
+		st.HistoryDetailsOpen = open
+		if err := m.a.settings.Set(st); err != nil {
+			m.say("notSaved", err.Error())
+		}
+	}
 }

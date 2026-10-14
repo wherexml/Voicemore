@@ -3,11 +3,13 @@ package main
 import (
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"voiceinput/internal/config"
 	"voiceinput/internal/macos"
 	"voiceinput/internal/providers"
+	"voiceinput/internal/store"
 )
 
 // The home page says what to press, shows what is set up and lists the
@@ -65,106 +67,197 @@ func (m *mainWindow) homeView(c *ui.Context) {
 	t := c.Theme()
 	s := m.a.settings.Get()
 	key := keyName(s.TriggerKey)
-	ui.Scroll(c).Fill().Padding(44, 28, 24).AlignItems(ui.Center).Children(func() {
-		ui.Column(c).FillWidth().MaxWidth(580).Gap(48).Children(func() {
-			// What to press. The key and the headline share a line.
-			ui.Column(c.Key("hero")).Gap(12).AlignItems(ui.Start).Children(func() {
-				ui.Row(c).Gap(16).AlignItems(ui.Center).Children(func() {
-					ui.Row(c).Height(50).MinWidth(52).Padding(0, 15).Radius(11).Justify(ui.Center).AlignItems(ui.Center).
-						Background(t.Background).BorderWidth(1, 1, 3, 1).BorderColor(strongLine(t)).Children(func() {
-						ui.Text(c, key).FontSize(16).FontWeight(600).SingleLine()
-					})
-					ui.Text(c, T("homeReady", key)).FontSize(25).FontWeight(600)
+	ui.Scroll(c).Fill().Padding(0, 28, 20).AlignItems(ui.Center).Children(func() {
+		ui.Column(c).FillWidth().MaxWidth(860).Children(func() {
+			// The updater, first: one slim card.
+			m.updateCard(c)
+
+			// Dictation is the page: the key, what pressing it brings up,
+			// and one sentence. No frame; the space around it is the emphasis.
+			ui.Column(c.Key("hero")).FillWidth().AlignItems(ui.Center).Padding(64, 16, 60).Children(func() {
+				ui.Row(c).Gap(14).AlignItems(ui.Center).Children(func() {
+					keycap(c, key, 60, 18)
+					ui.Box(c).Size(34, 4).Draw(drawDottedLink)
+					// A still picture of the pill that appears while speaking.
+					ui.Box(c).Size(146, 34).Draw(drawPillPreview)
 				})
+				ui.Box(c).Height(34)
+				ui.Text(c, T("homeReady", key)).FontSize(34).FontWeight(600)
+				ui.Box(c).Height(14)
 				hint := "homeToggle"
 				if s.TriggerMode == config.TriggerHold {
 					hint = "homeHold"
 				}
-				ui.Text(c, T(hint)).FontSize(14).TextColor(t.TextMuted)
-				// A still picture of the pill that appears while speaking.
-				ui.Box(c).Size(146, 34).Draw(drawPillPreview)
+				ui.Text(c, T(hint)).FontSize(15).TextColor(softText(t)).MaxWidth(480)
 			})
 
-			// What is set up; each row opens its part of the settings.
-			ui.Column(c.Key("setup")).Children(func() {
-				ui.Text(c, T("homeSetup")).FontSize(12).FontWeight(600).TextColor(t.TextMuted).Padding(0, 0, 4)
-				mode := "mToggle"
-				if s.TriggerMode == config.TriggerHold {
-					mode = "mHold"
-				}
-				m.setupRow(c, "shortcut", T("hShortcut"), key+" · "+T(mode), "dictation", nil)
-				cleanup := T("off")
-				if s.CleanupDefault {
-					cleanup = m.a.modelLabel(providers.KindCleanup, s)
-				}
-				m.setupRow(c, "cleanup", T("cleanup"), cleanup, "dictation", func() {
-					on := s.CleanupDefault
-					if ui.Switch(c.Key("sw"), &on).Label(T("cleanup")).Changed() {
-						m.a.setCleanup(on)
-					}
-				})
-				m.setupRow(c, "asr", T("mAsr"), m.a.modelLabel(providers.KindASR, s), "models", nil)
-				perms := T("granted")
-				if macos.MicrophoneStatus() != "authorized" || !macos.AccessibilityTrusted(false) || !macos.InputMonitoringGranted(false) {
-					perms = T("notGranted")
-				}
-				m.setupRow(c, "perms", T("gPerms"), perms, "perms", nil)
-				ui.Divider(c)
-			})
-
-			// The latest dictations, which open in History.
+			// Setup and Recent, side by side: plain rows under one rule each,
+			// four to a column and of one height, so the columns end together.
 			now := time.Now()
 			c.After(untilNextMinute(now)) // the time labels turn with the minute
 			records := m.a.history.List("")
-			ui.Column(c.Key("recent")).Children(func() {
-				ui.Row(c).Padding(0, 0, 4).Children(func() {
-					ui.Text(c, T("homeRecent")).FontSize(12).FontWeight(600).TextColor(t.TextMuted).Grow(1)
-					if len(records) > 0 {
-						all := ui.ButtonBase(c.Key("all")).Label(T("showAll"))
-						all.Children(func() { ui.Text(c, T("showAll")).FontSize(12).TextColor(t.TextMuted) })
-						if all.Clicked() {
-							m.goTo("history")
+			ui.Row(c).Gap(44).AlignItems(ui.Start).Children(func() {
+				// What is set up; each row opens its part of the settings.
+				ui.Column(c.Key("setup")).Grow(1).Basis(0).MinWidth(0).Children(func() {
+					sectionHead(c, T("homeSetup"), nil)
+					mode := "mToggle"
+					if s.TriggerMode == config.TriggerHold {
+						mode = "mHold"
+					}
+					m.setupRow(c, "shortcut", icKeyboard, T("hShortcut"), key+" · "+T(mode), "general", nil)
+					ui.Divider(c)
+					m.setupRow(c, "cleanup", icSparkle, T("cleanup"), "", "models", func() {
+						m.a.cleanupSwitch(c)
+					})
+					ui.Divider(c)
+					m.setupRow(c, "asr", icMic, T("mAsr"), m.a.modelLabel(providers.KindASR, s), "models", nil)
+					ui.Divider(c)
+					perms := T("granted")
+					if macos.MicrophoneStatus() != "authorized" || !macos.AccessibilityTrusted(false) || !macos.InputMonitoringGranted(false) {
+						perms = T("notGranted")
+					}
+					m.setupRow(c, "perms", icShield, T("gPerms"), perms, "perms", nil)
+				})
+
+				// The latest dictations, which open in History.
+				ui.Column(c.Key("recent")).Grow(1).Basis(0).MinWidth(0).Children(func() {
+					sectionHead(c, T("homeRecent"), func() {
+						if len(records) > 0 {
+							all := ui.ButtonBase(c.Key("all")).Label(T("showAll"))
+							all.Children(func() { ui.Text(c, T("showAll")).FontSize(12).FontWeight(500).TextColor(softText(t)) })
+							if all.Clicked() {
+								m.goTo("history")
+							}
 						}
+					})
+					if len(records) == 0 {
+						ui.Text(c, T("homeEmpty")).TextColor(t.TextMuted).Padding(14, 2)
+					}
+					for i, r := range records[:min(len(m.recentOpen), len(records))] {
+						if i > 0 {
+							ui.Divider(c)
+						}
+						m.recentRow(c, i, r, now)
 					}
 				})
-				if len(records) == 0 {
-					ui.Divider(c)
-					ui.Text(c, T("homeEmpty")).TextColor(t.TextMuted).Padding(12, 0)
-				}
-				for _, r := range records[:min(3, len(records))] {
-					ui.Divider(c)
-					row := ui.ButtonBase(c.Key(r.ID)).Gap(12).Padding(11, 0).AlignItems(ui.Center).Cursor(ui.CursorPointer)
-					row.Children(func() {
-						ui.Text(c, timeLabel(r.StartedAt, now)).FontSize(12).TextColor(faintText(t)).MinWidth(108).SingleLine()
-						text, _ := primaryText(r)
-						if text == "" {
-							text = T("emptyText")
-						}
-						ui.Text(c, text).Grow(1).SingleLine()
-					})
-					if row.Clicked() {
-						m.showRecord(r.ID)
-					}
-				}
-				ui.Divider(c)
 			})
 		})
 	})
 }
 
-// setupRow is a line of the setup list: a name, its value, an optional
-// control, and a chevron into the settings.
-func (m *mainWindow) setupRow(c *ui.Context, key, label, value, category string, control func()) {
+// sectionHead is the heading of one of Home's two lists: a small label
+// over a rule, with an optional action at its right.
+func sectionHead(c *ui.Context, title string, action func()) {
 	t := c.Theme()
-	ui.Divider(c)
-	ui.Row(c.Key(key)).Gap(12).MinHeight(44).AlignItems(ui.Center).Children(func() {
-		ui.Text(c, label).Grow(1).SingleLine()
-		ui.Text(c, value).FontSize(12.5).TextColor(t.TextMuted).SingleLine()
+	ui.Row(c).MinHeight(28).Padding(0, 2, 6).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(strongLine(t)).Children(func() {
+		ui.Text(c, title).FontSize(12).FontWeight(500).TextColor(t.TextMuted).Grow(1)
+		if action != nil {
+			action()
+		}
+	})
+}
+
+// keycap draws a key as the interface shows it: a raised tile with a
+// heavier lower edge.
+func keycap(c *ui.Context, key string, height, font float32) {
+	t := c.Theme()
+	if len([]rune(key)) > 3 { // a named key, as "Right Option", reads smaller
+		font *= 0.76
+	}
+	ui.Row(c).Height(height).MinWidth(height+4).Padding(0, height*0.3).Radius(height*0.25).Justify(ui.Center).AlignItems(ui.Center).
+		Background(cardColor(t)).BorderWidth(1, 1, 3, 1).BorderColor(strongLine(t)).Children(func() {
+		ui.Text(c, key).FontSize(font).FontWeight(700).SingleLine()
+	})
+}
+
+// drawDottedLink joins the keycap and the pill: a row of dots.
+func drawDottedLink(p *ui.Painter, r ui.Rect) {
+	const d, gap = 2, 4
+	for x := r.X; x+d <= r.X+r.W; x += d + gap {
+		p.Fill(ui.Rect{X: x, Y: r.Y + (r.H-d)/2, W: d, H: d}, ui.RGBA(128, 127, 120, 0.7), d/2)
+	}
+}
+
+// setupRow is a line of the setup list: an icon, a name, its value, an
+// optional control, and a chevron into the settings.
+func (m *mainWindow) setupRow(c *ui.Context, key string, svg *ui.SVG, label, value, category string, control func()) {
+	t := c.Theme()
+	ui.Row(c.Key(key)).Gap(12).Height(46).Padding(0, 2).AlignItems(ui.Center).Children(func() {
+		ui.Icon(c, svg).FontSize(16).TextColor(t.TextMuted)
+		ui.Text(c, label).SingleLine()
+		ui.Spacer(c)
+		if value != "" {
+			ui.Text(c, value).FontSize(12.5).TextColor(softText(t)).MinWidth(0).SingleLine()
+		}
 		if control != nil {
 			control()
 		}
 		if iconButton(c.Key("open"), icChevron, T("openIn", label)).Clicked() {
 			m.a.prefs.open(category)
+		}
+	})
+}
+
+// recentRow is one of the latest dictations on Home: its text, which opens
+// it in History, and at the right one slot of a fixed width that shows the
+// time, or, while the pointer or the keyboard is on the row, a button that
+// copies the text shown. The two are separate buttons side by side.
+func (m *mainWindow) recentRow(c *ui.Context, i int, r store.Record, now time.Time) {
+	t := c.Theme()
+	const feedbackDuration = 1500 * time.Millisecond
+	for id, at := range m.recentCopied {
+		if now.Sub(at) >= feedbackDuration {
+			delete(m.recentCopied, id)
+		}
+	}
+	copiedAt, copied := m.recentCopied[r.ID]
+	if copied {
+		c.After(feedbackDuration - now.Sub(copiedAt))
+	}
+	text, _ := primaryText(r)
+	shown := text
+	if shown == "" {
+		shown = T("emptyText")
+	}
+	ui.Row(c.Key(r.ID)).Gap(10).Height(46).Padding(0, 2).AlignItems(ui.Center).Children(func() {
+		open := ui.ButtonBase(c.Key("open")).Grow(1).MinWidth(0).Height(46).Justify(ui.Start).AlignItems(ui.Center).
+			Cursor(ui.CursorPointer).Label(shown).Bind(&m.recentOpen[i])
+		open.Children(func() { ui.Text(c, shown).FontSize(13.5).Grow(1).SingleLine() })
+		if open.Clicked() {
+			m.showRecord(r.ID)
+		}
+		slot := ui.ButtonBase(c.Key("copy")).Width(108).Height(28).Radius(6).Justify(ui.End).AlignItems(ui.Center).
+			Label(T("copyOf", shown)).Tooltip(T("copy")).Bind(&m.recentCopy[i])
+		active := text != "" && (open.Hovered() || slot.Hovered() || m.recentOpen[i].Focused(c) || m.recentCopy[i].Focused(c))
+		if copied {
+			slot.Label(T("copied")).Tooltip(T("copied"))
+		}
+		slot.Children(func() {
+			if copied {
+				// A small ease-out pop, inside a fixed slot so the row never shifts.
+				size := float32(14)
+				if elapsed := now.Sub(copiedAt); elapsed < 180*time.Millisecond && !c.Preferences().ReduceMotion {
+					progress := max(float32(0), float32(elapsed)/float32(180*time.Millisecond))
+					size -= 4 * (1 - progress) * (1 - progress)
+					c.After(16 * time.Millisecond)
+				}
+				ui.Box(c).Size(14, 14).AlignItems(ui.Center).Justify(ui.Center).Children(func() {
+					ui.Icon(c, icCheck).FontSize(size).TextColor(t.Success)
+				})
+			} else if active {
+				ui.Icon(c, icCopy).FontSize(14).TextColor(softText(t))
+			} else {
+				ui.Text(c, timeLabel(r.StartedAt, now)).FontSize(11.5).TextColor(faintText(t)).SingleLine()
+			}
+		})
+		if slot.Clicked() && text != "" {
+			// Copies what the row shows, and stays on Home.
+			mygo.Clipboard.WriteText(text)
+			if m.recentCopied == nil {
+				m.recentCopied = make(map[string]time.Time)
+			}
+			m.recentCopied[r.ID] = time.Now()
+			c.After(0)
 		}
 	})
 }
@@ -194,4 +287,23 @@ func drawPillPreview(p *ui.Painter, r ui.Rect) {
 	for i, h := range heights {
 		p.Fill(ui.Rect{X: left + float32(i)*(w+gap), Y: cy - h/2, W: w, H: h}, ui.RGBA(255, 255, 255, 0.8), 1)
 	}
+}
+
+// A non-disabled wrapper preserves hover help around a disabled switch.
+func (a *app) cleanupSwitch(c *ui.Context) {
+	a.ensureCleanupReady()
+	c.After(15 * time.Second)
+	on := a.settings.Get().CleanupDefault
+	hint := T("cleanupNotConfigured")
+	if a.cleanupReady {
+		hint = T("cleanup")
+	}
+	if a.cleanupChecking {
+		hint = T("cleanupChecking")
+	}
+	ui.Box(c.Key("cleanupHint")).Tooltip(hint).Children(func() {
+		if ui.Switch(c.Key("sw"), &on).Label(T("cleanup")).Disabled(!a.cleanupReady && !on).Changed() {
+			a.setCleanup(on)
+		}
+	})
 }

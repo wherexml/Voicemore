@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.2
+
+- Add first-run onboarding with a safe dictation practice flow.
+- Refresh Home, Settings, history, and the recording overlay.
+- Support microphone selection, device-loss recovery, and configurable recording sounds.
+- Add configurable transcript styling and retain text when dictation cannot be inserted.
+- Preserve recognition context across thinking pauses in local ASR.
+- Add a multilingual product website, refreshed app icon, and distribution verification tools.
+- Restrict the preview publishing workflow to development prereleases.
+
+新增首次使用引导和听写练习，调整首页、设置、历史与录音浮层；支持麦克风选择、设备断开恢复、录音提示音和转写文本整理，改善本地识别在思考停顿时的上下文保留。新增多语言官网、应用图标及分发验证工具，开发预览发布限定为 prerelease。
+
 ## 0.3.1
 
 - Move updates to a compact top-right header control on every page.

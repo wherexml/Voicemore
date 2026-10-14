@@ -15,11 +15,14 @@ BUSY=False
 READY=False
 SR=16000
 STEP=0.6
-SILENCE=0.7
-MAX_SEGMENT=18
+# Silence is not a sentence boundary: retain thinking pauses in the same
+# acoustic context until Stop or a bounded window. VAD still gates speech and
+# trims trailing silence; previews continue independently every STEP.
+MAX_SEGMENT=30
 MIN_SPEECH=1536  # 96 ms verified speech; no energy-only ASR fallback
 SPEECH_THRESHOLD=0.5
 TAIL_PAD=2048  # 128 ms after the last speech frame
+PRE_ROLL=2*SR  # Keep onset context: short VAD crops can change recognition.
 
 def load():
  global MODEL,VAD
@@ -39,7 +42,7 @@ MAX_HOTWORD_CHARS=4096
 
 def transcribe(samples,hotwords):
  t=time.monotonic()
- result=MODEL.generate(samples,language='Chinese',hotwords=hotwords,max_tokens=256,temperature=0,verbose=False)
+ result=MODEL.generate(samples,language='Chinese',hotwords=hotwords,max_tokens=512,temperature=0,verbose=False)
  return result.text.strip(),time.monotonic()-t
 
 @asynccontextmanager
@@ -53,7 +56,7 @@ async def lifespan(app):
 app=FastAPI(lifespan=lifespan)
 app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost'])
 @app.get('/health')
-def health(): return {'instance':os.environ['VOICE_INPUT_INSTANCE'],'ready':READY,'busy':BUSY,'model':'Qwen3-ASR-1.7B-8bit','step_s':STEP,'silence_s':SILENCE,'mode':'incremental utterance redecoding','vad':'Silero ONNX CPU','min_speech_ms':96,'default_hotword_count':len(DEFAULT_HOTWORDS)}
+def health(): return {'instance':os.environ['VOICE_INPUT_INSTANCE'],'ready':READY,'busy':BUSY,'model':'Qwen3-ASR-1.7B-8bit','step_s':STEP,'silence_s':None,'max_segment_s':MAX_SEGMENT,'finalization':'stop-or-window-limit','mode':'incremental utterance redecoding','vad':'Silero ONNX CPU','min_speech_ms':96,'default_hotword_count':len(DEFAULT_HOTWORDS)}
 @app.websocket('/ws')
 async def live(ws:WebSocket):
  global BUSY
@@ -104,13 +107,13 @@ async def live(ws:WebSocket):
   nonlocal chunks,n,silence,since,speech_n,pre,latest
   voiced=gate.probability(a)>=SPEECH_THRESHOLD
   if not chunks and not voiced:
-   pre=np.concatenate([pre,a])[-4800:];return
+   pre=np.concatenate([pre,a])[-PRE_ROLL:];return
   if not chunks:
    chunks=[pre];n=len(pre);pre=np.empty(0,np.float32)
   chunks.append(a);n+=len(a);since+=len(a)
   if voiced:speech_n+=len(a)
   silence=0 if voiced else silence+len(a)
-  if silence>=int(SILENCE*SR) or n>=MAX_SEGMENT*SR:
+  if n>=MAX_SEGMENT*SR:
    commit()
   elif voiced and speech_n>=MIN_SPEECH and n>=int(STEP*SR) and since>=int(STEP*SR):
    latest=(segment,np.concatenate(chunks),False);since=0;wake.set()

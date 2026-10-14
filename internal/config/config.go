@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"voiceinput/internal/textstyle"
 )
 
 const (
@@ -18,7 +19,7 @@ const (
 )
 
 // SchemaVersion is the version Open migrates settings to.
-const SchemaVersion = 4
+const SchemaVersion = 5
 
 // Defaults of the two independent model services. Speech recognition is
 // the existing ASR service with its own streaming protocol; cleanup is an
@@ -80,8 +81,20 @@ func (p Providers) Clone() Providers {
 	return out
 }
 
+// Onboarding is where the first-run guide stands. Left says the guide is
+// not shown at launch any more: the user finished it or chose "Later", or
+// the settings are those of an installation older than the guide.
+type Onboarding struct {
+	Left      bool `json:"left"`
+	Step      int  `json:"step,omitempty"`
+	Seen      bool `json:"seen,omitempty"`      // the introduction was read
+	Practiced bool `json:"practiced,omitempty"` // a first dictation was inserted
+	Cloud     bool `json:"cloud,omitempty"`     // the speech step shows the cloud branch
+}
+
 type Settings struct {
-	SchemaVersion int `json:"schemaVersion"`
+	TextStyle     textstyle.Options `json:"textStyle"`
+	SchemaVersion int               `json:"schemaVersion"`
 
 	// ASRAssign and CleanupAssign are the two default models. They are
 	// independent, and both start on the local services. Providers holds
@@ -89,6 +102,14 @@ type Settings struct {
 	ASRAssign     Assignment `json:"asrAssign"`
 	CleanupAssign Assignment `json:"cleanupAssign"`
 	Providers     Providers  `json:"providers"`
+
+	// Appearance is "light" or "dark"; empty follows the system.
+	Appearance string `json:"appearance,omitempty"`
+	// HistoryDetailsOpen is whether "Details" of a record in History is
+	// left open: the user's last choice, kept across records and launches.
+	HistoryDetailsOpen bool `json:"historyDetailsOpen,omitempty"`
+	// Onboarding is the progress of the first-run guide.
+	Onboarding Onboarding `json:"onboarding"`
 
 	// Language is "en", "zh-Hant" or "zh-Hans"; empty follows the system.
 	Language string `json:"language"`
@@ -138,17 +159,32 @@ type Settings struct {
 
 	// SeedPath is the local hotword file the user may import explicitly.
 	SeedPath string `json:"seedPath"`
+
+	// InputDevice is the UID of the chosen microphone; empty follows the
+	// system's default input. InputDeviceName is its name when chosen, to
+	// show while it is disconnected: recording then uses the default, and
+	// returns to it once it is connected again.
+	InputDevice     string `json:"inputDevice,omitempty"`
+	InputDeviceName string `json:"inputDeviceName,omitempty"`
+	// InteractionSounds plays the start and stop cues of a recording.
+	InteractionSounds bool `json:"interactionSounds"`
+	// MuteOutput mutes the system's audio output while recording and puts
+	// it back when the recording ends, however it ends.
+	MuteOutput bool `json:"muteOutput"`
+	// ShowInDock shows the app in the Dock and the app switcher; without
+	// it the app lives in the menu bar only. Launch at login is not kept
+	// here: macOS holds it (System Settings → Login Items).
+	ShowInDock bool `json:"showInDock"`
 }
 
 func Defaults() Settings {
 	return Settings{
+		TextStyle:               textstyle.Defaults(),
 		SchemaVersion:           SchemaVersion,
 		ASRAssign:               Assignment{Provider: "local"},
 		CleanupAssign:           Assignment{Provider: "local"},
 		ASRURL:                  DefaultASRURL,
 		ASRModel:                DefaultASRModel,
-		CleanupURL:              DefaultCleanupURL,
-		CleanupModel:            DefaultCleanupModel,
 		FinalizeTimeoutSec:      60,
 		TriggerKey:              "Fn",
 		TriggerMode:             TriggerToggle,
@@ -161,6 +197,9 @@ func Defaults() Settings {
 		ObserveEdits:            false,
 		ObserveSeconds:          30,
 		SeedPath:                "",
+		InteractionSounds:       true,
+		MuteOutput:              true,
+		ShowInDock:              true,
 	}
 }
 
@@ -196,8 +235,21 @@ func migrate(s Settings) Settings {
 	if s.SchemaVersion >= SchemaVersion {
 		return s
 	}
+	// Version 5 added the first-run guide. Settings saved by an earlier
+	// version belong to someone who already uses the app: the guide is not
+	// shown to them at launch, and stays available from Settings → General.
+	if s.SchemaVersion < 5 {
+		s.Onboarding.Left = true
+		// Volcengine's "Agent Plan" access mode never had a protocol and is
+		// no longer offered: such a setting falls back to the API-key mode.
+		// Its stored key is left where it is. The legacy mode (App ID and
+		// token) keeps working for those who use it.
+		if s.Providers.VolcMode == "agent" {
+			s.Providers.VolcMode = ""
+		}
+	}
 	// Version 4 places the capsule just above the Dock. Preserve custom gaps.
-	if s.OverlayBottomOffset == 96 {
+	if s.SchemaVersion < 4 && s.OverlayBottomOffset == 96 {
 		s.OverlayBottomOffset = 12
 	}
 	// Versions 1 and 2 had no providers: the defaults of a file without
@@ -206,9 +258,6 @@ func migrate(s Settings) Settings {
 	// Version 1 stored the full chat-completions URL, and saved an empty
 	// one when cleanup had never been set up.
 	s.CleanupURL = strings.TrimSuffix(strings.TrimRight(strings.TrimSpace(s.CleanupURL), "/"), "/chat/completions")
-	if s.CleanupURL == "" && s.CleanupModel == "" {
-		s.CleanupURL, s.CleanupModel = DefaultCleanupURL, DefaultCleanupModel
-	}
 	if s.ASRModel == "" {
 		s.ASRModel = DefaultASRModel
 	}

@@ -1,6 +1,12 @@
 #!/bin/sh
-# Publish a complete signed update atomically through a draft GitHub Release.
+# This pipeline builds development-signed previews, not public distribution builds.
 set -eu
+if [ "$#" -ne 1 ] || [ "$1" != --development-preview ]; then
+ echo 'Stopped: this pipeline uses Apple Development signing and does not notarize.' >&2
+ echo 'For an explicitly intended prerelease, use --development-preview.' >&2
+ echo 'Stable distribution requires the separate Developer ID/notarization workflow in docs/public/DISTRIBUTION.md.' >&2
+ exit 1
+fi
 : "${SIGNING_IDENTITY:?Set the macOS signing identity}"
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_dir"
@@ -40,6 +46,6 @@ else
  git tag -a "$tag" -m "Voicemore $version"
 fi
 git push origin HEAD "$tag"
-gh release create "$tag" --repo wherexml/Voicemore --verify-tag --draft --title "Voicemore $version" --notes-file "$stage/notes.md" "$stage/Voicemore-$version-arm64.dmg" "$stage/$archive" "$stage/update-darwin-arm64.json" "$stage/SHA256SUMS.txt"
-# Draft assets are uploaded together before the stable feed becomes visible.
-gh release edit "$tag" --repo wherexml/Voicemore --draft=false --latest
+gh release create "$tag" --repo wherexml/Voicemore --verify-tag --draft --prerelease --title "Voicemore $version (Development Preview)" --notes-file "$stage/notes.md" "$stage/Voicemore-$version-arm64.dmg" "$stage/$archive" "$stage/update-darwin-arm64.json" "$stage/SHA256SUMS.txt"
+# Upload all assets before making the development prerelease visible.
+gh release edit "$tag" --repo wherexml/Voicemore --draft=false --prerelease --latest=false

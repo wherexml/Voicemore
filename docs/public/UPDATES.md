@@ -6,7 +6,9 @@ Voicemore uses MyGo's native updater with a pinned Ed25519 public key. The produ
 
 The app checks after launch and hourly. The top-right header shows a quiet icon when current, a blue update badge when available, download progress during transfer, installation/restart status, and an amber badge on failure. Click it for version details and actions; the Home body stays free of update notices. Escape or an outside click dismisses the panel. Clicking Update & Restart downloads and authenticates the archive before replacement, then relaunches through the normal shutdown path. The app's data directory is separate and never replaced. In-app notices work even when macOS notifications are denied. Update checks need GitHub access; offline failures allow manual retry.
 
-## Publish a version
+## Publish a development preview
+
+Stable distribution is blocked until the Developer ID and notarization workflow is complete. See [distribution requirements](DISTRIBUTION.md). The following command intentionally publishes a prerelease, which existing clients do not receive through the stable feed.
 
 1. Change `version` in `mygo.json` and add a matching `## x.y.z` section in `CHANGELOG.md`.
 2. Complete acceptance, commit all changes, and make sure the working tree is clean.
@@ -14,10 +16,10 @@ The app checks after launch and hourly. The top-right header shows a quiet icon 
 4. Run:
 
    ```sh
-   SIGNING_IDENTITY='Your macOS signing identity' ./scripts/publish-release.sh
+   SIGNING_IDENTITY='Apple Development: geekmooc@gmail.com (5QLDC77G39)' ./scripts/publish-release.sh --development-preview
    ```
 
-The script builds the DMG and signed archive, verifies packaging, pushes the matching commit/tag, uploads a **draft** release with all assets, then publishes it as **latest**. If an upload fails, the draft stays invisible to update checks; finish that draft's assets before publishing it. Existing releases are not overwritten. GitHub **prereleases and drafts do not become this feed's latest release**. Publishing a DMG alone is insufficient.
+The script builds the DMG and signed archive, verifies packaging, pushes the matching commit/tag, uploads a **draft prerelease** with all assets, then publishes it with **latest=false**. If an upload fails, the draft stays invisible to update checks. Existing releases are not overwritten. GitHub **prereleases and drafts do not become this feed's latest release**. Publishing a DMG alone is insufficient.
 
 Required assets: `Voicemore-x.y.z-arm64.dmg`, `voicemore-x.y.z-darwin-arm64.tar.gz`, `update-darwin-arm64.json`, `SHA256SUMS.txt`.
 
@@ -44,6 +46,6 @@ Save AX snapshots, screenshots, before/after hashes and process/bundle versions 
 
 ## 中文
 
-以后发布新版本时，修改版本号和 CHANGELOG，提交后运行发布脚本即可。脚本先上传完整草稿，再设为 latest，因此客户端不会读到缺少下载文件的半成品。GitHub draft/prerelease 不参与当前更新通道。
+当前发布脚本只允许显式的 `--development-preview`，发布为 prerelease 且不设为 latest。正式通道须先完成 Developer ID 签名、公证与跨 Mac 安装验收，见 DISTRIBUTION.md。GitHub draft/prerelease 不参与当前更新通道。
 
 0.2.0 没有更新功能，需手动安装一次 0.3.0。此后右上角更新面板可一键更新并自动重启。更新包经过独立签名验证；下载取消、验签失败不会替换原应用。录音或模型部署时暂不可开始更新；安装时暂停快捷键听写。安装目录不可写时提示移动到可写位置，不索取管理员密码或修改目录权限。

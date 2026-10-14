@@ -62,6 +62,7 @@ type Record struct {
 	// RawText is the ASR's final transcript as received. CorrectedText is
 	// it after the confirmed dictionary rules, empty when none applied.
 	RawText       string   `json:"rawText"`
+	Corrected     bool     `json:"corrected,omitempty"` // Distinguishes an intentionally empty result.
 	CorrectedText string   `json:"correctedText,omitempty"`
 	AppliedRules  []string `json:"appliedRules,omitempty"`
 
@@ -87,7 +88,7 @@ type Record struct {
 
 // Transcript is the transcript the dictionary produced, or the raw one.
 func (r *Record) Transcript() string {
-	if r.CorrectedText != "" {
+	if r.Corrected || r.CorrectedText != "" {
 		return r.CorrectedText
 	}
 	return r.RawText

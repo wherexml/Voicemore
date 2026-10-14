@@ -304,3 +304,95 @@ func (m *mainWindow) updateView(c *ui.Context) {
 		})
 	})
 }
+
+// updateCard is the updater on Home: one slim card at the top of the page
+// with the version, one action, and what is happening under them. It shows
+// the same state as updateView, which is the earlier header popover and is
+// kept for reference; the main window draws this card instead.
+func (m *mainWindow) updateCard(c *ui.Context) {
+	u := &m.a.updates
+	t := c.Theme()
+	downloading := u.installing && u.status == "updateDownloading"
+	verifying := downloading && u.total > 0 && u.downloaded >= u.total
+	current := u.status == "updateCurrent" && u.available == nil
+	ui.Column(c.Key("update-card")).Radius(12).Background(cardColor(t)).Border(1, t.Border).Padding(8, 12).Gap(8).Children(func() {
+		ui.Row(c).Gap(9).MinHeight(30).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Size(22, 22).Draw(drawAppMark)
+			ui.Text(c, "Voicemore "+mygo.App.Version()).FontSize(12.5).FontWeight(500).TextColor(softText(t)).SingleLine()
+			if current {
+				// Up to date is said beside the version, quietly, and nowhere else.
+				ui.Icon(c, icCheck).FontSize(13).TextColor(t.Success)
+				ui.Text(c, T("updateCurrent")).FontSize(12).TextColor(t.TextMuted).SingleLine()
+			}
+			ui.Spacer(c)
+			switch {
+			case u.status == "updateRestartFailed":
+				if ui.PrimaryButton(c.Key("restart"), T("updateRestartAction")).Clicked() {
+					u.installing, u.status, u.detail = true, "updateRestarting", ""
+					m.a.bindTrigger()
+					m.a.restartAfterUpdate()
+				}
+			case u.available != nil:
+				ui.Text(c, T("updateFound", u.available.Version)).FontSize(12.5).FontWeight(500).TextColor(infoText(t)).SingleLine()
+				if ui.PrimaryButton(c.Key("install"), T("updateInstall")).Disabled(u.installing || u.checking || m.a.updateBusy()).Clicked() {
+					m.a.installUpdate()
+				}
+			default:
+				if ui.Button(c.Key("check"), T("updateCheck")).Disabled(u.checking || u.installing).Clicked() {
+					m.a.checkUpdates()
+				}
+			}
+		})
+		status := ""
+		switch {
+		case verifying:
+			status = T("updateVerifyNote")
+		case downloading && u.total > 0:
+			status = T("updateProgress", 100*u.downloaded/u.total)
+		case u.status != "" && u.status != "updateAvailable" && !current:
+			status = T(u.status)
+		}
+		if status != "" {
+			ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() {
+				if u.checking || verifying {
+					ui.Spinner(c)
+				}
+				ui.Text(c, status).FontSize(12).TextColor(softText(t))
+			})
+		}
+		if downloading {
+			progress := -1.0
+			if u.total > 0 {
+				progress = min(1.0, float64(u.downloaded)/float64(u.total))
+			}
+			ui.Progress(c, progress)
+		}
+		if u.available != nil && !u.installing && m.a.updateBusy() && u.status != "updateBusy" {
+			ui.Text(c, T("updateBusy")).FontSize(12).TextColor(softText(t))
+		}
+		if u.detail != "" {
+			ui.Text(c, u.detail).FontSize(11.5).TextColor(t.TextMuted).Selectable()
+		}
+		if downloading && !verifying && u.cancel != nil {
+			ui.Row(c).Children(func() {
+				if ui.Button(c.Key("cancel"), T("updateCancel")).Clicked() {
+					u.cancel()
+				}
+			})
+		}
+	})
+}
+
+// drawAppMark paints the app's mark small: the indigo tile of
+// resources/logo.svg with its five voice strokes and the mint dot.
+func drawAppMark(p *ui.Painter, r ui.Rect) {
+	p.Fill(r, ui.RGB(32, 40, 79), r.W*0.23)
+	u := r.W / 1024 // the logo's own units
+	bars := [][3]float32{{292, 366, 142}, {402, 410, 190}, {512, 468, 218}, {622, 410, 190}, {732, 366, 142}}
+	w := 62 * u
+	for _, b := range bars {
+		p.Fill(ui.Rect{X: r.X + b[0]*u - w/2, Y: r.Y + b[1]*u - w/2, W: w, H: b[2]*u + w}, ui.RGB(247, 250, 255), w/2)
+	}
+	d := 62 * u
+	p.Fill(ui.Rect{X: r.X + 732*u - d/2, Y: r.Y + 268*u - d/2, W: d, H: d}, ui.RGB(105, 231, 195), d/2)
+}

@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voicemore: speak naturally, text lands at your cursor | Dictation for macOS</title>
+<meta name="description" content="Voicemore is a focused, native macOS dictation app. Press Fn, speak, press Fn again, and the text is inserted into the field you are using. Recognition runs offline on your Mac once the model is downloaded, or through Alibaba Cloud or Volcengine; text cleanup is optional and off by default. For Apple Silicon, macOS 26.2 or later.">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f5f2ea" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f1424" media="(prefers-color-scheme: dark)">
+<link rel="icon" type="image/png" href="assets/icon.png">
+<link rel="apple-touch-icon" href="assets/icon.png">
+<link rel="stylesheet" href="assets/site.css">
+
+<!--
+  Mock of the official website: three static pages with shared assets,
+  index.html (Simplified Chinese), zh-hant.html (Traditional Chinese) and
+  en.html (English). Keep their content in step when one is edited.
+
+  No production domain is decided yet, so there is no canonical link and
+  no og:url, and og:image and the hreflang links are relative paths.
+  Before publishing: add <link rel="canonical">, og:url, make og:image
+  and the hreflang hrefs absolute URLs, and add "url" to the structured
+  data below.
+-->
+<link rel="alternate" hreflang="zh-Hans" href="index.html">
+<link rel="alternate" hreflang="zh-Hant" href="zh-hant.html">
+<link rel="alternate" hreflang="en" href="en.html">
+<link rel="alternate" hreflang="x-default" href="index.html">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Voicemore">
+<meta property="og:locale" content="en_US">
+<meta property="og:locale:alternate" content="zh_CN">
+<meta property="og:locale:alternate" content="zh_TW">
+<meta property="og:title" content="Voicemore: speak naturally, text lands at your cursor">
+<meta property="og:description" content="A focused, native Mac dictation app. Press Fn, speak, and the text is inserted where you are typing. Works offline once the model is downloaded.">
+<meta property="og:image" content="assets/icon.png">
+<meta property="og:image:width" content="1024">
+<meta property="og:image:height" content="1024">
+<meta property="og:image:alt" content="Voicemore app icon">
+<meta name="twitter:card" content="summary">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "SoftwareApplication",
+      "name": "Voicemore",
+      "description": "A native macOS dictation app. Press Fn, speak, and press Fn again to insert the transcript into the focused text field. Run speech recognition locally, connect a cloud provider, and optionally tidy your words with a language model.",
+      "applicationCategory": "UtilitiesApplication",
+      "operatingSystem": "macOS 26.2 or later (Apple Silicon)",
+      "softwareVersion": "0.3.1",
+      "inLanguage": "en",
+      "image": "assets/icon.png",
+      "downloadUrl": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.1",
+      "releaseNotes": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.1",
+      "sameAs": "https://github.com/wherexml/Voicemore"
+    },
+    {
+      "@type": "FAQPage",
+      "inLanguage": "en",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "Which Macs does Voicemore support?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "An Apple Silicon (M-series) chip and macOS 26.2 or later. The current package does not support Intel Macs. The minimum system version is set by the bundled MLX runtime."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What if macOS blocks the app the first time?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The current preview is development-signed and has not completed Developer ID signing or Apple notarization. After confirming where you downloaded it, use “Open Anyway” in System Settings → Privacy & Security to allow this one app. Do not turn Gatekeeper off globally."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Do I need an internet connection?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The package includes the inference runtime but not the model weights. Deploying the local model the first time downloads about 2.47 GB of model files and unpacks about 0.65 GB of runtime. After that, local recognition works offline. Cloud recognition and cloud text cleanup need a connection."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Which system permissions are needed?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Microphone, Accessibility and Input Monitoring, all granted in System Settings → Privacy & Security. Restart the app after granting the keyboard-related permissions."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Pressing Fn opens the emoji picker or switches input source?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "In the system Keyboard settings, set “Press 🌐 key to” to “Do Nothing”, or choose another shortcut in Voicemore’s settings."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Does text insertion work in every app?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "It depends on the target app and system permissions. Dictation into TextEdit has been verified; some editors and protected fields may still behave differently. Reports on GitHub are welcome."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "How do updates work?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Since 0.3.0 the app checks for a new version after launch and hourly while running. One click downloads it, verifies its Ed25519 signature, installs it and restarts. Settings, models, history and credentials are kept. The app must be installed in the Applications folder."
+          }
+        }
+      ]
+    }
+  ]
+}
+</script>
+</head>
+
+<body>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="site-head">
+  <div class="wrap">
+    <a class="brand" href="#top" aria-label="Voicemore home">
+      <img src="assets/icon.png" width="28" height="28" alt="">
+      <span>Voicemore</span>
+    </a>
+    <nav class="site-nav" aria-label="Page">
+      <a href="#features">Features</a>
+      <a href="#compare">Compare</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <nav class="lang" id="lang" aria-label="Language"><a href="index.html" lang="zh-Hans" hreflang="zh-Hans" aria-label="简体中文" title="简体中文">简</a><a href="zh-hant.html" lang="zh-Hant" hreflang="zh-Hant" aria-label="繁體中文" title="繁體中文">繁</a><a href="en.html" lang="en" hreflang="en" aria-label="English" title="English" aria-current="page">EN</a></nav>
+    <a class="btn small" href="#download">Download</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <section class="hero" id="top">
+    <div class="wrap">
+      <p class="eyebrow">A focused, native Mac dictation app · Early preview</p>
+      <h1>Speak naturally.<br>Text lands at your <em>cursor</em>.</h1>
+      <p class="lede">Press <kbd>Fn</kbd> and speak. Press it again, and the transcript is inserted into the field you are using. Voicemore does dictation and nothing else, and it can do all of it on this Mac.</p>
+      <ul class="pillars" aria-label="Key points"><li>Offline local recognition once the model is downloaded</li><li>Text cleanup is optional and off by default</li><li>Dictionary corrections apply only after you confirm</li></ul>
+      <div class="cta">
+        <a class="btn" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.1" rel="noopener">Download for Apple Silicon</a>
+        <a class="btn ghost" href="#demo">See the demo</a>
+      </div>
+      <p class="fine">Early preview v0.3.1 · Requires an M-series chip and macOS 26.2 or later</p>
+    </div>
+  </section>
+
+  <section class="demo" id="demo" aria-labelledby="demo-title">
+    <div class="wrap">
+      <h2 id="demo-title" hidden>Dictation demo</h2>
+      <div class="stage" id="stage" data-phase="idle" data-pause="Pause" data-resume="Resume" data-raw="Um, so, the meeting is at three tomorrow afternoon, and, uh, remember to bring the contract." data-clean="The meeting is at three tomorrow afternoon. Remember to bring the contract." data-listening="Listening. Click again when you are done." data-pill-listen="Listening" data-pill-work="Transcribing" data-pill-tidy="Tidying up" data-work="Transcribing…" data-work-tidy="Transcribing and tidying up…" data-done="Inserted at the cursor. Click to try again." data-done-tidy="Inserted, with the filler words removed. Click to try again.">
+        <p class="sim"><span aria-hidden="true"></span>Simulated demo · No microphone access</p>
+        <div class="mac" role="img" aria-label="A text editor window showing dictated text being inserted at the cursor">
+          <div class="mac-bar" aria-hidden="true"><i></i><i></i><i></i><span>Notes — TextEdit</span></div>
+          <div class="mac-doc">
+            <span id="typed">The meeting is at three tomorrow afternoon. Remember to bring the contract.</span><span class="caret" aria-hidden="true"></span>
+            <div class="pill" aria-hidden="true">
+              <span class="bars"><b></b><b></b><b></b><b></b><b></b></span>
+              <span id="pill-text">Listening</span>
+              <span class="live" id="live"></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button class="keycap" id="key" type="button" aria-describedby="hint">Fn<small aria-hidden="true">🌐</small></button>
+          <p class="hint" id="hint" role="status" aria-live="polite">Click this key to start speaking.</p>
+          <label class="switch">
+            <input type="checkbox" id="tidy">
+            <i aria-hidden="true"></i>
+            <span>Text cleanup</span>
+          </label>
+        </div>
+        <div class="transport" id="transport" role="group" aria-label="Demo controls" hidden>
+          <button type="button" id="replay"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v2.8h2.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Replay</span></button>
+          <button type="button" id="pause" aria-pressed="false" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-pause" d="M5.5 3.5v9M10.5 3.5v9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path class="i-play" d="M5.5 3.5l7 4.5-7 4.5z" fill="currentColor"/></svg><span>Pause</span></button>
+        </div>
+        <p class="demo-note">This page uses preset text and never accesses your microphone. In the app, text cleanup is off by default.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="how" aria-labelledby="how-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">How it works</p>
+        <h2 id="how-title">No window switching. No copy and paste.</h2>
+      </div>
+      <ol class="steps">
+        <li>
+          <h3>Put the cursor where you want to write</h3>
+          <p>An email, a document, a chat box. Voicemore sits in the menu bar and stays out of your way.</p>
+        </li>
+        <li>
+          <h3>Press the shortcut and speak</h3>
+          <p>Fn by default, or another key you choose. Press once to toggle, or hold to talk.</p>
+        </li>
+        <li>
+          <h3>The text goes into the current field</h3>
+          <p>A floating bar shows recording and transcription progress, then the text appears at your cursor.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <section class="band tint" id="features" aria-labelledby="features-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">Features</p>
+        <h2 id="features-title">One job, dictation, done thoroughly.</h2>
+      </div>
+      <div class="grid">
+        <article>
+          <h3>Local speech model</h3>
+          <p>Qwen3-ASR-1.7B-8bit is managed inside the app: download, deploy and start it there. No separate inference tool to install.</p>
+        </article>
+        <article>
+          <h3>Cloud recognition</h3>
+          <p>Or connect Alibaba Cloud or Volcengine with your own provider account and credentials.</p>
+        </article>
+        <article>
+          <h3>Optional text cleanup</h3>
+          <p>Connect a local or compatible cloud language model to turn speech into tidy writing. Off by default.</p>
+        </article>
+        <article>
+          <h3>History and playback</h3>
+          <p>Review every transcript, edit the result, and listen to the saved recording.</p>
+        </article>
+        <article>
+          <h3>Personal dictionary</h3>
+          <p>Hotwords and correction rules get names right. Suggestions drawn from your edits apply only after you confirm them.</p>
+        </article>
+        <article>
+          <h3>Native interface</h3>
+          <p>Dock and menu-bar access, an interface in English, Simplified Chinese and Traditional Chinese, and one-click updates in the app.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="compare" aria-labelledby="compare-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">Compare</p>
+        <h2 id="compare-title">Choose Voicemore for focused dictation.</h2>
+        <p>Turn speech into text on your Mac. Keep audio on your device and decide when your words should be rewritten.</p>
+      </div>
+      <div class="cmp two">
+        <article class="ours">
+          <p class="tag">This site</p>
+          <h3>Voicemore</h3>
+          <p class="stance">Focused, native Mac dictation</p>
+          <ul><li>Offline local recognition once the model is downloaded</li><li>Or connect your own cloud provider account</li><li>Text cleanup is optional and off by default</li><li>Dictionary corrections apply only after you confirm</li></ul>
+          <p class="src">Early preview; Apple Silicon and macOS 26.2 or later only.</p>
+        </article>
+        <article>
+          <h3>Typeless</h3>
+          <p class="stance">Cloud processing, zero retention</p>
+          <ul><li>Its data controls page states that transcription is processed in the cloud</li><li>The same page states zero data retention</li></ul>
+          <p class="src">Official source: <a href="https://www.typeless.com/data-controls" rel="noopener nofollow">Data controls</a></p>
+        </article>
+      </div>
+      <dl class="cmp-notes">
+        <div><dt>Write offline</dt><dd>Unlike Typeless’s cloud transcription, Voicemore can recognize speech offline after the model is downloaded, without sending audio to the cloud.</dd></div>
+        <div><dt>Keep your own words</dt><dd>Text cleanup stays off until you want it. Suggested dictionary corrections take effect after your confirmation.</dd></div>
+        <div><dt>Stay with your writing</dt><dd>Choose Voicemore when a focused Mac dictation workflow fits your needs.</dd></div>
+      </dl>
+      <p class="src">Checked against official pages on October 14, 2026. This is a selected comparison; see each product’s website for current details.</p>
+    </div>
+  </section>
+
+  <section class="band tint" id="privacy" aria-labelledby="privacy-title">
+    <div class="wrap split">
+      <div class="head">
+        <p class="kicker">Privacy and data</p>
+        <h2 id="privacy-title">Where your voice goes, stated plainly.</h2>
+        <p>The recognition mode you choose decides whether audio leaves this Mac.</p>
+      </div>
+      <div>
+        <dl class="facts">
+          <div>
+            <dt>Local recognition</dt>
+            <dd>Audio is sent only to the inference process at the loopback address <code>127.0.0.1:48132</code>. Once the model is deployed it works offline.</dd>
+          </div>
+          <div>
+            <dt>Cloud recognition</dt>
+            <dd>When selected, audio is sent to the provider you configured. With cloud text cleanup on, the transcript is sent to the endpoint you configured.</dd>
+          </div>
+          <div>
+            <dt>Where data lives</dt>
+            <dd>Settings, history, recordings, dictionary, models and encrypted credentials are stored on this Mac in <code>~/Library/Application Support/Voice Input/</code>.</dd>
+          </div>
+          <div>
+            <dt>Recording retention</dt>
+            <dd>Recordings are saved by default and kept for 30 days. You can change this in Settings.</dd>
+          </div>
+        </dl>
+        <p class="caveat">API credentials are stored encrypted with AES-GCM on this Mac; the key is also stored locally with strict file permissions. This avoids plain-text exposure but does not protect against software running as the same macOS user.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="band" id="faq" aria-labelledby="faq-title">
+    <div class="wrap">
+      <div class="head">
+        <p class="kicker">FAQ</p>
+        <h2 id="faq-title">Before you install.</h2>
+      </div>
+      <div class="faq">
+        <details>
+          <summary>Which Macs does Voicemore support?</summary>
+          <p>An Apple Silicon (M-series) chip and macOS 26.2 or later. The current package does not support Intel Macs. The minimum system version is set by the bundled MLX runtime.</p>
+        </details>
+        <details>
+          <summary>What if macOS blocks the app the first time?</summary>
+          <p>The current preview is development-signed and has not completed Developer ID signing or Apple notarization. After confirming where you downloaded it, use “Open Anyway” in System Settings → Privacy & Security to allow this one app. Do not turn Gatekeeper off globally.</p>
+        </details>
+        <details>
+          <summary>Do I need an internet connection?</summary>
+          <p>The package includes the inference runtime but not the model weights. Deploying the local model the first time downloads about 2.47 GB of model files and unpacks about 0.65 GB of runtime. After that, local recognition works offline. Cloud recognition and cloud text cleanup need a connection.</p>
+        </details>
+        <details>
+          <summary>Which system permissions are needed?</summary>
+          <p>Microphone, Accessibility and Input Monitoring, all granted in System Settings → Privacy & Security. Restart the app after granting the keyboard-related permissions.</p>
+        </details>
+        <details>
+          <summary>Pressing Fn opens the emoji picker or switches input source?</summary>
+          <p>In the system Keyboard settings, set “Press 🌐 key to” to “Do Nothing”, or choose another shortcut in Voicemore’s settings.</p>
+        </details>
+        <details>
+          <summary>Does text insertion work in every app?</summary>
+          <p>It depends on the target app and system permissions. Dictation into TextEdit has been verified; some editors and protected fields may still behave differently. Reports on GitHub are welcome.</p>
+        </details>
+        <details>
+          <summary>How do updates work?</summary>
+          <p>Since 0.3.0 the app checks for a new version after launch and hourly while running. One click downloads it, verifies its Ed25519 signature, installs it and restarts. Settings, models, history and credentials are kept. The app must be installed in the Applications folder.</p>
+        </details>
+      </div>
+    </div>
+  </section>
+
+  <section class="get" id="download" aria-labelledby="download-title">
+    <div class="wrap">
+      <img src="assets/icon.png" width="104" height="104" alt="Voicemore app icon" loading="lazy">
+      <h2 id="download-title">Say it. It’s typed.</h2>
+      <p>Download <strong>Voicemore-0.3.1-arm64.dmg</strong>, open it, drag Voicemore to Applications, then launch it from Applications.</p>
+      <div class="cta">
+        <a class="btn" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.1" rel="noopener">Download from the v0.3.1 release page</a>
+        <a class="btn ghost" href="https://github.com/wherexml/Voicemore" rel="noopener">View source</a>
+      </div>
+      <ul class="req" aria-label="Requirements"><li>Apple Silicon (M-series)</li><li>macOS 26.2 or later</li><li>No Intel Mac support</li></ul>
+      <p class="preview"><strong>Preview notice:</strong> v0.3.1 is development-signed and not yet notarized by Apple, so macOS may block it the first time on another Mac. Gatekeeper validation across Macs and broader app compatibility are still in progress.</p>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-foot">
+  <div class="wrap">
+    <span>Voicemore · Early preview v0.3.1</span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/wherexml/Voicemore" rel="noopener">GitHub</a>
+      <a href="https://github.com/wherexml/Voicemore/releases" rel="noopener">All releases</a>
+      <a href="https://github.com/wherexml/Voicemore/issues" rel="noopener">Report an issue</a>
+    </nav>
+  </div>
+</footer>
+
+<script src="assets/site.js" defer></script>
+</body>
+</html>

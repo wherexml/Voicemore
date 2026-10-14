@@ -6,6 +6,10 @@ import "errors"
 
 var errUnsupported = errors.New("Voicemore needs macOS")
 
+var ErrNoMicrophone = errors.New("no microphone was found")
+
+func InputDeviceMissing() bool { return false }
+
 type Target struct{ AppName, BundleID string }
 
 func CaptureTarget() *Target                { return &Target{} }
@@ -24,7 +28,13 @@ func StartHotkey(string, func(), func(combo bool), func()) (func(), error) {
 type Capture struct{}
 
 func StartCapture(func(pcm []byte)) (*Capture, error) { return nil, errUnsupported }
-func (c *Capture) Stop()                              {}
+func StartCaptureFrom(string, func(pcm []byte)) (*Capture, error) {
+	return nil, errUnsupported
+}
+func (c *Capture) Stop()                {}
+func (c *Capture) SilenceOutput() error { return errUnsupported }
+func (c *Capture) DeviceGone() bool     { return false }
+func WaitRecordingStartCue() error      { return errUnsupported }
 
 func MicrophoneStatus() string          { return "unsupported" }
 func RequestMicrophone(done func(bool)) { done(false) }
@@ -34,3 +44,14 @@ func FnKeyConflict() string             { return "" }
 func OpenPrivacySettings(pane string)   {}
 
 func PlayRecordingCue(start bool) {}
+
+type InputDevice struct {
+	UID, Name string
+	Default   bool
+}
+
+func InputDevices() []InputDevice { return nil }
+func LoginItemStatus() string     { return "unavailable" }
+func SetLoginItem(bool) error     { return errUnsupported }
+func OpenLoginItemsSettings()     {}
+func SetDockIcon(bool)            {}

@@ -484,7 +484,9 @@ func labelled(c *ui.Context, key, label, note string, control func()) {
 // field: typing replaces it, Save stores what was typed in the app's
 // encrypted local store, and the cross removes the stored value. Nothing here
 // writes a credential to settings.json, to the history or to a log.
-func (p *prefsWindow) secretField(c *ui.Context, account, label string, edited func()) {
+// edited is called whenever the field's stored value is about to change;
+// saved, when not nil, only after "Save key" stored a key successfully.
+func (p *prefsWindow) secretField(c *ui.Context, account, label string, edited, saved func()) {
 	stored := p.a.secret(account) != ""
 	draft := p.draft("secret:"+account, "")
 	placeholder := T("mKeyNone")
@@ -515,6 +517,9 @@ func (p *prefsWindow) secretField(c *ui.Context, account, label string, edited f
 					p.say("keyNotSaved", err.Error())
 				} else {
 					p.say(okKey)
+					if value != "" && saved != nil {
+						saved() // an explicit, successful Save: never a removal
+					}
 				}
 			})
 			p.a.main.refresh()
@@ -529,6 +534,23 @@ func (p *prefsWindow) secretField(c *ui.Context, account, label string, edited f
 }
 
 var fieldLabels = map[string]string{"apiKey": "mKey", "appId": "appId", "token": "accessToken"}
+
+// volcKeyAccount is where Volcengine's API key is stored: the account of
+// the current ("new") access mode, the only one the settings show.
+const volcKeyAccount = "provider.volc." + providers.VolcNew + ".apiKey"
+
+// volcUseKey moves settings still in the legacy access mode to the
+// API-key mode. It is called for one thing only: the user pressed "Save
+// key" in Volcengine's editor and the key was stored. That is so whether
+// or not the key differs from one already stored. Until then the legacy
+// credentials serve as before; opening the editor, typing, or removing a
+// key changes nothing.
+func (p *prefsWindow) volcUseKey() {
+	if providers.VolcMode(p.a.settings.Get()) != providers.VolcNew {
+		p.change(func(s *config.Settings) { s.Providers.VolcMode = providers.VolcNew })
+		p.conn(providers.Volc).invalidate()
+	}
+}
 
 // defaultControl is "Set as default", or the mark of being it. It is
 // disabled until the provider can serve.
@@ -564,19 +586,14 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 			p.say("assignCleared", T(e.Name))
 		}
 	})
-	modeOK, modeWhy := providers.ModeUsable(id, s)
+	modeOK, _ := providers.ModeUsable(id, s)
 	if id == providers.Volc {
-		labelled(c, "mode", T("volcMode"), "", func() {
-			modes := []string{providers.VolcNew, providers.VolcLegacy, providers.VolcAgent}
-			i := slices.Index(modes, providers.VolcMode(s))
-			if ui.Segmented(c.Key("seg"), &i, T("vNew"), T("vLegacy"), T("vAgent")).Changed() {
-				// Each mode has its own credentials, which stay where they are.
-				p.change(func(s *config.Settings) { s.Providers.VolcMode = modes[i] })
-				k.invalidate()
-			}
-		})
-		if !modeOK {
-			ui.Text(c, T(modeWhy)).FontSize(12).TextColor(t.Warning).Padding(10, 12).Radius(8).Background(noticeColor(t))
+		// Volcengine is set up with an API key and a billing plan, and
+		// nothing else: the access-mode choice, the legacy App ID and token
+		// fields and Agent Plan are no longer shown. Credentials saved in
+		// the legacy mode keep serving until "Save key" is pressed here.
+		if providers.VolcMode(s) != providers.VolcNew {
+			ui.Text(c, T("volcLegacyNote")).FontSize(12).TextColor(t.Warning).Padding(10, 12).Radius(8).Background(noticeColor(t))
 		}
 		labelled(c, "resource", T("volcResource"), "", func() {
 			resources := []string{cloudasr.VolcHourly, cloudasr.VolcConcurrent, cloudasr.VolcClassicHourly}
@@ -602,9 +619,20 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 			}
 		})
 	}
-	for _, f := range providers.Fields(id, s) {
+	fields := providers.Fields(id, s)
+	if id == providers.Volc {
+		fields = []string{"apiKey"} // the one field shown, whatever mode the saved settings are in
+	}
+	for _, f := range fields {
 		account := providers.Account(id, s, f)
-		labelled(c, "secret-"+account, T(fieldLabels[f]), "", func() { p.secretField(c, account, T(fieldLabels[f]), k.invalidate) })
+		if id == providers.Volc {
+			account = volcKeyAccount
+		}
+		var saved func()
+		if id == providers.Volc {
+			saved = p.volcUseKey
+		}
+		labelled(c, "secret-"+account, T(fieldLabels[f]), "", func() { p.secretField(c, account, T(fieldLabels[f]), k.invalidate, saved) })
 	}
 	ui.Text(c, T("mKeyHint")).FontSize(11.5).TextColor(faintText(t))
 
@@ -857,7 +885,7 @@ func (p *prefsWindow) localCleanup(c *ui.Context, s config.Settings) {
 			p.change(func(s *config.Settings) { s.CleanupURL = strings.TrimSpace(*url) })
 		}
 	})
-	labelled(c, "key", T("mKey"), T("mKeyHint"), func() { p.secretField(c, cleanupKeyAccount, T("mKey"), k.invalidate) })
+	labelled(c, "key", T("mKey"), T("mKeyHint"), func() { p.secretField(c, cleanupKeyAccount, T("mKey"), k.invalidate, nil) })
 	labelled(c, "model", T("mModelId"), "", func() {
 		// Suggestions are the models the service listed, without those
 		// whose names say they are not text models. Any ID can be typed.

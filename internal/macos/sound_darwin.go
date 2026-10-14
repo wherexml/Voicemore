@@ -4,7 +4,9 @@ package macos
 
 import (
 	_ "embed"
+	"fmt"
 	"runtime"
+	"time"
 	"unsafe"
 
 	"github.com/ebitengine/purego/objc"
@@ -46,4 +48,25 @@ func PlayRecordingCue(start bool) {
 			objc.Send[bool](sound, sel("play"))
 		}
 	})
+}
+
+// WaitRecordingStartCue waits off the main thread so the cue can finish before
+// output is muted. Poll the player instead of guessing from the WAV duration.
+func WaitRecordingStartCue() error {
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		playing := false
+		OnMain(func() {
+			if sound := recordingSounds[0]; sound != 0 {
+				playing = objc.Send[bool](sound, sel("isPlaying"))
+			}
+		})
+		if !playing {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("recording start cue did not finish")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }

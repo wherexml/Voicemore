@@ -20,6 +20,7 @@ import (
 	"voiceinput/internal/dict"
 	"voiceinput/internal/macos"
 	"voiceinput/internal/store"
+	"voiceinput/internal/textstyle"
 )
 
 type Phase int
@@ -53,8 +54,18 @@ type View struct {
 	Message string
 	// Text is what a failed dictation still holds, to copy.
 	Text string
-	// CleanupFailed offers inserting the transcript or trying again.
+	// CleanupFailed offers trying the cleanup again, or copying.
 	CleanupFailed bool
+	// Retained says the dictation ended without inserting but holds text
+	// to copy: the insertion failed, or the recording or the recognition
+	// broke off with words already heard. The phase is Failed; the overlay
+	// shows it as a neutral notice, not as an error. A failed cleanup is
+	// not this: it offers a retry.
+	Retained bool
+	// Notice, with Retained, is the reason to show above the text: that
+	// the microphone is gone, or why the recognition ended. Empty for a
+	// failed insertion, where the overlay only says the text is kept.
+	Notice string
 }
 
 type Controller struct {
@@ -105,6 +116,7 @@ type run struct {
 	confirm   chan struct{}      // closed when the user ends the recording
 	confirmed bool
 	ready     chan struct{} // closed only after the first PCM buffer is retained
+	lost      chan struct{} // closed when the microphone disappeared while recording
 	readyOnce sync.Once
 	cueEnded  bool // the recording-end cue has already been scheduled
 	cancelled bool
@@ -120,6 +132,13 @@ type run struct {
 	rec      store.Record
 	recSaved bool
 	text     string // the transcript after the dictionary's rules
+
+	// sink, when set, makes this a practice run of the first-run guide:
+	// its transcript is given to the sink instead of being inserted. Such
+	// a run never calls macos.Insert, never touches the clipboard and is
+	// never observed afterwards. It is set when the run is created and
+	// never changed.
+	sink func(text string)
 
 	observing bool
 	rel       sync.Once
@@ -245,6 +264,10 @@ func (c *Controller) Toggle() {
 }
 
 func (c *Controller) start(viaHold bool) {
+	c.startWithSink(viaHold, nil)
+}
+
+func (c *Controller) startWithSink(viaHold bool, sink func(string)) {
 	s := c.Settings.Get()
 	c.mu.Lock()
 	if c.cur != nil || c.retranscribing {
@@ -254,18 +277,48 @@ func (c *Controller) start(viaHold bool) {
 	ctx, stop := context.WithCancel(context.Background())
 	r := &run{
 		id: store.NewID(), started: time.Now(), ctx: ctx, stop: stop,
-		confirm: make(chan struct{}), ready: make(chan struct{}), more: make(chan struct{}, 1), viaHold: viaHold,
+		confirm: make(chan struct{}), ready: make(chan struct{}), lost: make(chan struct{}), more: make(chan struct{}, 1), viaHold: viaHold,
 	}
 	if c.cleanupNext != nil {
 		r.cleanup = *c.cleanupNext
 	} else {
 		r.cleanup = s.CleanupDefault
 	}
+	r.sink = sink // assigned atomically with creating this run
 	c.cur = r
 	c.view = View{Phase: Preparing, Cleanup: r.cleanup}
 	c.mu.Unlock()
 	c.changed()
 	go c.record(r, s)
+}
+
+// StartPractice starts one dictation whose transcript goes to sink and
+// nowhere else: no app is written to, the clipboard is left alone, and
+// nothing is observed. The sink belongs to the run this call starts; if no
+// run can start now (one is in progress), nothing is armed and a later
+// dictation is an ordinary one. sink is called at most once, from a
+// goroutine of the controller, with a transcript that is not empty, and
+// only if the run was not cancelled.
+func (c *Controller) StartPractice(sink func(text string)) {
+	if sink == nil {
+		return
+	}
+	c.Dismiss() // a finished or failed attempt can be retried
+	c.startWithSink(false, sink)
+}
+
+// Practicing says the dictation in progress is a practice run.
+func (c *Controller) Practicing() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.cur != nil && c.cur.sink != nil
+}
+
+// CancelPractice abandons the practice run in progress, if there is one:
+// its result is discarded and its sink is never called. An ordinary
+// dictation is left alone.
+func (c *Controller) CancelPractice() {
+	c.cancel(true)
 }
 
 // Confirm ends the recording and lets the dictation finish and insert.
@@ -292,9 +345,13 @@ func (c *Controller) Confirm() {
 // arrive later are dropped. On a finished or failed one it closes the
 // overlay.
 func (c *Controller) Cancel() {
+	c.cancel(false)
+}
+
+func (c *Controller) cancel(practiceOnly bool) {
 	c.mu.Lock()
 	r := c.cur
-	if r == nil {
+	if r == nil || (practiceOnly && r.sink == nil) {
 		c.mu.Unlock()
 		return
 	}
@@ -350,15 +407,21 @@ func (c *Controller) Dismiss() {
 	c.changed()
 }
 
-// CopyFailed copies the text a failed dictation holds and closes it.
+// CopyFailed copies the text a failed dictation holds, says for a moment
+// that it is on the clipboard, and closes. A practice run never touches
+// the clipboard: it only closes.
 func (c *Controller) CopyFailed() {
 	c.mu.Lock()
-	text := c.view.Text
+	r, text := c.cur, c.view.Text
+	held := r != nil && c.view.Phase == Failed && text != ""
+	practice := r != nil && r.sink != nil
 	c.mu.Unlock()
-	if text != "" && c.CopyText != nil {
-		c.CopyText(text)
+	if !held || practice || c.CopyText == nil {
+		c.Dismiss()
+		return
 	}
-	c.Dismiss()
+	c.CopyText(text)
+	c.done(r, c.tr("copiedFallback"))
 }
 
 // cleanupOptions is the one cleanup configuration: the dictation's cleanup,
@@ -440,6 +503,9 @@ func (c *Controller) fail(r *run, err error, text string) {
 	}
 	capture := r.capture
 	c.view = View{Phase: Failed, Message: err.Error(), Text: text, Cleanup: r.cleanup}
+	if text != "" {
+		c.view.Retained, c.view.Notice = true, err.Error()
+	}
 	c.mu.Unlock()
 	capture.Stop()
 	c.endCue(r)
@@ -450,7 +516,7 @@ func (c *Controller) fail(r *run, err error, text string) {
 // Call only after microphone capture has stopped.
 func (c *Controller) endCue(r *run) {
 	c.mu.Lock()
-	play := !r.cueEnded
+	play := r.capture != nil && !r.cueEnded && c.Settings.Get().InteractionSounds
 	r.cueEnded = true
 	c.mu.Unlock()
 	if play {
@@ -487,8 +553,11 @@ func (c *Controller) record(r *run, s config.Settings) {
 
 	// The microphone starts before the ASR is connected, and the samples
 	// wait: what is said while it connects is not lost.
-	capture, err := macos.StartCapture(func(pcm []byte) { c.samples(r, pcm) })
+	capture, err := macos.StartCaptureFrom(s.InputDevice, func(pcm []byte) { c.samples(r, pcm) })
 	if err != nil {
+		if errors.Is(err, macos.ErrNoMicrophone) {
+			err = errors.New(c.tr("micMissing"))
+		}
 		c.fail(r, err, "")
 		return
 	}
@@ -516,18 +585,35 @@ func (c *Controller) record(r *run, s config.Settings) {
 		c.fail(r, errors.New(c.tr("endedEarly")), "")
 		return
 	case <-readyTimeout.C:
-		c.fail(r, errors.New(c.tr("micNoFrames")), "")
+		// No samples came: the device went away, or it is there and silent.
+		if macos.InputDeviceMissing() {
+			c.fail(r, errors.New(c.tr("micMissing")), "")
+		} else {
+			c.fail(r, errors.New(c.tr("micNoFrames")), "")
+		}
 		return
 	}
 
 	macos.OnMain(func() {
 		c.mu.Lock()
-		play := c.active(r) && !r.confirmed
+		play := c.active(r) && !r.confirmed && s.InteractionSounds
 		c.mu.Unlock()
 		if play {
 			macos.PlayRecordingCue(true)
 		}
 	})
+	// Let the complete start cue sound before muting. Stop restores output
+	// synchronously before endCue, including an early stop during this wait.
+	if err := macos.WaitRecordingStartCue(); err != nil {
+		c.fail(r, err, "")
+		return
+	}
+	if s.MuteOutput {
+		if err := capture.SilenceOutput(); err != nil {
+			c.fail(r, err, "")
+			return
+		}
+	}
 
 	var hotwords *string
 	{
@@ -586,6 +672,8 @@ func (c *Controller) record(r *run, s config.Settings) {
 
 	// Send what was recorded, as it comes, until the user confirms; then
 	// the rest, and wait for the service to finalize.
+	go c.watchMic(r, capture)
+	lost, lostCh := false, r.lost
 	sent := 0
 	flush := func() error {
 		c.mu.Lock()
@@ -600,6 +688,15 @@ func (c *Controller) record(r *run, s config.Settings) {
 			return // cancelled: closing the session drops what is left
 		case <-r.confirm:
 			confirmed = true
+		case <-lostCh:
+			// The microphone is gone. End the recording as a confirmation
+			// would, so what was already recorded is still sent and
+			// finalized; if the user ended it first, that stands.
+			lostCh = nil
+			if !c.micLost(r) {
+				continue
+			}
+			lost, confirmed = true, true
 		case <-r.more:
 		}
 		if sess.Err() != nil {
@@ -617,10 +714,62 @@ func (c *Controller) record(r *run, s config.Settings) {
 		err = sess.Finish(finCtx)
 		cancel()
 	}
-	if err != nil {
+	text := sess.Final()
+	switch {
+	case lost:
+		// Nothing is inserted from a recording that broke off. The words
+		// heard so far are kept, to copy and in the history; when the
+		// service could not finalize, also those that were not final yet.
+		if err != nil {
+			text += sess.Pending()
+		}
+		err = errors.New(c.tr("micMissing"))
+	case err != nil:
 		err = errors.New(c.explain(err))
 	}
-	c.finish(r, s, sess.Final(), err)
+	c.finish(r, s, text, err)
+}
+
+// watchMic looks, a few times a second while the dictation records,
+// whether the device it started on is still there, and closes r.lost once
+// when it is not. It ends with the recording.
+func (c *Controller) watchMic(r *run, capture *macos.Capture) {
+	tick := time.NewTicker(300 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		select {
+		case <-r.ctx.Done():
+			return
+		case <-r.confirm:
+			return
+		case <-tick.C:
+			if capture.DeviceGone() {
+				close(r.lost)
+				return
+			}
+		}
+	}
+}
+
+// micLost ends the recording because its microphone is gone: the capture
+// is stopped, which also restores the muted output, and the dictation goes
+// on to finalize what it has. It reports false when the recording was
+// already ended or abandoned.
+func (c *Controller) micLost(r *run) bool {
+	c.mu.Lock()
+	if !c.active(r) || r.confirmed {
+		c.mu.Unlock()
+		return false
+	}
+	r.confirmed = true
+	r.stopAt = time.Now()
+	c.view.Phase = Finalizing
+	capture := r.capture
+	c.mu.Unlock()
+	capture.Stop()
+	c.endCue(r)
+	c.changed()
+	return true
 }
 
 // finish takes the final transcript, or what there is of it with an error,
@@ -639,12 +788,12 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 	c.endCue(r)
 
 	raw = strings.TrimSpace(raw)
-	text, applied := c.Dict.Apply(raw)
+	text, applied := c.formatTranscript(raw, s)
 	r.text = text
 	r.rec.DurationMs = pcmMs(pcm)
 	r.rec.RawText, r.rec.AppliedRules = raw, applied
 	if text != raw {
-		r.rec.CorrectedText = text
+		r.rec.Corrected, r.rec.CorrectedText = true, text
 	}
 	r.rec.Timing.FirstPartialMs = r.firstMs
 	if !r.stopAt.IsZero() {
@@ -729,6 +878,7 @@ func (c *Controller) clean(r *run, s config.Settings) {
 		c.changed()
 		return
 	}
+	cleaned, _ = textstyle.Apply(cleaned, s.TextStyle, c.Dict.Hotwords())
 	c.update(r, func(rec *store.Record) {
 		rec.CleanedText, rec.CleanupError, rec.Timing.CleanupMs = cleaned, "", took
 		rec.CleanupModel = opts.Model
@@ -763,6 +913,13 @@ func (c *Controller) failedCleanup() *run {
 
 // insert writes text to the target, once per dictation whatever happens.
 func (c *Controller) insert(r *run, s config.Settings, text string) {
+	if strings.TrimSpace(text) == "" {
+		c.update(r, func(rec *store.Record) {
+			rec.Status, rec.StatusDetail = store.StatusNotInserted, c.tr("detailNoSpeech")
+		})
+		c.done(r, c.tr("noSpeech"))
+		return
+	}
 	c.mu.Lock()
 	if !c.active(r) || r.inserted {
 		c.mu.Unlock()
@@ -773,6 +930,23 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 	c.mu.Unlock()
 	c.changed()
 
+	if r.sink != nil {
+		// A practice run: the transcript goes to the guide's own field and
+		// nowhere else. Nothing is inserted into any app, the clipboard is
+		// not read or written, and no edit is observed afterwards.
+		c.update(r, func(rec *store.Record) {
+			rec.Status, rec.StatusDetail = store.StatusNotInserted, c.tr("detailPractice")
+			rec.Timing.FinalToInsertMs = time.Since(r.finalAt).Milliseconds()
+		})
+		c.mu.Lock()
+		live := c.active(r)
+		c.mu.Unlock()
+		if live && strings.TrimSpace(text) != "" {
+			r.sink(text)
+		}
+		c.done(r, "")
+		return
+	}
 	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs})
 	if errors.Is(err, context.Canceled) {
 		r.release()
@@ -783,7 +957,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		c.update(r, func(rec *store.Record) { rec.Status, rec.StatusDetail = store.StatusNotInserted, err.Error() })
 		c.mu.Lock()
 		if c.active(r) {
-			c.view = View{Phase: Failed, Message: msg, Text: text, Cleanup: r.cleanup}
+			c.view = View{Phase: Failed, Message: msg, Text: text, Cleanup: r.cleanup, Retained: true}
 		}
 		c.mu.Unlock()
 		c.changed()
@@ -946,7 +1120,7 @@ func (c *Controller) Retranscribe(id string) error {
 	if err != nil && raw == "" {
 		return errors.New(c.tr("asrUnreachable", service.Label(), c.explain(err)))
 	}
-	text, applied := c.Dict.Apply(strings.TrimSpace(raw))
+	text, applied := c.formatTranscript(strings.TrimSpace(raw), s)
 	if len(applied) > 0 {
 		note += "; " + c.tr("noteRules", strings.Join(applied, ", "))
 	}
@@ -954,7 +1128,7 @@ func (c *Controller) Retranscribe(id string) error {
 		note += "; " + c.tr("noteIncomplete", err.Error())
 	}
 	c.History.Update(id, func(rec *store.Record) {
-		rec.Versions = append(rec.Versions, store.Version{ID: store.NewID(), Kind: store.KindRetranscribe, Text: text, Note: note, At: time.Now()})
+		rec.Versions = append(rec.Versions, store.Version{ID: store.NewID(), Kind: store.KindRetranscribe, Text: text, BasedOn: raw, Note: note, At: time.Now()})
 	})
 	c.historyChanged()
 	return err
@@ -974,9 +1148,17 @@ func (c *Controller) Recleanup(id, base string) error {
 	if err != nil {
 		return errors.New(c.explain(err))
 	}
+	cleaned, _ = textstyle.Apply(cleaned, s.TextStyle, c.Dict.Hotwords())
 	c.History.Update(id, func(rec *store.Record) {
 		rec.Versions = append(rec.Versions, store.Version{ID: store.NewID(), Kind: store.KindRecleanup, Text: cleaned, BasedOn: base, Model: opts.Model, At: time.Now()})
 	})
 	c.historyChanged()
 	return nil
+}
+
+// formatTranscript is shared by live dictation and history retranscription.
+func (c *Controller) formatTranscript(raw string, s config.Settings) (string, []string) {
+	text, rules := c.Dict.Apply(raw)
+	text, styleRules := textstyle.Apply(text, s.TextStyle, c.Dict.Hotwords())
+	return text, append(rules, styleRules...)
 }

@@ -1,8 +1,16 @@
 #!/bin/sh
-# SIGNING_IDENTITY='Developer ID Application: ...' ./scripts/build-macos.sh
-# Explicit local-only builds may use SIGNING_IDENTITY=-.
+# Local builds always use the fixed Apple Development identity from AGENTS.md.
 set -eu
-: "${SIGNING_IDENTITY:?Set SIGNING_IDENTITY to a code-signing identity (or - for a local ad-hoc build)}"
+fixed_identity='Apple Development: geekmooc@gmail.com (5QLDC77G39)'
+SIGNING_IDENTITY=${SIGNING_IDENTITY:-$fixed_identity}
+if [ "$SIGNING_IDENTITY" != "$fixed_identity" ]; then
+  echo "Local builds require $fixed_identity; refusing a different or ad-hoc identity." >&2
+  exit 1
+fi
+if ! security find-identity -v -p codesigning | grep -Fq "\"$fixed_identity\""; then
+  echo "The fixed Apple Development signing identity is unavailable; build stopped." >&2
+  exit 1
+fi
 project_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$project_dir"
 ./scripts/fetch-asr-runtime.sh

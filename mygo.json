@@ -1,14 +1,16 @@
 {
   "name": "Voicemore",
   "identifier": "dev.steve.voice-input",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "out": "build",
   "macos": {
     "infoPlist": {
-      "NSMicrophoneUsageDescription": "Voicemore records your speech when you dictate and sends it to the speech recognition service chosen in Settings: the local one on this Mac by default, or a cloud provider you set up and select."
+      "NSMicrophoneUsageDescription": "Voicemore records your speech when you dictate and sends it to the speech recognition service chosen in Settings: the local one on this Mac by default, or a cloud provider you set up and select.",
+      "CFBundleIconFile": "Voicemore.icns"
     },
     "entitlements": "resources/VoiceInput.entitlements",
-    "minimumSystemVersion": "26.2"
+    "minimumSystemVersion": "26.2",
+    "signingIdentity": "Apple Development: geekmooc@gmail.com (5QLDC77G39)"
   },
   "icon": "resources/icon.png",
   "updates": {

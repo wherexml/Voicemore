@@ -34,7 +34,14 @@ func (m *mainWindow) dictView(c *ui.Context) {
 			if len(pending) == 0 {
 				ui.Text(c, T("noPending")).TextColor(t.TextMuted)
 			}
-			for _, cand := range pending {
+			// Three to a page. A page emptied by an accept or an ignore falls
+			// back to the last one that exists; what was typed for a
+			// candidate and whether its sentence is open are kept by its ID.
+			const candPerPage = 3
+			cpages := max(1, (len(pending)+candPerPage-1)/candPerPage)
+			m.cPage = min(max(1, m.cPage), cpages)
+			cfrom := (m.cPage - 1) * candPerPage
+			for _, cand := range pending[cfrom:min(len(pending), cfrom+candPerPage)] {
 				ui.Column(c.Key("cand-"+cand.ID)).Padding(12, 14).Radius(10).Gap(6).Background(cardColor(t)).Border(1, t.Border).Children(func() {
 					ui.Textf(c, "%s  →  %s", cand.Wrong, cand.Right).FontSize(14).Bold().Selectable()
 					source := cand.Source
@@ -81,6 +88,7 @@ func (m *mainWindow) dictView(c *ui.Context) {
 					})
 				})
 			}
+			pager(c, "cand-pager", &m.cPage, cpages)
 		})
 
 		// Manual additions are keywords, one entry at a time.
@@ -136,7 +144,7 @@ func (m *mainWindow) dictView(c *ui.Context) {
 			ui.Row(c).Gap(8).Children(func() {
 				ui.Text(c, T("entries", len(entries))).FontSize(12).Bold().TextColor(t.TextMuted)
 				ui.Spacer(c)
-				if searchInput(c.Key("dict-search"), &m.dictQuery).Width(220).Changed() {
+				if searchInput(c, "dict-search", &m.dictQuery, 220).Changed() {
 					m.dPage = 1 // a search starts at its first page
 				}
 			})

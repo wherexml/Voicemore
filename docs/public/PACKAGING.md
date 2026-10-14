@@ -4,11 +4,11 @@
 
 ```sh
 ./scripts/fetch-asr-runtime.sh
-SIGNING_IDENTITY='Your full signing identity' ./scripts/build-macos.sh
-./scripts/verify-dmg.sh 'build/darwin-arm64/Voicemore 0.3.1 arm64.dmg'
+SIGNING_IDENTITY='Apple Development: geekmooc@gmail.com (5QLDC77G39)' ./scripts/build-macos.sh
+./scripts/verify-dmg.sh 'build/darwin-arm64/Voicemore 0.3.2 arm64.dmg'
 ```
 
-Output: `build/darwin-arm64/Voicemore 0.3.1 arm64.dmg` and `SHA256SUMS.txt`.
+Output: `build/darwin-arm64/Voicemore 0.3.2 arm64.dmg` and `SHA256SUMS.txt`.
 The disk image contains `Voicemore.app`, an `/Applications` shortcut, and a Finder icon layout. Drag the app onto that shortcut, eject the image, and launch from Applications.
 
 The verification script mounts the finished DMG read-only, copies the app to a temporary installation directory, checks its signature and arm64 architecture, checks product/minimum-system metadata and the bundled runtime hash, and writes repeatable evidence under `artifacts/dmg-verification/`. It then unmounts the image and removes only its temporary directories. It does not grant permissions, run the app, or access personal settings.
@@ -17,7 +17,7 @@ For native end-to-end acceptance, launch the copied app on an Apple Silicon Mac,
 
 ## Signing
 
-The repository deliberately contains no personal signing identity or notarization credentials. `SIGNING_IDENTITY=-` is an explicit local-only ad-hoc build; a successful signature check does not mean Gatekeeper will accept a public download.
+Local builds pin the Apple Development identity specified in AGENTS.md. The certificate and private key must already be available locally; no signing credentials are included. Missing identities stop the build. Ad-hoc signing is prohibited. A successful signature check does not mean Gatekeeper will accept a public download.
 
 v0.3.1 is an **unnotarized, development-signed preview**. Production distribution needs a usable Developer ID Application identity, hardened-runtime-compatible nested binaries, and a successful Apple notarization/stapling pass. The bundled Python runtime archive is opaque to ordinary app-bundle signing; its extracted executable/native modules must also be audited and signed for a future notarized release. Do not claim notarization based on an app-only signature.
 

@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/egoist/mygo"
+	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 
 	"voiceinput/internal/config"
@@ -21,11 +24,16 @@ import (
 type prefsWindow struct {
 	a      *app
 	win    *mygo.Window
-	cat    string // "general", "perms", "dictation", "models" or "privacy"
+	cat    string // "general", "perms", "models" or "privacy"
 	status func() string
 
+	dragWin    *mygo.Window
+	dragPane   string
+	bundlePath string // exact running bundle, never a backup or guessed install path
 	audioDays  float64
 	fnConflict string // what the system does on Fn
+	mics       []macos.InputDevice
+	micsAt     time.Time // when mics was read: microphones come and go
 
 	// Models (models.go).
 	pickOpen    map[string]*bool       // kind → its default picker is open
@@ -41,6 +49,11 @@ type prefsWindow struct {
 	models      []string           // the local cleanup service's list, once fetched
 	listOpen    bool
 	custom      map[string]*customDraft // custom provider editors' drafts
+	permsWere   bool                    // the permissions were all granted when last looked at
+	// guideReturn follows a visit from the first-run guide: 1 once it has
+	// opened these settings, 2 once an editor has been open. When that
+	// editor closes, the settings close too and the guide is in front again.
+	guideReturn int
 }
 
 // conn is a connection check of one provider. Checks run off the main
@@ -69,6 +82,7 @@ func newPrefsWindow(a *app) *prefsWindow {
 		drafts: map[string]*string{}, shown: map[string]bool{}, conns: map[string]*conn{}, custom: map[string]*customDraft{}}
 	p.audioDays = float64(a.settings.Get().AudioRetentionDays)
 	p.fnConflict = macos.FnKeyConflict()
+	p.bundlePath = runningAppBundle()
 	p.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:           T("navSettings"),
 		Width:           980,
@@ -95,9 +109,14 @@ func (p *prefsWindow) visible() bool { return p != nil && p.win != nil && p.win.
 
 // open shows the settings, at a category when one is named.
 func (p *prefsWindow) open(category string) {
+	if category == "dictation" {
+		category = "general"
+	}
 	if category != "" {
+		p.dlgOpen, p.addOpen = false, false
 		p.cat = category
 	}
+	p.refresh()
 	p.win.SetTitle(T("navSettings"))
 	p.win.Show()
 	p.win.Focus()
@@ -106,9 +125,16 @@ func (p *prefsWindow) open(category string) {
 
 // close hides the settings and gives the main window the keyboard back.
 func (p *prefsWindow) close() {
+	if p.dragWin != nil {
+		p.dragWin.Hide()
+	}
+	p.guideReturn = 0
 	p.win.Hide()
 	if p.a.main.win.IsVisible() {
 		p.a.main.win.Focus()
+	}
+	if p.a.onboard.visible() {
+		p.a.onboard.win.Focus()
 	}
 	p.a.main.refresh()
 }
@@ -210,7 +236,6 @@ var categories = []struct {
 }{
 	{"general", "gGeneral", icSliders},
 	{"perms", "gPerms", icShield},
-	{"dictation", "navDictate", icMic},
 	{"models", "gModels", icSparkle},
 	{"privacy", "gPrivacy", icLock},
 }
@@ -226,6 +251,13 @@ func (p *prefsWindow) view(c *ui.Context) {
 	}
 	if !overlay && (c.Shortcut(0, ui.KeyEscape) || c.Shortcut(ui.Cmd, ui.KeyW)) {
 		p.close()
+	}
+	if p.guideReturn > 0 {
+		if p.dlgOpen {
+			p.guideReturn = 2
+		} else if p.guideReturn == 2 {
+			p.close() // back to the guide
+		}
 	}
 	title := ""
 	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
@@ -272,8 +304,6 @@ func (p *prefsWindow) view(c *ui.Context) {
 					switch p.cat {
 					case "perms":
 						p.permissions(c)
-					case "dictation":
-						p.dictation(c)
 					case "models":
 						p.modelsView(c)
 					case "privacy":
@@ -300,17 +330,58 @@ func card(c *ui.Context, key string, rows func()) {
 	ui.Column(c.Key(key)).Radius(10).Background(cardColor(t)).Border(1, t.Border).Gap(1).Dividers(1, t.Border).Children(rows)
 }
 
+// hintDelay is how long the pointer rests on a row before its hint shows,
+// so that passing over the rows does not flash their hints.
+const hintDelay = 300 * time.Millisecond
+
+// hintHover is when the pointer came onto each settings row it is on, by
+// row; a row it left has no entry. Only the main thread touches it.
+var hintHover = map[string]time.Time{}
+
 // setting is a row: an optional icon, a label with a hint, and a control.
+// The hint explains the setting: it shows once the pointer has rested on
+// the row for hintDelay, and goes when the pointer leaves.
 func setting(c *ui.Context, key string, svg *ui.SVG, label, hint string, control func()) {
+	settingRow(c, key, svg, label, hint, false, control)
+}
+
+// settingRow is setting; with notice, the hint is a state the user must
+// see (a missing device, an approval to give) and always shows.
+func settingRow(c *ui.Context, key string, svg *ui.SVG, label, hint string, notice bool, control func()) {
 	t := c.Theme()
-	ui.Row(c.Key(key)).Gap(16).Padding(11, 14).AlignItems(ui.Center).Children(func() {
+	row := ui.Row(c.Key(key)).Gap(16).Padding(11, 14).AlignItems(ui.Center)
+	shown := notice
+	if !notice && hint != "" {
+		// Rows of different cards may share a key: the label tells them apart.
+		id := key + "\x00" + label
+		if row.Hovered() {
+			since, ok := hintHover[id]
+			if !ok {
+				since = time.Now()
+				hintHover[id] = since
+			}
+			if wait := hintDelay - time.Since(since); wait > 0 {
+				c.After(wait)
+			} else {
+				shown = true
+			}
+		} else {
+			delete(hintHover, id) // left before the delay: nothing shows
+		}
+	}
+	row.Children(func() {
 		if svg != nil {
 			ui.Icon(c, svg).FontSize(16).TextColor(t.TextMuted)
 		}
 		ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
 			ui.Text(c, label)
 			if hint != "" {
-				ui.Text(c, hint).FontSize(11.5).TextColor(t.TextMuted)
+				// A hidden hint keeps its room, so the rows never move.
+				col := t.TextMuted
+				if !shown {
+					col = ui.Transparent
+				}
+				ui.Text(c, hint).FontSize(11.5).TextColor(col)
 			}
 		})
 		ui.Row(c).Shrink(0).Gap(8).AlignItems(ui.Center).Children(control)
@@ -328,12 +399,151 @@ func (p *prefsWindow) general(c *ui.Context) {
 				p.win.SetTitle(T("navSettings"))
 			}
 		})
+		// Light, dark, or the system's. It applies to the app's own
+		// surfaces at once; what macOS draws follows the system.
+		setting(c, "appearance", nil, T("appearance"), "", func() {
+			modes := []string{"light", "dark", ""}
+			i := 2
+			for k, mode := range modes {
+				if mode == appearance {
+					i = k
+				}
+			}
+			if ui.Segmented(c.Key("seg"), &i, T("apLight"), T("apDark"), T("apAuto")).Changed() {
+				appearance = modes[i]
+				p.change(func(s *config.Settings) { s.Appearance = modes[i] })
+				p.a.refreshAll()
+			}
+		})
+		p.loginItem(c)
+		setting(c, "dock", nil, T("sDock"), T("sDockHint"), func() {
+			on := p.a.settings.Get().ShowInDock
+			if ui.Switch(c.Key("sw"), &on).Label(T("sDock")).Changed() {
+				p.change(func(s *config.Settings) { s.ShowInDock = on })
+				macos.SetDockIcon(on)
+				p.win.Focus()
+			}
+		})
+		// The first-run guide, for whoever left it or never saw it.
+		setting(c, "guide", nil, T("obGuide"), T("obGuideHint"), func() {
+			if ui.Button(c.Key("open"), T("obShowBtn")).Clicked() {
+				p.close()
+				p.a.onboard.open()
+			}
+		})
+	})
+	p.audio(c)
+	p.dictation(c)
+}
+
+// loginItem is the app's entry in System Settings → Login Items. macOS
+// keeps it, so the switch shows what the system reports, not a saved copy.
+func (p *prefsWindow) loginItem(c *ui.Context) {
+	status := macos.LoginItemStatus()
+	hint := T("sLoginItemHint")
+	switch status {
+	case "approval":
+		hint = T("loginApproval")
+	case "unavailable":
+		hint = T("loginUnavailable")
+	}
+	settingRow(c, "login", nil, T("sLoginItem"), hint, status == "approval" || status == "unavailable", func() {
+		if status == "approval" && ui.Button(c.Key("open"), T("openSettings")).Clicked() {
+			macos.OpenLoginItemsSettings()
+		}
+		on := status == "enabled" || status == "approval"
+		if ui.Switch(c.Key("sw"), &on).Label(T("sLoginItem")).Disabled(status == "unavailable").Changed() {
+			if err := macos.SetLoginItem(on); err != nil {
+				p.say("loginFailed", err.Error())
+			} else {
+				p.status = nil
+			}
+			if on && macos.LoginItemStatus() == "approval" {
+				macos.OpenLoginItemsSettings()
+			}
+		}
+	})
+}
+
+// audio is the microphone, the cues and muting the output while recording.
+func (p *prefsWindow) audio(c *ui.Context) {
+	t := c.Theme()
+	s := p.a.settings.Get()
+	// Microphones are plugged in and out while the page is open.
+	c.After(2 * time.Second)
+	if time.Since(p.micsAt) >= 2*time.Second {
+		p.mics, p.micsAt = macos.InputDevices(), time.Now()
+	}
+	auto, connected := T("micAuto"), false
+	uids := []string{""}
+	for _, m := range p.mics {
+		if m.Default {
+			auto = T("micAutoNamed", m.Name)
+		}
+	}
+	names := []string{auto}
+	for _, m := range p.mics {
+		uids = append(uids, m.UID)
+		names = append(names, m.Name)
+		connected = connected || m.UID == s.InputDevice
+	}
+	hint, notice := T("sMicDeviceHint"), false
+	if s.InputDevice != "" && !connected {
+		// It stays chosen, and is used again once it is back.
+		name := s.InputDeviceName
+		if name == "" {
+			name = s.InputDevice
+		}
+		uids = append(uids, s.InputDevice)
+		names = append(names, T("micDisconnected", name))
+		hint, notice = T("micDisconnectedHint"), true
+	}
+	ui.Text(c, T("gAudio")).FontSize(16).TextColor(t.Text)
+	card(c, "audio", func() {
+		settingRow(c, "mic", nil, T("sMicDevice"), hint, notice, func() {
+			chosen := names[0]
+			for i, uid := range uids {
+				if uid == s.InputDevice {
+					chosen = names[i]
+				}
+			}
+			if ui.Select(c.Key("sel"), &chosen, names).Label(T("sMicDevice")).Width(240).Changed() {
+				for i, n := range names {
+					if n != chosen || uids[i] == s.InputDevice {
+						continue
+					}
+					uid, name := uids[i], ""
+					for _, m := range p.mics {
+						if m.UID == uid {
+							name = m.Name
+						}
+					}
+					p.change(func(s *config.Settings) { s.InputDevice, s.InputDeviceName = uid, name })
+				}
+			}
+		})
+		setting(c, "sounds", nil, T("sSounds"), T("sSoundsHint"), func() {
+			on := s.InteractionSounds
+			if ui.Switch(c.Key("sw"), &on).Label(T("sSounds")).Changed() {
+				p.change(func(s *config.Settings) { s.InteractionSounds = on })
+				if on {
+					macos.PlayRecordingCue(true) // a sample of what it sounds like
+				}
+			}
+		})
+		setting(c, "mute", nil, T("sMuteOutput"), T("sMuteOutputHint"), func() {
+			on := s.MuteOutput
+			if ui.Switch(c.Key("sw"), &on).Label(T("sMuteOutput")).Changed() {
+				p.change(func(s *config.Settings) { s.MuteOutput = on })
+			}
+		})
 	})
 }
 
 // permissions shows the three permissions as macOS reports them, each with
 // a way to grant it when it is missing.
 func (p *prefsWindow) permissions(c *ui.Context) {
+	c.After(time.Second)
 	t := c.Theme()
 	state := func(granted bool, action string, act func()) {
 		if granted {
@@ -344,6 +554,15 @@ func (p *prefsWindow) permissions(c *ui.Context) {
 		ui.Text(c, T("notGranted")).FontSize(12).TextColor(t.Danger).SingleLine()
 		if ui.Button(c.Key("grant"), action).Clicked() {
 			act()
+		}
+	}
+	// A trigger key that could not be bound for want of a permission is
+	// bound again as soon as macOS reports them granted.
+	if granted := permissionsGranted(); granted != p.permsWere {
+		p.permsWere = granted
+		if granted && p.a.triggerErr != "" {
+			p.a.bindTrigger()
+			p.a.main.refresh()
 		}
 	}
 	card(c, "perms", func() {
@@ -358,15 +577,89 @@ func (p *prefsWindow) permissions(c *ui.Context) {
 			})
 		})
 		setting(c, "ax", icPerson, T("pAx"), "", func() {
-			state(macos.AccessibilityTrusted(false), T("request"), func() { macos.AccessibilityTrusted(true) })
+			state(macos.AccessibilityTrusted(false), T("request"), func() { p.showPermissionDrag("Privacy_Accessibility") })
 		})
 		setting(c, "input", icKeyboard, T("pInput"), "", func() {
-			state(macos.InputMonitoringGranted(false), T("openSettings"), func() { macos.OpenPrivacySettings("Privacy_ListenEvent") })
+			state(macos.InputMonitoringGranted(false), T("openSettings"), func() { p.showPermissionDrag("Privacy_ListenEvent") })
 		})
 	})
-	if !macos.AccessibilityTrusted(false) || !macos.InputMonitoringGranted(false) {
-		ui.Text(c, T("permHint")).FontSize(11.5).TextColor(t.TextMuted)
+}
+
+// runningAppBundle offers only the actual packaged executable's app. A plain
+// go run binary has no app to register in System Settings.
+func runningAppBundle() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
 	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	macOS := filepath.Dir(exe)
+	contents := filepath.Dir(macOS)
+	bundle := filepath.Dir(contents)
+	if filepath.Base(macOS) != "MacOS" || filepath.Base(contents) != "Contents" || filepath.Ext(bundle) != ".app" {
+		return ""
+	}
+	if _, err := os.Stat(filepath.Join(contents, "Info.plist")); err != nil {
+		return ""
+	}
+	return bundle
+}
+
+// showPermissionDrag shows the app drag card above other apps while the user
+// grants Accessibility or Input Monitoring. It exports the actual file URL.
+func (p *prefsWindow) showPermissionDrag(pane string) {
+	macos.OpenPrivacySettings(pane)
+	if p.bundlePath == "" {
+		return
+	}
+	p.dragPane = pane
+	if p.dragWin == nil {
+		p.dragWin = mygo.NewFlyout(mygo.FlyoutOptions{
+			Tray: p.a.tray, Width: 248, Height: 112, Hidden: true,
+			Content: ui.View(p.permissionDragView),
+		})
+		p.dragWin.SetAlwaysOnTop(true)
+		p.dragWin.OnClose(func(e *mygo.CloseEvent) {
+			if !p.a.quitting {
+				e.PreventDefault()
+				p.dragWin.Hide()
+			}
+		})
+	}
+	area := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
+	p.dragWin.SetBounds(mygo.Rectangle{X: area.X + area.Width - 280, Y: area.Y + area.Height/2 - 56, Width: 248, Height: 112})
+	p.dragWin.ShowInactive()
+}
+
+func (p *prefsWindow) permissionDragView(c *ui.Context) {
+	useTheme(c)
+	c.Root().Background(ui.Transparent)
+	c.After(time.Second)
+	granted := p.dragPane == "Privacy_Accessibility" && macos.AccessibilityTrusted(false) || p.dragPane == "Privacy_ListenEvent" && macos.InputMonitoringGranted(false)
+	if granted {
+		p.dragWin.Hide()
+		p.a.refreshAll()
+		return
+	}
+	data, err := transfer.FileData(p.bundlePath)
+	if err != nil {
+		return
+	}
+	ui.Column(c.Key("drag-app")).Size(248, 112).Padding(16).Gap(10).Radius(18).Background(cardColor(c.Theme())).Label(T("permDragApp")).
+		DragData(data, transfer.DragOptions{Operations: transfer.Copy, Done: func(r transfer.Result) {
+			if r.Err != nil {
+				p.status = func() string { return T("permDragFailed") }
+				p.refresh()
+			}
+		}}).Children(func() {
+		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Size(44, 44).Draw(drawAppMark)
+			ui.Text(c, "Voicemore").FontSize(17).FontWeight(600)
+		})
+		ui.Text(c, T("permDragHint")).FontSize(12).TextColor(c.Theme().TextMuted)
+	})
 }
 
 var fnActions = map[string]string{
@@ -401,11 +694,35 @@ func (p *prefsWindow) dictation(c *ui.Context) {
 			}
 		})
 		setting(c, "cleanup", nil, T("sCleanDefault"), T("sCleanDefaultHint"), func() {
-			on := s.CleanupDefault
-			if ui.Switch(c.Key("sw"), &on).Label(T("sCleanDefault")).Changed() {
-				p.a.setCleanup(on)
+			p.a.cleanupSwitch(c)
+		})
+		setting(c, "observe", nil, T("sObserve"), T("sObserveHint"), func() {
+			on := s.ObserveEdits
+			if ui.Switch(c.Key("sw"), &on).Label(T("sObserve")).Changed() {
+				p.change(func(s *config.Settings) { s.ObserveEdits = on })
 			}
 		})
+	})
+
+	ui.Text(c, T("basicFormat")).FontSize(16).TextColor(t.Text)
+	card(c, "basic-format", func() {
+		for _, row := range []struct {
+			key string
+			on  bool
+			set func(*config.Settings, bool)
+		}{
+			{"formatPeriod", s.TextStyle.TrimPeriod, func(s *config.Settings, v bool) { s.TextStyle.TrimPeriod = v }},
+			{"formatCalm", s.TextStyle.CalmExclamations, func(s *config.Settings, v bool) { s.TextStyle.CalmExclamations = v }},
+			{"formatFillers", s.TextStyle.RemoveFillers, func(s *config.Settings, v bool) { s.TextStyle.RemoveFillers = v }},
+			{"formatAcronyms", s.TextStyle.JoinAcronyms, func(s *config.Settings, v bool) { s.TextStyle.JoinAcronyms = v }},
+		} {
+			setting(c, row.key, nil, T(row.key), T(row.key+"Hint"), func() {
+				on := row.on
+				if ui.Switch(c.Key("sw"), &on).Label(T(row.key)).Changed() {
+					p.change(func(s *config.Settings) { row.set(s, on) })
+				}
+			})
+		}
 	})
 }
 
@@ -467,12 +784,6 @@ func (p *prefsWindow) privacy(c *ui.Context) {
 					p.change(func(s *config.Settings) { s.AudioRetentionDays = days })
 					go p.a.purge()
 				}
-			}
-		})
-		setting(c, "observe", nil, T("sObserve"), T("sObserveHint"), func() {
-			on := s.ObserveEdits
-			if ui.Switch(c.Key("sw"), &on).Label(T("sObserve")).Changed() {
-				p.change(func(s *config.Settings) { s.ObserveEdits = on })
 			}
 		})
 

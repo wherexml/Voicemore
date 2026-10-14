@@ -60,11 +60,11 @@ git clone https://github.com/wherexml/Voicemore.git
 cd Voicemore
 # 下载指定版本运行环境并验证 SHA-256。
 ./scripts/fetch-asr-runtime.sh
-# 仅供本机使用的临时签名构建：
-SIGNING_IDENTITY=- ./scripts/build-macos.sh
+# 使用固定 Apple Development 证书构建：
+SIGNING_IDENTITY='Apple Development: geekmooc@gmail.com (5QLDC77G39)' ./scripts/build-macos.sh
 ```
 
-使用自己的签名证书时，将 `SIGNING_IDENTITY` 设置为完整证书名称。正式对外分发还需 Developer ID 签名和 Apple 公证；仓库不包含签名凭证。详见[打包与验收说明](docs/public/PACKAGING.md)。
+本地构建必须使用 AGENTS.md 指定的固定 Apple Development 证书；脚本会拒绝其他身份，不会降级为临时签名。正式对外分发还需 Developer ID 签名和 Apple 公证；仓库不包含签名凭证。详见[打包与验收说明](docs/public/PACKAGING.md)。
 
 运行环境以 Release 附件分发，不存入 Git。Python 依赖、模型版本和校验值位于 `internal/localasr/assets/`。运行环境压缩包保留第三方许可证；源码依赖与图标说明见[第三方声明](resources/licenses/README.md)。
 

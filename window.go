@@ -2,6 +2,7 @@ package main
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/audio"
@@ -22,12 +23,18 @@ type mainWindow struct {
 	updateOpen bool
 	starting   bool // the 3-second countdown before a dictation
 
+	// Home: the focus of the recent rows' two buttons, by row.
+	recentOpen   [4]ui.Handle
+	recentCopy   [4]ui.Handle
+	recentCopied map[string]time.Time // record ID → last successful copy
+
 	// History.
 	query       string
 	hPage       int // from 1
 	selected    string
 	reviseOpen  bool
-	detailsOpen bool
+	detailsOpen bool   // "Details" is left open: the saved preference
+	detailsPeek string // the record whose details a rerun opened, whatever the preference
 	revBase     string // the text the revision started from
 	revText     string
 	player      *audio.Player
@@ -37,6 +44,7 @@ type mainWindow struct {
 	// Dictionary.
 	dictQuery string
 	dPage     int
+	cPage     int // the page of the candidates, three to a page
 	newTerm   string
 	contexts  map[string]string // candidate ID → context words typed for it
 	candOpen  map[string]bool   // candidate ID → its context sentence is showing
@@ -45,7 +53,7 @@ type mainWindow struct {
 const pageSize = 100 // items per page of History and of the Dictionary
 
 func newMainWindow(a *app) *mainWindow {
-	m := &mainWindow{a: a, page: "home", hPage: 1, dPage: 1, contexts: map[string]string{}, candOpen: map[string]bool{}}
+	m := &mainWindow{a: a, page: "home", hPage: 1, dPage: 1, cPage: 1, detailsOpen: a.settings.Get().HistoryDetailsOpen, contexts: map[string]string{}, candOpen: map[string]bool{}}
 	m.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:         "Voicemore",
 		Width:         1040,
@@ -68,7 +76,19 @@ func newMainWindow(a *app) *mainWindow {
 	return m
 }
 
+// show brings the app to the front: the first-run guide while it is
+// open, which stands in for this window, and otherwise this window.
 func (m *mainWindow) show() {
+	if m.a.onboard.visible() {
+		m.a.onboard.win.Show()
+		m.a.onboard.win.Focus()
+		return
+	}
+	m.reveal()
+}
+
+// reveal shows this window, whatever else is open.
+func (m *mainWindow) reveal() {
 	m.win.Show()
 	m.win.Focus()
 }
@@ -123,12 +143,12 @@ func railButton(c *ui.Context, key string, svg *ui.SVG, label string, selected b
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key(key)).Size(44, 44).Radius(22).Justify(ui.Center).AlignItems(ui.Center).
 		Label(label).Tooltip(label)
-	b.Children(func() { ui.Icon(c, svg).FontSize(24).TextColor(t.Text) })
+	b.Children(func() { ui.Icon(c, svg).FontSize(24).TextColor(railText(t)) })
 	switch {
 	case selected:
 		b.Background(railSelected(t))
 	case b.Hovered():
-		b.Background(hoverColor(t))
+		b.Background(railHover(t))
 	}
 	return b.Clicked()
 }
@@ -140,7 +160,7 @@ func (m *mainWindow) view(c *ui.Context) {
 		// The rail: 78 px, icons only. The window controls take its top;
 		// the three pages are centered in its height, and Settings is
 		// anchored at the bottom.
-		ui.Column(c.Key("rail")).Width(78).Background(railColor(t)).BorderWidth(0, 1, 0, 0).BorderColor(t.Border).
+		ui.Column(c.Key("rail")).Width(78).Background(railColor(t)).BorderWidth(0, 1, 0, 0).BorderColor(railLine(t)).
 			AlignItems(ui.Center).Children(func() {
 			ui.Box(c).Height(max(bar.Height, 44)).FillWidth().DragWindow()
 			ui.Spacer(c)
@@ -165,12 +185,18 @@ func (m *mainWindow) view(c *ui.Context) {
 		})
 
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			// Update details live in a popover so the page stays focused.
-			ui.Row(c).Height(52).Padding(0, 28).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).AlignItems(ui.Center).Children(func() {
+			// The header is the page's title. Home has none, and no rule
+			// under it: its first thing is the update card (updates.go).
+			header := ui.Row(c).Height(52).Padding(0, 28).AlignItems(ui.Center)
+			if m.page != "home" {
+				header.BorderWidth(0, 0, 1, 0).BorderColor(t.Border)
+			}
+			header.Children(func() {
 				ui.Row(c).Grow(1).Height(52).AlignItems(ui.Center).DragWindow().Children(func() {
-					ui.Text(c, T(pageTitles[m.page])).FontSize(15).FontWeight(600)
+					if m.page != "home" {
+						ui.Text(c, T(pageTitles[m.page])).FontSize(15).FontWeight(600)
+					}
 				})
-				m.updateView(c)
 			})
 			m.problems(c)
 			ui.Column(c.Key("page-" + m.page)).Grow(1).MinHeight(0).Children(func() {

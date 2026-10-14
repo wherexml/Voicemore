@@ -22,6 +22,46 @@ var (
 	langIndex atomic.Int32
 )
 
+func init() {
+
+	texts["basicFormat"] = [3]string{"Basic formatting", "基礎格式", "基础格式"}
+	texts["formatPeriod"] = [3]string{"Omit the final period", "省略末尾句號", "省略末尾句号"}
+	texts["formatPeriodHint"] = [3]string{"Keep question marks and ellipses.", "保留問號與省略號。", "保留问号与省略号。"}
+	texts["formatCalm"] = [3]string{"Reduce exclamation marks", "減少驚嘆號", "减少感叹号"}
+	texts["formatCalmHint"] = [3]string{"Use periods for ordinary prose; preserve quotes and code.", "一般敘述改用句號，保留引文與程式碼。", "普通叙述改用句号，保留引文与代码。"}
+	texts["formatFillers"] = [3]string{"Remove common fillers", "移除常見語氣詞", "删除常见语气词"}
+	texts["formatFillersHint"] = [3]string{"Remove standalone 嗯 / 呃 / 啊 and sentence-ending 啊. No cleanup model needed.", "移除獨立的嗯／呃／啊和句尾啊，無需整理模型。", "删除独立的嗯／呃／啊和句尾啊，无需整理模型。"}
+	texts["formatAcronyms"] = [3]string{"Join spelled-out terms", "合併拼讀詞彙", "合并拼读词汇"}
+	texts["formatAcronymsHint"] = [3]string{"Join known terms such as A P P → APP and dictionary words.", "合併 A P P → APP 等已知縮寫及詞典詞彙。", "合并 A P P → APP 等已知缩写及词典词汇。"}
+
+	texts["gAudio"] = [3]string{"Audio", "音訊", "音频"}
+	texts["sMicDevice"] = [3]string{"Microphone", "麥克風", "麦克风"}
+	texts["sMicDeviceHint"] = [3]string{"The input used for dictation.", "聽寫使用的輸入裝置。", "听写使用的输入设备。"}
+	texts["micAuto"] = [3]string{"Automatic (system default)", "自動（系統預設）", "自动（系统默认）"}
+	texts["micAutoNamed"] = [3]string{"Automatic (%s)", "自動（%s）", "自动（%s）"}
+	texts["micDisconnected"] = [3]string{"%s (disconnected)", "%s（未連接）", "%s（未连接）"}
+	texts["micDisconnectedHint"] = [3]string{"Not connected: dictation uses the system default until it is back.", "未連接：重新連接前，聽寫會使用系統預設麥克風。", "未连接：重新连接前，听写会使用系统默认麦克风。"}
+	texts["sSounds"] = [3]string{"Interaction sounds", "互動音效", "交互音效"}
+	texts["sSoundsHint"] = [3]string{"Play a short sound when recording starts and stops.", "開始與結束錄音時播放提示音。", "开始和结束录音时播放提示音。"}
+	texts["sMuteOutput"] = [3]string{"Mute audio while dictating", "聽寫時靜音其他音訊", "听写时静音其他音频"}
+	texts["sMuteOutputHint"] = [3]string{"Mutes the sound output while recording and restores it when recording ends.", "錄音時將聲音輸出靜音，錄音結束後恢復。", "录音时将声音输出静音，录音结束后恢复。"}
+	texts["sLoginItem"] = [3]string{"Launch at login", "登入時啟動", "登录时启动"}
+	texts["sLoginItemHint"] = [3]string{"Open Voicemore automatically when you log in to your Mac.", "登入 Mac 時自動開啟 Voicemore。", "登录 Mac 时自动打开 Voicemore。"}
+	texts["loginApproval"] = [3]string{"Waiting for approval in System Settings → Login Items.", "需在「系統設定」→「登入項目」中允許。", "需在“系统设置”→“登录项”中允许。"}
+	texts["loginUnavailable"] = [3]string{"Only available for the installed app.", "僅適用於已安裝的 App。", "仅适用于已安装的 App。"}
+	texts["loginFailed"] = [3]string{"Could not change the login item: %s", "無法變更登入項目：%s", "无法更改登录项：%s"}
+	texts["sDock"] = [3]string{"Show in Dock", "在 Dock 中顯示", "在程序坞中显示"}
+	texts["sDockHint"] = [3]string{"When off, Voicemore stays available from the menu bar.", "關閉後，仍可從選單列使用 Voicemore。", "关闭后，仍可从菜单栏使用 Voicemore。"}
+
+	texts["cleanupNotConfigured"] = [3]string{"Text cleanup model is not configured", "未配置文字整理模型", "未配置文字整理模型"}
+	texts["cleanupChecking"] = [3]string{"Checking service…", "正在檢查服務…", "正在检查服务…"}
+	texts["cleanupUnavailable"] = [3]string{
+		"Text cleanup is not configured or its service/model is unavailable. It remains off. Configure and check a text model in Settings → Models. The bundled speech model does not include a text cleanup service.",
+		"整理文字尚未配置，或服務／模型不可用，已保持關閉。請到設定 → 模型配置並檢查文字模型。內建語音模型不包含文字整理服務。",
+		"整理文字尚未配置，或服务／模型不可用，已保持关闭。请到设置 → 模型配置并检查文字模型。内置语音模型不包含文字整理服务。",
+	}
+}
+
 // langFor maps a saved choice, or a system locale such as "zh-TW", to a
 // language index.
 func langFor(id string) int {
@@ -123,6 +163,69 @@ func rootCause(err error) string {
 // Simplified Chinese. The keys of internal/session's messages are here
 // under the same names.
 var texts = map[string][3]string{
+	// Appearance, in Settings → General.
+	"appearance": {"Appearance", "外觀", "外观"},
+	"apLight":    {"Light", "淺色", "浅色"},
+	"apDark":     {"Dark", "深色", "深色"},
+	"apAuto":     {"Automatic", "自動", "自动"},
+
+	// Volcengine, for settings saved in an access mode this version no longer offers.
+	"volcLegacyNote": {"This Mac still uses Volcengine credentials saved in an earlier access mode, and they keep working. Pressing Save key here switches to the current mode.", "這台 Mac 仍在使用先前接入方式儲存的火山引擎憑證，它們會繼續有效。在此儲存 API 金鑰後會改用目前的方式。", "这台 Mac 仍在使用之前接入方式保存的火山引擎凭证，它们会继续有效。在此保存 API 密钥后会改用当前方式。"},
+
+	// The first-run guide (onboarding.go).
+	"obTitle":        {"Get started", "開始使用", "开始使用"},
+	"obProgress":     {"%d of %d done", "已完成 %d / %d", "已完成 %d / %d"},
+	"obS1":           {"How it works", "使用方式", "使用方式"},
+	"obS2":           {"Speech model", "語音模型", "语音模型"},
+	"obS3":           {"Permissions", "權限", "权限"},
+	"obS4":           {"First dictation", "第一次聽寫", "第一次听写"},
+	"obS1h":          {"Speak, and it's typed", "隨時隨地，開口即寫", "随时随地，开口即写"},
+	"obS2h":          {"Choose where speech is recognized", "選擇語音辨識的位置", "选择语音识别的位置"},
+	"obS3h":          {"Allow three things in macOS", "在 macOS 允許三項權限", "在 macOS 允许三项权限"},
+	"obS4h":          {"Try it once here", "在這裡試一次", "在这里试一次"},
+	"obI1":           {"Press %s", "按 %s", "按 %s"},
+	"obI1text":       {"In any app, with the cursor where the text should go.", "在任何 App 中，游標放在要輸入的位置。", "在任何应用中，光标放在要输入的位置。"},
+	"obI1holdText":   {"Hold it in any app, with the cursor where the text should go.", "在任何 App 中按住，游標放在要輸入的位置。", "在任何应用中按住，光标放在要输入的位置。"},
+	"obI2":           {"Speak", "說話", "说话"},
+	"obI2text":       {"A small capsule at the bottom of the screen shows it is listening.", "螢幕底部的小膠囊表示正在聆聽。", "屏幕底部的小胶囊表示正在聆听。"},
+	"obI3":           {"Text appears", "文字出現", "文字出现"},
+	"obI3text":       {"Press %s again: the text is inserted at your cursor.", "再按一次 %s，文字就會寫入游標位置。", "再按一次 %s，文字就会写入光标位置。"},
+	"obI3holdText":   {"Release the key: the text is inserted at your cursor.", "放開按鍵，文字就會寫入游標位置。", "松开按键，文字就会写入光标位置。"},
+	"obLocal":        {"On this Mac", "在這台 Mac 上", "在这台 Mac 上"},
+	"obLocalText":    {"Private and offline after one download.", "下載一次後即可離線使用，內容不離開本機。", "下载一次后即可离线使用，内容不离开本机。"},
+	"obCloud":        {"A cloud provider", "雲端供應商", "云端服务商"},
+	"obCloudText":    {"No download; needs your own API key.", "不需下載；需要你自己的 API 金鑰。", "无需下载；需要你自己的 API 密钥。"},
+	"obMore":         {"More options…", "更多選項…", "更多选项…"},
+	"obDownload":     {"Download model", "下載模型", "下载模型"},
+	"obDownloadSize": {"About %.1f GB total", "共約 %.1f GB", "共约 %.1f GB"},
+	"obLocalNote":    {"Voicemore manages the model and starts it with the app.", "Voicemore 會管理模型，並隨 App 啟動。", "Voicemore 会管理模型，并随应用启动。"},
+	"obCloudOpen":    {"Open speech providers", "打開語音辨識供應商", "打开语音识别服务商"},
+	"obWhyMic":       {"To hear what you say while you dictate.", "聽寫時用來聽見你說的話。", "听写时用来听见你说的话。"},
+	"obWhyAx":        {"To insert the text at your cursor.", "用來把文字寫入游標位置。", "用来把文字写入光标位置。"},
+	"obWhyInput":     {"To notice the trigger key in any app.", "用來在任何 App 中偵測觸發鍵。", "用来在任何应用中检测触发键。"},
+	"obDenied":       {"Denied", "已拒絕", "已拒绝"},
+	"obDeniedNote":   {"Microphone access was denied. macOS will not ask again: allow Voicemore in System Settings, then come back.", "麥克風權限已被拒絕。macOS 不會再次詢問：請在系統設定中允許 Voicemore 後再回來。", "麦克风权限已被拒绝。macOS 不会再次询问：请在系统设置中允许 Voicemore 后再回来。"},
+	"obPermsNote":    {"All three are granted.", "三項權限皆已授權。", "三项权限均已授权。"},
+	"obField":        {"Practice field", "練習輸入框", "练习输入框"},
+	"obFieldPh":      {"Your practice dictation will appear here.", "練習聽寫的文字會出現在這裡。", "练习听写的文字会出现在这里。"},
+	"obPracticed":    {"Your first dictation was inserted.", "第一次聽寫已寫入。", "第一次听写已写入。"},
+	"obNeedFirst":    {"Finish the speech model and the permissions first.", "請先完成語音模型與權限。", "请先完成语音模型与权限。"},
+	"obPracticeNote": {"Press Start practice, say a sentence, then stop. The text appears in the field above and nowhere else: no app is written to and the clipboard is not used.", "按「開始練習」，說一句話，然後結束。文字只會出現在上方的輸入框：不會寫入任何 App，也不會使用剪貼簿。", "按“开始练习”，说一句话，然后结束。文字只会出现在上方的输入框：不会写入任何应用，也不会使用剪贴板。"},
+	"obStart":        {"Start practice", "開始練習", "开始练习"},
+	"obNeedStep":     {"Finish this step to continue, or choose Later.", "完成此步驟後才能繼續，或選擇「稍後」。", "完成此步骤后才能继续，或选择“稍后”。"},
+	"obBack":         {"Back", "上一步", "上一步"},
+	"obContinue":     {"Continue", "繼續", "继续"},
+	"obFinish":       {"Finish", "完成", "完成"},
+	"obNotYet":       {"Not done yet", "尚未完成", "尚未完成"},
+	"obLater":        {"Later", "稍後", "稍后"},
+	"obComplete":     {"Voicemore is set up.", "Voicemore 已設定完成。", "Voicemore 已设置完成。"},
+	"obCompleteText": {"Press %s in any app to dictate. This guide stays available in Settings → General.", "在任何 App 中按 %s 即可聽寫。此指引可在「設定 → 一般」再次打開。", "在任何应用中按 %s 即可听写。此指引可在“设置 → 通用”中再次打开。"},
+	"obReview":       {"Review steps", "查看步驟", "查看步骤"},
+	"obEnter":        {"Enter Voicemore", "進入 Voicemore", "进入 Voicemore"},
+	"obGuide":        {"Setup guide", "設定指引", "设置指引"},
+	"obGuideHint":    {"The getting-started steps, in a window of their own", "獨立視窗的開始使用步驟", "独立窗口的开始使用步骤"},
+	"obShowBtn":      {"Open guide", "打開指引", "打开指引"},
+
 	"updateNewShort":      {"Update available", "有新版本", "有新版本"},
 	"updateDownloadShort": {"Downloading", "下載中", "下载中"},
 	"updateVerifyShort":   {"Installing", "安裝中", "安装中"},
@@ -216,6 +319,7 @@ var texts = map[string][3]string{
 	"noText":       {"No transcript yet", "尚無轉寫文字", "尚无转写文字"},
 	"pendingMark":  {"not final: %s", "未定稿：%s", "未定稿：%s"},
 	"willClean":    {"This dictation will be tidied up; the original stays in History.", "本次會整理文字；原始轉寫保留在歷史中。", "本次会整理文字；原始转写保留在历史中。"},
+	"ovRetained":   {"Text kept, ready to copy", "文字已保留，可複製", "文字已保留，可复制"},
 	"copyText":     {"Copy text", "複製文字", "复制文字"},
 	"retryClean":   {"Retry cleanup", "重試整理", "重试整理"},
 	"insertRaw":    {"Insert original", "寫入原文", "写入原文"},
@@ -245,7 +349,7 @@ var texts = map[string][3]string{
 	"del":             {"Delete record and audio", "刪除記錄與錄音", "删除记录与录音"},
 	"details":         {"Details", "詳細資料", "详细信息"},
 	"raw":             {"Original transcript", "原始轉寫", "原始转写"},
-	"corrected":       {"After dictionary rules", "套用詞典規則後", "应用词典规则后"},
+	"corrected":       {"After dictionary and formatting rules", "套用詞典與格式規則後", "应用词典与格式规则后"},
 	"cleaned":         {"Tidied text", "整理結果", "整理结果"},
 	"insertedText":    {"Inserted text", "實際寫入", "实际写入"},
 	"cleanOff":        {"Cleanup was off for this dictation", "本次未開啟文字整理", "本次未开启文字整理"},
@@ -271,13 +375,13 @@ var texts = map[string][3]string{
 	"pending":        {"Waiting for confirmation (%d)", "等待確認（%d）", "等待确认（%d）"},
 	"noPending":      {"Revise a transcript in History and corrections of names appear here. Nothing applies before you accept it.", "在歷史中修訂轉寫後，專有名詞的更正會出現在這裡。確認前不會生效。", "在历史中修订转写后，专有名词的纠正会出现在这里。确认前不会生效。"},
 	"candShort":      {"%s · seen %d×", "%s · 出現 %d 次", "%s · 出现 %d 次"},
-	"context":        {"Context", "語境", "语境"},
+	"context":        {"Context", "上下文", "上下文"},
 	"srcRevision":    {"history revision", "歷史修訂", "历史修订"},
 	"srcObserved":    {"edit after insertion", "寫入後的修改", "写入后的修改"},
 	"conflict":       {"Conflict: %s", "衝突：%s", "冲突：%s"},
-	"commonWord":     {"A replacement rule for “%s” needs context words.", "「%s」的替換規則需要限定語境詞。", "“%s”的替换规则需要限定语境词。"},
+	"commonWord":     {"A replacement rule for “%s” needs context words.", "「%s」的替換規則需要限定上下文詞。", "“%s”的替换规则需要限定上下文词。"},
 	"ctxPlaceholder": {"Replace only when the transcript contains… (comma separated)", "僅當轉寫包含這些詞時才替換…（以逗號分隔）", "仅当转写包含这些词时才替换…（用逗号分隔）"},
-	"ctxLabel":       {"Context words", "限定語境詞", "限定语境词"},
+	"ctxLabel":       {"Context words", "限定上下文詞", "限定上下文词"},
 	"acceptHint":     {"Add keyword", "加入關鍵詞", "添加关键词"},
 	"acceptRule":     {"Accept as replacement rule", "接受為替換規則", "接受为替换规则"},
 	"ignore":         {"Ignore", "忽略", "忽略"},
@@ -306,11 +410,15 @@ var texts = map[string][3]string{
 	"ignored":        {"Ignored. The same correction will not be proposed again.", "已忽略。同樣的更正不會再提出。", "已忽略。同样的纠正不会再提出。"},
 
 	// Settings.
-	"gPerms":            {"Permissions", "權限", "权限"},
+	"gPerms":         {"Permissions", "權限", "权限"},
+	"permDragHint":   {"Drag into System Settings to allow access", "拖入系統設定以授權", "拖入系统设置以授权"},
+	"permDragApp":    {"Drag Voicemore to System Settings", "拖移 Voicemore 到系統設定", "拖拽 Voicemore 到系统设置"},
+	"permDragFailed": {"Could not drag the app. Try again.", "無法拖移應用程式，請重試。", "无法拖拽应用，请重试。"},
+
 	"gGeneral":          {"General", "一般", "通用"},
 	"gTriggerClean":     {"Trigger and text cleanup", "觸發與文字整理", "触发与文字整理"},
 	"gModels":           {"Models", "模型", "模型"},
-	"gPrivacy":          {"History and privacy", "歷史與隱私", "历史与隐私"},
+	"gPrivacy":          {"Privacy settings", "隱私設定", "隐私设置"},
 	"pMic":              {"Microphone", "麥克風", "麦克风"},
 	"pAx":               {"Accessibility (insert text)", "輔助使用（寫入文字）", "辅助功能（写入文字）"},
 	"pInput":            {"Input Monitoring (trigger key)", "輸入監控（觸發鍵）", "输入监控（触发键）"},
@@ -332,7 +440,7 @@ var texts = map[string][3]string{
 	"customKey":         {"Custom shortcut: %s", "自訂快速鍵：%s", "自定义快捷键：%s"},
 	"fnConflict":        {"macOS is set to “%s” when the 🌐 key is pressed, so each dictation triggers it too. Choose “Do Nothing” in System Settings → Keyboard, or pick another trigger key. Voicemore never changes system settings.", "macOS 目前設定為按下 🌐 鍵時「%s」，每次聽寫也會觸發它。請在「系統設定 → 鍵盤」選擇「不執行任何動作」，或改用其他觸發鍵。Voicemore 不會更改系統設定。", "macOS 当前设置为按下 🌐 键时“%s”，每次听写也会触发它。请在“系统设置 → 键盘”中选择“不执行任何操作”，或改用其他触发键。Voicemore 不会修改系统设置。"},
 	"sCleanDefault":     {"Tidy up by default", "預設整理文字", "默认整理文字"},
-	"sCleanDefaultHint": {"Off inserts the transcript exactly as recognized", "關閉時會原樣寫入辨識結果", "关闭时会原样写入识别结果"},
+	"sCleanDefaultHint": {"Basic formatting and dictionary rules still apply when text cleanup is off", "關閉文字整理時，仍套用基礎格式與詞典規則", "关闭文字整理时，仍应用基础格式与词典规则"},
 	"sAudio":            {"Save audio", "保存錄音", "保存录音"},
 	"sAudioHint":        {"Off keeps text only, with no replay", "關閉後只保留文字，無法重播", "关闭后只保留文字，无法回放"},
 	"sDays":             {"Keep audio for (days)", "錄音保留天數", "录音保留天数"},
@@ -513,6 +621,7 @@ var texts = map[string][3]string{
 	// Messages of the session controller (internal/session/messages.go).
 	"micDenied":       {"Microphone access is denied: allow Voicemore in System Settings → Privacy & Security → Microphone.", "麥克風權限遭拒：請在「系統設定 → 隱私權與安全性 → 麥克風」允許 Voicemore。", "麦克风权限被拒绝：请在“系统设置 → 隐私与安全性 → 麦克风”中允许 Voicemore。"},
 	"micNotGranted":   {"Microphone access was not granted, so nothing can be recorded.", "未取得麥克風權限，無法錄音。", "未获得麦克风权限，无法录音。"},
+	"micMissing":      {"No microphone found. Connect one and try again.", "找不到麥克風，請連接後重試。", "未找到麦克风，请连接后重试。"},
 	"endedEarly":      {"The recording ended before it started.", "錄音在開始前就結束了。", "录音在开始前就结束了。"},
 	"asrBusy":         {"The speech recognition service is busy with another recording. Try again in a moment.", "語音辨識服務正在處理另一段錄音，請稍後再試。", "语音识别服务正在处理另一段录音，请稍后再试。"},
 	"asrUnreachable":  {"The speech recognition service at %s cannot be reached: %s", "無法連上位於 %s 的語音辨識服務：%s", "无法连接位于 %s 的语音识别服务：%s"},
@@ -536,6 +645,7 @@ var texts = map[string][3]string{
 	"noAudio":         {"This record has no audio to use.", "這筆記錄沒有可用的錄音。", "这条记录没有可用的录音。"},
 	"busy":            {"A recording or transcription is in progress. Try again in a moment.", "正在錄音或轉寫，請稍後再試。", "正在录音或转写，请稍后再试。"},
 	"detailPasted":    {"pasted into %s", "已貼入 %s", "已粘贴到 %s"},
+	"detailPractice":  {"practice in the setup guide; not inserted into any app", "設定指引中的練習；未寫入任何 App", "设置指引中的练习；未写入任何应用"},
 	"detailNoElement": {"the app exposed no focused element, so only the app could be checked", "該 App 未提供焦點元素，只能核對 App 本身", "该应用未提供焦点元素，只能核对应用本身"},
 	"detailClipboard": {"the clipboard changed meanwhile and was left as it is", "剪貼簿在此期間有變動，已保持原狀", "剪贴板在此期间发生变化，已保持原状"},
 	"detailCancelled": {"cancelled before insertion", "寫入前已取消", "写入前已取消"},

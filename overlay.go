@@ -26,7 +26,9 @@ const (
 	hitW               = 36 // their hit targets, as high as the pill
 	overlayW           = 300
 	compactH           = capsuleH + 8
-	panelH             = 124
+	panelH             = 124 // the transcript preview and the recovery panels
+	noticeH            = 64  // a notice of one centered text
+	shadowRoom         = 16  // below the capsule, for its shadow
 )
 
 var (
@@ -35,6 +37,8 @@ var (
 	dim       = ui.RGBA(255, 255, 255, 0.45)
 	buttonBg  = ui.RGB(58, 58, 60)
 	errorText = ui.RGB(255, 140, 130)
+	panelBg   = ui.RGBA(0, 0, 0, 0.92)
+	panelLine = ui.RGBA(255, 255, 255, 0.2)
 )
 
 type overlay struct {
@@ -44,6 +48,7 @@ type overlay struct {
 	expanded         bool           // the transcript preview is open
 	area             mygo.Rectangle // the work area the dictation started on
 	height           int
+	room             int // kept below the capsule for its shadow
 	closing          bool
 	fadeAt           time.Time
 	fadeFrom, fadeTo float32
@@ -95,6 +100,9 @@ func (o *overlay) sync() {
 			return
 		}
 		o.v = v
+		if v.Phase == session.Preparing && was != session.Preparing {
+			o.expanded = false // each dictation starts with the preview closed
+		}
 		if was == session.Idle || o.closing {
 			o.closing = false
 			o.fade(1)
@@ -126,29 +134,71 @@ func (o *overlay) fade(to float32) {
 	o.fadeID++
 }
 
-// place sizes the window for what it shows and keeps its bottom edge still.
+// place sizes the window for what it shows and keeps the capsule still.
+// Below the capsule the window keeps room for its shadow, taken from the
+// offset to the bottom of the screen, so the capsule itself does not move.
 func (o *overlay) place() {
 	h := compactH
-	if o.panel() {
-		h += panelH + 8
+	if k := o.panelKind(); k != panelNone {
+		h += panelHeight(k) + 8
 	}
-	if h == o.height {
+	offset := max(0, o.a.settings.Get().OverlayBottomOffset)
+	o.room = min(shadowRoom, offset)
+	if h+o.room == o.height {
 		return
 	}
-	o.height = h
-	offset := max(0, o.a.settings.Get().OverlayBottomOffset)
+	o.height = h + o.room
 	o.win.SetBounds(mygo.Rectangle{
 		X:      o.area.X + (o.area.Width-overlayW)/2,
 		Y:      o.area.Y + o.area.Height - h - offset,
 		Width:  overlayW,
-		Height: h,
+		Height: h + o.room,
 	})
 }
 
-// panel says the box above the capsule shows: the preview the user opened,
-// or the message of a failure or of a dictation that inserted nothing.
-func (o *overlay) panel() bool {
-	return o.expanded || o.v.Phase == session.Failed || (o.v.Phase == session.Done && o.v.Message != "")
+// What the box above the capsule is, as mock/capsule-states.html has it.
+const (
+	panelNone     = iota
+	panelNotice   // 300×64, one centered text: nothing to preview yet, what a finished dictation did, or a failure with nothing to recover
+	panelPreview  // 300×124, the transcript as it arrives
+	panelRetained // 300×124, text that was not inserted, whatever ended the dictation, and Copy
+	panelRecover  // 300×124, a failed cleanup: Retry cleanup and Copy
+)
+
+func (o *overlay) panelKind() int {
+	v := o.v
+	switch v.Phase {
+	case session.Idle:
+		return panelNone
+	case session.Done:
+		// The green check needs no words; a preview that was open closes.
+		if v.Message != "" {
+			return panelNotice
+		}
+		return panelNone
+	case session.Failed:
+		switch {
+		case v.Text == "":
+			return panelNotice
+		case v.Retained:
+			return panelRetained
+		}
+		return panelRecover
+	}
+	switch {
+	case !o.expanded:
+		return panelNone
+	case v.Final == "" && v.Pending == "":
+		return panelNotice
+	}
+	return panelPreview
+}
+
+func panelHeight(kind int) int {
+	if kind == panelNotice {
+		return noticeH
+	}
+	return panelH
 }
 
 func (o *overlay) view(c *ui.Context) {
@@ -162,15 +212,16 @@ func (o *overlay) view(c *ui.Context) {
 	if c.Now().Sub(o.fadeAt) < 180*time.Millisecond {
 		c.After(16 * time.Millisecond)
 	}
-	ui.Column(c).Fill().Justify(ui.End).AlignItems(ui.Center).Gap(6).Opacity(alpha).Children(func() {
-		if o.panel() {
-			o.panelView(c)
+	ui.Column(c).Fill().Padding(0, 0, float32(o.room), 0).Justify(ui.End).AlignItems(ui.Center).Gap(6).Opacity(alpha).Children(func() {
+		if kind := o.panelKind(); kind != panelNone {
+			o.panelView(c, kind)
 		}
 		ui.Row(c).Size(capsuleW, capsuleH).Scale(0.96+0.04*alpha, 0.96+0.04*alpha).Radius(capsuleH/2).Background(black).
-			Border(0.5, ui.RGBA(255, 255, 255, 0.22)).Padding(0, 2).Gap(2).Children(func() {
+			Border(0.5, ui.RGBA(255, 255, 255, 0.22)).Shadow(0, 5, 16, 0, ui.RGBA(0, 0, 0, 0.13)).Padding(0, 2).Gap(2).Children(func() {
 			// Cancel: nothing is inserted, whatever arrives later. The
 			// circle is drawn inside a taller, wider box that takes the
-			// click, so the small control stays easy to hit.
+			// click, so the small control stays easy to hit. On a notice
+			// or a failure it closes the overlay, as Escape does.
 			if ui.Box(c.Key("cancel")).Size(hitW, capsuleH).
 				Label(T("ovCancel")).Tooltip(T("ovCancel")).Cursor(ui.CursorPointer).Draw(drawCross).Clicked() {
 				if !o.closing {
@@ -178,11 +229,19 @@ func (o *overlay) view(c *ui.Context) {
 				}
 			}
 
-			if v.Phase == session.Preparing {
-				ui.Text(c, T("stPreparing")).FontSize(10).TextColor(dim).Grow(1).MaxLines(1)
-			} else {
+			draw := func(p *ui.Painter, r ui.Rect) { o.drawDots(c, p, r) }
+			switch v.Phase {
+			case session.Preparing:
+				ui.Column(c).Grow(1).Height(capsuleH).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, T("stPreparing")).FillWidth().FontSize(10).TextColor(dim).TextAlign(ui.Center).MaxLines(1)
+				})
+			case session.Done, session.Failed:
+				// A mark, not a control: what there is to read or to do
+				// is in the box above.
+				ui.Box(c.Key("mark")).Grow(1).Height(capsuleH).Draw(draw)
+			default:
 				if ui.Box(c.Key("dots")).Grow(1).Height(capsuleH).Label(T("ovPreview")).
-					Cursor(ui.CursorPointer).Draw(func(p *ui.Painter, r ui.Rect) { o.drawDots(c, p, r) }).Clicked() {
+					Cursor(ui.CursorPointer).Draw(draw).Clicked() {
 					// After this frame: resizing the window is not part of
 					// building it.
 					go o.win.Update(func() {
@@ -190,7 +249,6 @@ func (o *overlay) view(c *ui.Context) {
 						o.place()
 					})
 				}
-
 			}
 
 			// Confirm ends the recording once; while the dictation is
@@ -216,43 +274,74 @@ func (o *overlay) view(c *ui.Context) {
 	}
 }
 
-func (o *overlay) panelView(c *ui.Context) {
+func (o *overlay) panelView(c *ui.Context, kind int) {
 	v := o.v
 	ctrl := o.a.ctrl
-	ui.Column(c).Width(overlayW).Height(panelH).Radius(12).Background(ui.RGBA(0, 0, 0, 0.92)).
-		Border(1, ui.RGBA(255, 255, 255, 0.2)).Padding(9, 12).Gap(5).Children(func() {
-		switch {
-		case v.Phase == session.Failed:
-			ui.Text(c, v.Message).FontSize(12).TextColor(errorText).MaxLines(3)
-			if v.Text != "" {
-				ui.Text(c, tail(v.Text, 60)).FontSize(12).TextColor(white).MaxLines(2)
+	if kind == panelNotice {
+		// One centered text: white for what a finished dictation did, the
+		// error color for a failure, dimmed while there is no transcript.
+		text, size, col, lines := T("noText"), float32(13), dim, 2
+		switch v.Phase {
+		case session.Done:
+			text, col = v.Message, white
+		case session.Failed:
+			// A failure's reason may need a third line; it stays centered.
+			text, size, col, lines = v.Message, 12, errorText, 3
+		}
+		ui.Column(c).Width(overlayW).Height(noticeH).Radius(10).
+			Background(panelBg).Border(1, panelLine).Padding(8, 16).
+			Justify(ui.Center).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, text).FillWidth().FontSize(size).LineHeight(1.3).TextColor(col).
+				TextAlign(ui.Center).MaxLines(lines)
+		})
+		return
+	}
+	box := ui.Column(c).Width(overlayW).Height(panelH).Radius(12).Background(panelBg).
+		Border(1, panelLine).Padding(9, 12).Gap(5)
+	// copyButton puts the held text on the clipboard; the overlay then says so
+	// for a moment and closes.
+	copyButton := func() {
+		if panelButton(c, "copy", T("copyText")) {
+			go ctrl.CopyFailed()
+		}
+	}
+	switch kind {
+	case panelRetained:
+		// The text is whole and was not written: nothing here is an
+		// error to read, there is one thing to do.
+		box.AlignItems(ui.Center).Children(func() {
+			// Why it ended, when there is a reason to give: the microphone
+			// went away, the recognition broke off. In the same neutral
+			// white: the words are safe, and that is what matters here.
+			caption := T("ovRetained")
+			if v.Notice != "" {
+				caption = v.Notice
 			}
+			ui.Text(c, caption).FillWidth().FontSize(13).LineHeight(1.3).TextColor(white).TextAlign(ui.Center).MaxLines(2)
+			ui.Text(c, tail(v.Text, 60)).FillWidth().FontSize(12).LineHeight(1.3).TextColor(ui.RGBA(255, 255, 255, 0.6)).
+				TextAlign(ui.Center).MaxLines(2)
 			ui.Spacer(c)
-			ui.Row(c).Gap(8).Children(func() {
-				if v.CleanupFailed {
-					if ui.Button(c.Key("retry"), T("retryClean")).Clicked() {
-						go ctrl.RetryCleanup()
-					}
-					if ui.Button(c.Key("raw"), T("insertRaw")).Clicked() {
-						go ctrl.InsertOriginal()
-					}
+			ui.Row(c).Justify(ui.Center).Children(copyButton)
+		})
+	case panelRecover:
+		// A failed cleanup: Retry cleanup on the left, Copy on the right.
+		// The original is not inserted from here, and the cross or
+		// Escape closes.
+		box.Children(func() {
+			ui.Text(c, v.Message).FontSize(12).TextColor(errorText).MaxLines(2)
+			ui.Text(c, tail(v.Text, 60)).FontSize(13).TextColor(white).MaxLines(2)
+			ui.Spacer(c)
+			ui.Row(c).FillWidth().Justify(ui.Center).Gap(6).Children(func() {
+				if v.CleanupFailed && panelButton(c, "retry", T("retryClean")) {
+					go ctrl.RetryCleanup()
 				}
-				if v.Text != "" && ui.Button(c.Key("copy"), T("copyText")).Clicked() {
-					go ctrl.CopyFailed()
-				}
-				ui.Spacer(c)
-				if ui.Button(c.Key("close"), T("close")).Clicked() {
-					go ctrl.Dismiss()
-				}
+				copyButton()
 			})
-		case v.Phase == session.Done:
-			ui.Text(c, v.Message).FontSize(13).TextColor(white)
-		default:
-			// Final text is white; what may still change is dimmed and
-			// marked as such.
-			if v.Final == "" && v.Pending == "" {
-				ui.Text(c, T("noText")).FontSize(12).TextColor(dim)
-			}
+		})
+	default:
+		// Final text is white; what may still change is dimmed and
+		// marked as such.
+		box.Children(func() {
 			if v.Final != "" {
 				ui.Text(c, tail(v.Final, 90)).FontSize(13).TextColor(white).MaxLines(4)
 			}
@@ -263,8 +352,23 @@ func (o *overlay) panelView(c *ui.Context) {
 			if v.Cleanup {
 				ui.Text(c, T("willClean")).FontSize(11).TextColor(dim)
 			}
-		}
+		})
+	}
+}
+
+// panelButton is the small translucent button of the recovery panels.
+func panelButton(c *ui.Context, key, label string) bool {
+	b := ui.Row(c.Key(key)).Padding(3, 6).Radius(5).Border(1, ui.RGBA(255, 255, 255, 0.27)).
+		Label(label).Cursor(ui.CursorPointer)
+	if b.Hovered() {
+		b.Background(ui.RGBA(255, 255, 255, 0.2))
+	} else {
+		b.Background(ui.RGBA(255, 255, 255, 0.1))
+	}
+	b.Children(func() {
+		ui.Text(c, label).FontSize(11).TextColor(white).SingleLine()
 	})
+	return b.Clicked()
 }
 
 // tail returns the end of a text, where the newest words are.
@@ -309,7 +413,10 @@ func drawCheck(p *ui.Painter, r ui.Rect) {
 //   - Preparing: dim dots, one lit after the other.
 //   - Finalizing: a wave running through dots of one size.
 //   - Cleaning: pairs of dots pulsing from the middle outward.
-//   - Inserting, Done, Failed: still dots, a check mark, or a dash.
+//   - Inserting: still dots.
+//   - Done: a green check, or a dim dash when it has something to say.
+//   - Failed: an exclamation mark; the dim dash when the text is only
+//     waiting to be copied, which is not shown as an error.
 func (o *overlay) drawDots(c *ui.Context, p *ui.Painter, r ui.Rect) {
 	const n = session.Levels
 	still := c.Preferences().ReduceMotion
@@ -368,10 +475,10 @@ func (o *overlay) drawDots(c *ui.Context, p *ui.Painter, r ui.Rect) {
 		}
 	case session.Cleaning:
 		for i := range n {
-			size := float32(3)
+			size := float32(2.5)
 			if !still {
 				d := math.Abs(float64(i - n/2))
-				size = float32(2 + 2.5*(0.5+0.5*math.Sin(t*5-d*1.1)))
+				size = float32(2.5 + 2*(0.5+0.5*math.Sin(t*5-d*1.1)))
 			}
 			dot(i, size, size, ui.RGB(160, 200, 255), 0)
 		}
@@ -382,14 +489,18 @@ func (o *overlay) drawDots(c *ui.Context, p *ui.Painter, r ui.Rect) {
 	case session.Done:
 		cx := r.X + r.W/2
 		if o.v.Message == "" {
-			check := (&ui.Path{}).MoveTo(cx-5, cy).LineTo(cx-1.5, cy+3.5).LineTo(cx+5, cy-3.8)
-			p.StrokePath(check, 1.8, ui.RGB(120, 220, 140))
+			check := (&ui.Path{}).MoveTo(cx-4.5, cy+0.4).LineTo(cx-1.6, cy+3.3).LineTo(cx+4.5, cy-3.2)
+			p.StrokePath(check, 2.4, ui.RGB(120, 220, 140))
 		} else {
 			p.Line(cx-5, cy, cx+5, cy, 1.8, dim)
 		}
 	case session.Failed:
 		cx := r.X + r.W/2
-		p.Line(cx, cy-6, cx, cy+1.5, 2, errorText)
-		p.Fill(ui.Rect{X: cx - 1.2, Y: cy + 4.5, W: 2.4, H: 2.4}, errorText, 1.2)
+		if o.v.Retained && o.v.Text != "" {
+			p.Line(cx-5, cy, cx+5, cy, 1.8, dim)
+			break
+		}
+		p.Fill(ui.Rect{X: cx - 0.9, Y: cy - 6.9, W: 1.8, H: 8.8}, errorText, 0.9)
+		p.Fill(ui.Rect{X: cx - 0.9, Y: cy + 4.1, W: 1.8, H: 2}, errorText, 0.9)
 	}
 }
