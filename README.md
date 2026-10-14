@@ -5,6 +5,28 @@
 
 Voicemore is a native macOS dictation app. Press **Fn**, speak, and press **Fn** again to insert the transcript into the focused text field. Run speech recognition locally, connect a cloud provider, and optionally tidy your words with a language model.
 
+## A look inside
+
+### Speak naturally. Keep your flow.
+
+Press **Fn** to start, speak, and press it again to insert your words into the app you are using. Home keeps your shortcut, speech model, and recent transcripts close at hand.
+
+![Voicemore Home in English, with dictation controls, setup overview, and sample transcripts](docs/public/images/home-en.png)
+
+### A small capsule that follows your words
+
+See your transcript as you speak. Expand it to read the full text, finish with one click, or cancel with **Esc**. The indigo capsule shows listening, transcription, optional cleanup, and the final result. If insertion fails, your words stay available to copy.
+
+![Voicemore indigo capsule: Listening, Transcribing, Tidying up, Inserted, Copied, and Text kept](docs/public/images/capsule-en.png)
+
+### Your choice of speech and language models
+
+Run speech recognition on your Mac, or configure a cloud provider. Choose a separate language model for optional text cleanup.
+
+![Voicemore model settings in English, showing local speech recognition and configurable providers](docs/public/images/models-en.png)
+
+<sub>Images captured from the project's English interface demos, using sample text and configuration. They illustrate the interface; native macOS rendering may differ.</sub>
+
 ## Download and install
 
 **Apple Silicon (M-series), macOS 26.2 or later.** Intel Macs are not supported by this package. The current bundled MLX runtime sets the minimum OS requirement. Tested on macOS 27.0 arm64; older supported versions have not yet been tested end to end.
