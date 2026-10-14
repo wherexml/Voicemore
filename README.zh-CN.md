@@ -74,6 +74,6 @@ SIGNING_IDENTITY='Apple Development: geekmooc@gmail.com (5QLDC77G39)' ./scripts/
 
 ## 当前状态
 
-这是早期版本。正式发布必须通过 Developer ID 签名、Apple 公证、Gatekeeper 检查及原生安装与听写验收。Intel 支持与更广泛的应用兼容性仍不在已验证范围内。
+这是早期版本。正式发布必须通过 Developer ID 签名、Apple 公证、Gatekeeper 与最终安装包自动校验，原生安装和听写回归按改动范围增补。Intel 支持与更广泛的应用兼容性仍不在已验证范围内。
 
 欢迎[提交问题](https://github.com/wherexml/Voicemore/issues)，附上 macOS 版本、芯片和复现步骤。分享日志前请移除录音、转录文字与 API 密钥。

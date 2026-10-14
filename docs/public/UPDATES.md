@@ -8,7 +8,7 @@ The app checks after launch and hourly. The bottom-left rail above Settings show
 
 ## Publish a stable release
 
-Run `./scripts/publish-release.sh` for the default signed/notarized candidate workflow, complete cross-Mac E2E, then publish that verified candidate. Full commands and required evidence are in [DISTRIBUTION.md](DISTRIBUTION.md). Both the DMG and update archive come from the final stapled app. No stable release is allowed without Apple notarization.
+Run `./scripts/publish-release.sh --publish` for the automatic signed/notarized release workflow; omit `--publish` to prepare only. Reuse unchanged signed runtimes and select native regression tests by change scope. Full commands and required evidence are in [DISTRIBUTION.md](DISTRIBUTION.md). Both the DMG and update archive come from the final stapled app. No stable release is allowed without Apple notarization.
 
 ## Publish a development preview
 
@@ -50,6 +50,6 @@ Save AX snapshots, screenshots, before/after hashes and process/bundle versions 
 
 ## 中文
 
-当前发布脚本默认执行正式签名和 Apple 公证流程；正式通道必须通过票据校验与跨 Mac 安装验收后才能发布，见 DISTRIBUTION.md。只有显式的 `--development-preview` 才允许开发签名，并限制为 prerelease、不设为 latest。GitHub draft/prerelease 不参与当前更新通道。
+当前发布脚本默认执行正式签名和 Apple 公证流程；正式通道必须通过公证、票据与最终安装包自动校验；跨 Mac 原生验收按改动范围增补，不再每次强制重复，见 DISTRIBUTION.md。只有显式的 `--development-preview` 才允许开发签名，并限制为 prerelease、不设为 latest。GitHub draft/prerelease 不参与当前更新通道。
 
 0.2.0 没有更新功能，需手动安装一次 0.3.0。此后左下角设置上方的更新入口可一键更新并自动重启。更新包经过独立签名验证；下载取消、验签失败不会替换原应用。录音或模型部署时暂不可开始更新；安装时暂停快捷键听写。安装目录不可写时提示移动到可写位置，不索取管理员密码或修改目录权限。

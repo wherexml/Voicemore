@@ -96,4 +96,4 @@ The runtime archive is a Release asset rather than a Git blob. Python dependenci
 
 ## Project status
 
-This is an early release. Stable builds require Developer ID signing, Apple notarization, Gatekeeper checks and native installation/dictation acceptance. Intel support and broad target-app compatibility remain outside the verified scope. [Report an issue](https://github.com/wherexml/Voicemore/issues) with your macOS version, chip and reproduction steps; remove recordings, transcripts and API keys before sharing logs.
+This is an early release. Stable builds require Developer ID signing, Apple notarization, Gatekeeper and final-artifact checks; native regression testing is selected by change scope. Intel support and broad target-app compatibility remain outside the verified scope. [Report an issue](https://github.com/wherexml/Voicemore/issues) with your macOS version, chip and reproduction steps; remove recordings, transcripts and API keys before sharing logs.
