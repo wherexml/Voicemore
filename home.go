@@ -190,8 +190,8 @@ func (m *mainWindow) homeView(c *ui.Context) {
 				ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(16).Padding(0, 0, 12).Children(func() {
 					ui.Text(c, T("homeRecent")).FontSize(15).FontWeight(600).Grow(1)
 					if ui.ButtonBase(c.Key("all")).Label(T("showAll")).Padding(6).Children(func() { ui.Text(c, T("showAll")).FontSize(12) }).Clicked() {
-						m.query = ""
-						m.hPage = 1
+						m.clearHistoryFilters()
+						m.hRange = 3
 						m.goTo("history")
 					}
 				})
