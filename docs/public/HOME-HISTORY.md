@@ -57,4 +57,4 @@ V2 历史突出写入字符，保留次数、时长与写入率核心数值，�
 
 复现：按上一节启动 48181 服务，打开对比入口，切换 History/Dictionary、Light/Dark；在 V2 切换日期范围、选择小时方格再清除筛选，顶部总量应不变；在词典添加临时词、搜索后删除。验收记录及截图见本地 `artifacts/history-stats/v2-acceptance.md`，设计说明见 `mock/v2-design-notes.md`。
 
-V2 compact heatmap: fixed 12px squares with 3px spacing; day labels use two-digit numbers, with a year/month heading only at each month boundary. Full dates remain in tooltips. Newest-first ordering and equal panel heights remain. Chrome acceptance: 12px measured width; 30-day view groups October and September separately. Evidence: artifacts/history-stats/v2-compact-grid.png.
+V2 dense heatmap: responsive 24-column grid fills available width, 2px horizontal gaps and 16px cell height. Both panels are 208px tall with inner scrolling. Dates use M/D (10/16), newest first; hours descend 23 to 0 left-to-right. No year/month headings. Arrow keys follow visual order; original data indices preserve tooltip and filter mapping. Browser evidence: artifacts/history-stats/v2-dense-final.png.
