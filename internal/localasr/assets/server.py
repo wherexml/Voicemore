@@ -20,6 +20,8 @@ PREVIEW_TAIL_SAMPLES=4800  # Refresh once after 300 ms of silence, without final
 # acoustic context until Stop or a bounded window. VAD still gates speech and
 # trims trailing silence; previews continue independently every STEP.
 MAX_SEGMENT=30
+MAX_SEGMENT_EXTENSION=2  # Prefer a pause after the target; bound continuous speech.
+MIN_HINT_AUDIO=SR  # Subsecond acoustic fragments must not decode their hint text.
 MIN_SPEECH=1536  # 96 ms verified speech; no energy-only ASR fallback
 SPEECH_THRESHOLD=0.5
 TAIL_PAD=2048  # 128 ms after the last speech frame
@@ -41,9 +43,20 @@ DEFAULT_HOTWORDS=[]  # Personal dictionary is supplied by the app for each sessi
 MAX_HOTWORDS=128
 MAX_HOTWORD_CHARS=4096
 
+def recognition_options(sample_count,hotwords,system_prompt=None):
+ # Keep real short replies, but do not condition weak acoustic evidence on text.
+ # The optional context is used by offline acceptance, not exposed over /ws.
+ use_hints=sample_count>=MIN_HINT_AUDIO
+ return dict(language='Chinese',hotwords=hotwords if use_hints else None,
+             system_prompt=system_prompt if use_hints else None,
+             max_tokens=512,temperature=0,verbose=False)
+
+def recognize(samples,hotwords,system_prompt=None):
+ return MODEL.generate(samples,**recognition_options(len(samples),hotwords,system_prompt))
+
 def transcribe(samples,hotwords):
  t=time.monotonic()
- result=MODEL.generate(samples,language='Chinese',hotwords=hotwords,max_tokens=512,temperature=0,verbose=False)
+ result=recognize(samples,hotwords)
  return result.text.strip(),time.monotonic()-t
 
 @asynccontextmanager
@@ -57,7 +70,7 @@ async def lifespan(app):
 app=FastAPI(lifespan=lifespan)
 app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost'])
 @app.get('/health')
-def health(): return {'instance':os.environ['VOICE_INPUT_INSTANCE'],'ready':READY,'busy':BUSY,'model':'Qwen3-ASR-1.7B-8bit','step_s':STEP,'silence_s':None,'max_segment_s':MAX_SEGMENT,'finalization':'stop-or-window-limit','mode':'incremental utterance redecoding','vad':'Silero ONNX CPU','min_speech_ms':96,'default_hotword_count':len(DEFAULT_HOTWORDS)}
+def health(): return {'instance':os.environ['VOICE_INPUT_INSTANCE'],'ready':READY,'busy':BUSY,'model':'Qwen3-ASR-1.7B-8bit','step_s':STEP,'silence_s':None,'target_segment_s':MAX_SEGMENT,'max_segment_s':MAX_SEGMENT+MAX_SEGMENT_EXTENSION,'finalization':'stop-or-pause-after-target-or-hard-limit','min_hint_audio_s':MIN_HINT_AUDIO/SR,'mode':'incremental utterance redecoding','vad':'Silero ONNX CPU','min_speech_ms':96,'default_hotword_count':len(DEFAULT_HOTWORDS)}
 @app.websocket('/ws')
 async def live(ws:WebSocket):
  global BUSY
@@ -93,7 +106,7 @@ async def live(ws:WebSocket):
     else:job=latest;latest=None
     sid,audio,final=job
     text,dt=await asyncio.get_running_loop().run_in_executor(POOL,transcribe,audio,hotwords)
-    await ws.send_json({'type':'final' if final else 'partial','segment':sid,'text':text,'audio_s':len(audio)/SR,'decode_s':dt,'elapsed_s':time.monotonic()-started})
+    await ws.send_json({'type':'final' if final else 'partial','segment':sid,'text':text,'audio_s':len(audio)/SR,'hints_suppressed':len(audio)<MIN_HINT_AUDIO,'decode_s':dt,'elapsed_s':time.monotonic()-started})
    if stopping:
     await ws.send_json({'type':'done','elapsed_s':time.monotonic()-started});return
  def commit():
@@ -114,7 +127,7 @@ async def live(ws:WebSocket):
   chunks.append(a);n+=len(a);since+=len(a)
   if voiced:speech_n+=len(a);tail_previewed=False
   silence=0 if voiced else silence+len(a)
-  if n>=MAX_SEGMENT*SR:
+  if n>=(MAX_SEGMENT+MAX_SEGMENT_EXTENSION)*SR or (n>=MAX_SEGMENT*SR and silence>=PREVIEW_TAIL_SAMPLES):
    commit()
   elif voiced and speech_n>=MIN_SPEECH and n>=int(STEP*SR) and since>=int(STEP*SR):
    latest=(segment,np.concatenate(chunks),False);since=0;wake.set()
