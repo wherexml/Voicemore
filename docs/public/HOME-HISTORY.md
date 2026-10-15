@@ -46,3 +46,5 @@
 统计脚本和样式分别位于本地 `mock/assets/history-stats.js` 与 `history-stats.css`。新增确定性近月演示记录，不读取私人历史文件，刷新恢复；`?history=empty&lang=hans#history` 和 `?history=failed&lang=en#history` 分别复现空数据与全失败。该功能尚未接入原生产品；mock 与截图继续不入库。
 
 验收步骤：切换日期范围，核对图表各柱与应用字符合计等于顶部字符数；点击应用、搜索无匹配文字、清除筛选、删除一条演示记录；近 30 天翻页应保持总量；展开详情并切换浅深色与窄窗口。截图、实测结果和修改前备份保存在本地 `artifacts/history-stats/`。
+
+HTML demo 的历史与词典页面隐藏整个顶部标题栏（含标题文案、分隔线及 52px 占位），内容直接从主区域顶部开始；首页仍沿用原布局。浏览器验收两页标题栏实际高度均为 0，内容起点与主区域起点一致。截图见 `artifacts/history-stats/history-no-title.png` 与 `dictionary-no-title.png`。
