@@ -10,4 +10,4 @@
 - Sprint 草稿与本地验收证据不入库，目录约定见[文档索引](docs/public/README.md#维护约定)。
 
 - 文字整理的错误分类、延迟排查和 HTTP 验收见 [整理模块规格](internal/cleanup/README.md)；保留响应体读取阶段的超时与取消原因。
-- DJI 接收器单击/双击与键盘触发的边界、原生验收见[触发键规格](docs/public/DJI-BUTTON.md)。
+- DJI 接收器按钮与键盘触发的边界、原生验收见[触发键规格](docs/public/DJI-BUTTON.md)。
