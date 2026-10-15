@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/audio"
 	"github.com/egoist/mygo/ui"
 
@@ -132,7 +131,7 @@ func (m *mainWindow) openPlayer(r store.Record) error {
 func searchInput(c *ui.Context, key string, query *string, width float32) ui.Element {
 	t := c.Theme()
 	var in ui.Element
-	field := ui.Row(c).Gap(6).Padding(0, 9).Radius(8).AlignItems(ui.Center).Background(t.Surface).Border(1, strongLine(t))
+	field := ui.Row(c).Gap(6).Padding(0, 9).Radius(8).AlignItems(ui.Center).Background(settingsGroupColor(t)).Border(1, settingsGroupLine(c))
 	if width > 0 {
 		field.Width(width)
 	}
@@ -144,7 +143,6 @@ func searchInput(c *ui.Context, key string, query *string, width float32) ui.Ele
 }
 
 func (m *mainWindow) historyView(c *ui.Context) {
-	t := c.Theme()
 	records := m.a.history.List(m.query)
 	// The time labels are relative to now. A frame at the next minute
 	// redraws them as the minute or the day turns; it only draws, so the
@@ -159,52 +157,16 @@ func (m *mainWindow) historyView(c *ui.Context) {
 		m.stopPlayer()
 		m.selected = ""
 	}
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
-		ui.Column(c).Width(290).BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
-			ui.Column(c).Padding(14, 12, 12).Children(func() {
-				if searchInput(c, "history-search", &m.query, 0).Changed() {
-					m.hPage = 1 // a search starts at its first page
-				}
-			})
-			if len(records) == 0 {
-				ui.Text(c, T("noRecords")).Padding(24).TextColor(t.TextMuted)
+	ui.Column(c).Fill().Padding(16, 32, 24).Children(func() {
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(16).Padding(0, 0, 14).Children(func() {
+			ui.Text(c, T("allRecords")).FontSize(15).FontWeight(600).Grow(1)
+			if searchInput(c, "history-search", &m.query, 200).Changed() {
+				m.hPage = 1
 			}
-			// Rows are separate surfaces, 11 px apart, on the search field's inset.
-			ui.Scroll(c).Grow(1).Padding(2, 12, 16).Gap(11).Children(func() {
-				for _, r := range visible {
-					bg := ui.Transparent
-					if r.ID == m.selected {
-						bg = t.Selection
-					}
-					row := ui.Column(c.Key(r.ID)).Padding(12, 12).Radius(8).Gap(7).Background(bg).Cursor(ui.CursorPointer)
-					row.Children(func() {
-						ui.Row(c).Gap(6).Children(func() {
-							// The time on the left and duration at the edge.
-							ui.Text(c, timeLabel(r.StartedAt, now)).FontSize(11).TextColor(t.TextMuted).SingleLine()
-							ui.Spacer(c)
-							ui.Text(c, duration(r.DurationMs)).FontSize(11).TextColor(t.TextMuted).SingleLine()
-						})
-						text, _ := primaryText(r)
-						if text == "" {
-							text = T("emptyText")
-						}
-						ui.Text(c, text).FontSize(13).LineHeight(1.55).TextColor(softText(t)).MaxLines(2)
-					})
-					if row.Clicked() {
-						m.selectRecord(r)
-					}
-				}
-			})
-			pager(c, "pager", &m.hPage, pages)
 		})
-		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			r, ok := m.a.history.Get(m.selected)
-			if !ok {
-				ui.Text(c, T("pickRecord")).Padding(40, 26).TextColor(t.TextMuted)
-				return
-			}
-			ui.Scroll(c.Key("detail-"+r.ID)).Fill().Padding(28, 36).Gap(20).Children(func() { m.detailView(c, r) })
-		})
+		ui.Divider(c)
+		ui.Scroll(c.Key("records")).Grow(1).FillWidth().Children(func() { m.journal(c, visible, now) })
+		pager(c, "pager", &m.hPage, pages)
 	})
 }
 
@@ -215,9 +177,8 @@ func (m *mainWindow) textBlock(c *ui.Context, key, title, text, empty string) {
 	ui.Column(c.Key(key)).Gap(2).Children(func() {
 		ui.Row(c).Gap(6).Children(func() {
 			ui.Text(c, title).FontSize(12).TextColor(t.TextMuted).Grow(1)
-			if text != "" && iconButton(c.Key("copy"), icCopy, T("copyOf", title)).Clicked() {
-				mygo.Clipboard.WriteText(text)
-				m.say("copied")
+			if text != "" {
+				m.copyRecordButton(c, "block-"+m.selected+"-"+key, text, T("copyOf", title))
 			}
 		})
 		if text == "" {
@@ -293,10 +254,7 @@ func (m *mainWindow) detailView(c *ui.Context, r store.Record) {
 	id, base := r.ID, r.Transcript()
 	working := m.busy != nil
 	ui.Row(c.Key("actions")).Gap(8).Children(func() {
-		if labelButton(c.Key("copy"), icCopy, T("copy")).Disabled(primary == "").Clicked() {
-			mygo.Clipboard.WriteText(primary)
-			m.say("copied")
-		}
+		m.copyRecordButton(c, "detail-"+r.ID, primary, T("copy"))
 		if labelButton(c.Key("revise"), icPencil, T("reviseShort")).Clicked() {
 			m.reviseOpen = !m.reviseOpen
 		}

@@ -3,8 +3,8 @@ package main
 import "github.com/egoist/mygo/ui"
 
 // The neutral palette follows the approved mock/claude.html and OpsTwin:
-// white/light-grey surfaces, quiet borders, neutral primary actions, and
-// color reserved for status. The rail uses the same neutral family.
+// quiet surfaces without decorative outlines and indigo interactive states.
+// Focus indicators and high-contrast accessibility remain available.
 //
 // The frame's theme is a copy of the default with these colors, set with
 // Context.SetTheme at the top of each window's view. The copy keeps what
@@ -32,11 +32,11 @@ func useTheme(c *ui.Context) *ui.Theme {
 		t.SurfaceHover = ui.Hex("#242424")
 		t.SurfacePressed = ui.Hex("#2e2e2e")
 		t.Text = ui.Hex("#fafafa")
-		t.Accent, t.AccentHover, t.AccentPressed, t.AccentText = ui.Hex("#fafafa"), ui.Hex("#d4d4d4"), ui.Hex("#d4d4d4"), ui.Hex("#262626")
+		t.Accent, t.AccentHover, t.AccentPressed, t.AccentText = ui.Hex("#6366c4"), ui.Hex("#7477d4"), ui.Hex("#5053ad"), ui.Hex("#ffffff")
 		t.Danger, t.Warning, t.Success = ui.Hex("#f87171"), ui.Hex("#fbbf24"), ui.Hex("#34d399")
 		t.Selection = ui.Hex("#292929")
 		if !strong {
-			t.Border = ui.Hex("#242424")
+			t.Border = ui.Transparent
 			t.TextMuted = ui.Hex("#a3a3a3")
 		}
 	} else {
@@ -45,11 +45,11 @@ func useTheme(c *ui.Context) *ui.Theme {
 		t.SurfaceHover = ui.Hex("#f5f5f5")
 		t.SurfacePressed = ui.Hex("#ebebeb")
 		t.Text = ui.Hex("#262626")
-		t.Accent, t.AccentHover, t.AccentPressed, t.AccentText = ui.Hex("#262626"), ui.Hex("#404040"), ui.Hex("#000000"), ui.Hex("#fafafa")
+		t.Accent, t.AccentHover, t.AccentPressed, t.AccentText = ui.Hex("#5458b5"), ui.Hex("#45499d"), ui.Hex("#343b85"), ui.Hex("#ffffff")
 		t.Danger, t.Warning, t.Success = ui.Hex("#b91c1c"), ui.Hex("#92400e"), ui.Hex("#047857")
 		t.Selection = ui.Hex("#f0f0f0")
 		if !strong {
-			t.Border = ui.Hex("#ebebeb")
+			t.Border = ui.Transparent
 			t.TextMuted = ui.Hex("#666666")
 		}
 	}
@@ -69,7 +69,7 @@ func pick(t *ui.Theme, light, dark string) ui.Color {
 func railColor(t *ui.Theme) ui.Color    { return pick(t, "#fafafa", "#171717") }
 func railSelected(t *ui.Theme) ui.Color { return pick(t, "#ebebeb", "#2a2a2a") }
 func railHover(t *ui.Theme) ui.Color    { return pick(t, "#f0f0f0", "#202020") }
-func railLine(t *ui.Theme) ui.Color     { return pick(t, "#ebebeb", "#252525") }
+func railLine(t *ui.Theme) ui.Color     { return t.Border }
 func railText(t *ui.Theme) ui.Color     { return pick(t, "#262626", "#fafafa") }
 
 // fillColor is the subtle fill: card footers, the settings' category list.
@@ -78,9 +78,9 @@ func fillColor(t *ui.Theme) ui.Color { return pick(t, "#f5f5f5", "#202020") }
 // hoverColor is the fill of something the pointer is on.
 func hoverColor(t *ui.Theme) ui.Color { return pick(t, "#f0f0f0", "#242424") }
 
-// strongLine is a divider a little firmer than the theme's, as the edge of
-// a field or of the keycap.
-func strongLine(t *ui.Theme) ui.Color { return pick(t, "#d6d6d6", "#454545") }
+// Decorative control outlines are absent in normal appearance; the system
+// high-contrast border is retained when requested.
+func strongLine(t *ui.Theme) ui.Color { return t.Border }
 
 // softText is the secondary text: values and descriptions.
 func softText(t *ui.Theme) ui.Color { return pick(t, "#404040", "#d4d4d4") }
@@ -114,22 +114,31 @@ func okTint(t *ui.Theme) ui.Color {
 }
 
 // segmented keeps the native radio-group behavior while giving the selected
-// option a soft neutral fill and a defined edge in both appearances.
+// option the indigo brand fill without a decorative outline.
 func segmented(c *ui.Context, selected *int, labels ...string) ui.Element {
+	return segmentedSize(c, selected, false, labels...)
+}
+
+func segmentedSize(c *ui.Context, selected *int, compact bool, labels ...string) ui.Element {
 	t := c.Theme()
 	parts := ui.SegmentedBase(c, selected, len(labels))
 	track := parts.Track
 	track.AlignItems(ui.Stretch).Padding(t.Space(0.5)).Gap(t.Space(0.5)).
 		Radius(t.Radius).Background(pick(t, "#fafafa", "#202020")).Border(1, t.Border)
+	if compact {
+		track.Height(28).Padding(2).Gap(2)
+	}
 	track.Children(func() {
 		for i, label := range labels {
 			segment := parts.Segment(i)
 			segment.Padding(t.Space(1), t.Space(3)).Radius(max(t.Radius-t.Space(0.5), 0))
+			if compact {
+				segment.Padding(0, 8).AlignItems(ui.Center)
+			}
 			bg, fg := ui.Transparent, t.TextMuted
 			border := ui.Transparent
 			if i == *selected {
-				bg, fg = pick(t, "#e7e7e9", "#38383c"), t.Text
-				border = pick(t, "#c9c9ce", "#5c5c63")
+				bg, fg = t.Accent, t.AccentText
 			} else if !segment.IsDisabled() {
 				if segment.Pressed() {
 					bg = t.SurfacePressed

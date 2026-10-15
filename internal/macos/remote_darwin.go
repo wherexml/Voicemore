@@ -3,6 +3,7 @@
 package macos
 
 import (
+	"errors"
 	"github.com/ebitengine/purego/objc"
 	"strings"
 	"time"
@@ -42,6 +43,17 @@ func insertRemote(text string, o InsertOptions, current *Target) (res InsertResu
 	var window uintptr
 	var change, delay int
 	var flags uint64
+	// Call only on the main thread. A successful generation must contain the
+	// transcript before it can be used as the source of a remote paste.
+	stage := func() bool {
+		pb := pasteboard()
+		pb.Send(sel("clearContents"))
+		if !objc.Send[bool](pb, sel("setString:forType:"), nsString(text), nsString("public.utf8-plain-text")) {
+			return false
+		}
+		change = objc.Send[int](pb, sel("changeCount"))
+		return goString(pb.Send(sel("stringForType:"), nsString("public.utf8-plain-text"))) == text
+	}
 	OnMain(func() {
 		window = focusedWindow(current.pid)
 		title := ""
@@ -60,9 +72,9 @@ func insertRemote(text string, o InsertOptions, current *Target) (res InsertResu
 			}
 			specificity = len(rule.WindowTitle)
 			handled = rule.Shortcut == "cmd-v" || rule.Shortcut == "ctrl-v"
-			flags = 0x100000
+			flags = 0x100008
 			if rule.Shortcut == "ctrl-v" {
-				flags = 0x40000
+				flags = 0x40001
 			}
 			delay = rule.SyncDelayMs
 		}
@@ -74,10 +86,9 @@ func insertRemote(text string, o InsertOptions, current *Target) (res InsertResu
 			err = o.Context.Err()
 			return
 		}
-		pb := pasteboard()
-		pb.Send(sel("clearContents"))
-		pb.Send(sel("setString:forType:"), nsString(text), nsString("public.utf8-plain-text"))
-		change = objc.Send[int](pb, sel("changeCount"))
+		if !stage() {
+			err = errors.New("could not stage remote clipboard text")
+		}
 	})
 	defer func() {
 		if window != 0 {
@@ -111,14 +122,34 @@ func insertRemote(text string, o InsertOptions, current *Target) (res InsertResu
 		}
 		return true
 	}
-	deadline := time.Now().Add(time.Duration(min(max(delay, 200), 10000)) * time.Millisecond)
+	settle := time.Duration(min(max(delay, 200), 10000)) * time.Millisecond
+	refreshAt := time.Now().Add(450 * time.Millisecond)
+	deadline := refreshAt.Add(settle)
+	refreshed := false
 	for {
 		if o.Context != nil && o.Context.Err() != nil {
 			err = o.Context.Err()
 			return
 		}
 		ok := false
-		OnMain(func() { ok = valid() })
+		OnMain(func() {
+			ok = valid()
+			if ok && !refreshed && !time.Now().Before(refreshAt) {
+				// Some remote clipboard bridges miss a single update. Publish a
+				// second generation only while we still own the clipboard and
+				// target; never overwrite a newer user copy or retry the paste.
+				if o.Context != nil && o.Context.Err() != nil {
+					err, ok = o.Context.Err(), false
+					return
+				}
+				if !stage() {
+					err, ok = errors.New("could not refresh remote clipboard text"), false
+					return
+				}
+				refreshed = true
+				deadline = time.Now().Add(settle)
+			}
+		})
 		if !ok {
 			return
 		}
@@ -127,6 +158,7 @@ func insertRemote(text string, o InsertOptions, current *Target) (res InsertResu
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
+	ready := false
 	OnMain(func() {
 		if o.Context != nil && o.Context.Err() != nil {
 			err = o.Context.Err()
@@ -135,27 +167,39 @@ func insertRemote(text string, o InsertOptions, current *Target) (res InsertResu
 		if !valid() {
 			return
 		}
-		// Remote clients may need explicit modifier transitions, not just V flags.
-		modifier := uint16(55)
-		if flags == 0x40000 {
-			modifier = 59
-		}
-		for _, key := range []struct {
-			code  uint16
-			down  bool
-			flags uint64
-		}{
-			{modifier, true, flags}, {9, true, flags}, {9, false, flags}, {modifier, false, 0},
-		} {
-			ev := cgEventCreateKeyboardEvent(0, key.code, key.down)
-			if ev == 0 {
-				return
-			}
-			cgEventSetFlags(ev, key.flags)
-			cgEventPost(0, ev)
-			cfRelease(ev)
-		}
-		res.ClipboardOnly, res.Remote = false, true
+		ready = true
 	})
+	if !ready {
+		return
+	}
+	// CoreGraphics posting does not require AppKit's main thread. Keep
+	// the main run loop free: our listen-only hotkey tap must process each
+	// posted transition before the next one, just as in normal typing.
+	// Include left-device modifier bits (NX_DEVICELCMDKEYMASK /
+	// NX_DEVICELCTLKEYMASK) as well as the generic flags. Remote
+	// clients can distinguish physical left/right modifier transitions.
+	modifier := uint16(55)
+	if flags&0x40000 != 0 {
+		modifier = 59
+	}
+	for _, key := range []struct {
+		code  uint16
+		down  bool
+		flags uint64
+	}{
+		{modifier, true, flags}, {9, true, flags}, {9, false, flags}, {modifier, false, 0},
+	} {
+		ev := cgEventCreateKeyboardEvent(0, key.code, key.down)
+		if ev == 0 {
+			return
+		}
+		cgEventSetFlags(ev, key.flags)
+		cgEventPost(0, ev)
+		cfRelease(ev)
+		// Remote clients sample modifier state separately from key events.
+		// Give each transition time to be observed before sending the next.
+		time.Sleep(30 * time.Millisecond)
+	}
+	res.ClipboardOnly, res.Remote = false, true
 	return
 }

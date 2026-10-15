@@ -1,9 +1,18 @@
-<p align="center"><img src="resources/icon.png" width="112" alt="Voicemore icon"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/wherexml/Voicemore/main/resources/icon.png" width="112" alt="Voicemore icon"></p>
 <h1 align="center">Voicemore</h1>
 <p align="center">Speak naturally. Write where your cursor is.</p>
-<p align="center"><a href="README.zh-CN.md">简体中文</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.4">Download for Apple Silicon</a></p>
+<p align="center"><a href="README.zh-CN.md">简体中文</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.5">Download for Apple Silicon</a></p>
 
 Voicemore is a native macOS dictation app. Press **Fn**, speak, and press **Fn** again to insert the transcript into the focused text field. Run speech recognition locally, connect a cloud provider, and optionally tidy your words with a language model.
+
+## What’s new in 0.3.5
+
+- Clearer Settings and Dictionary groups, visible input fields, and aligned model dropdowns.
+- Simpler correction suggestions: review the original input, then add a keyword or accept a replacement rule.
+- A refreshed Home, shared history timeline, and clearer first-run permission guidance.
+- On-demand local speech-model loading, idle memory release, and improved previews after a pause.
+- Improved correction learning after sending or continuing text, cloud vocabulary hints, and remote input handling.
+- Dictation capsules follow the active display/desktop as focus changes.
 
 ## A look inside
 
@@ -11,19 +20,19 @@ Voicemore is a native macOS dictation app. Press **Fn**, speak, and press **Fn**
 
 Press **Fn** to start, speak, and press it again to insert your words into the app you are using. Home keeps your shortcut, speech model, and recent transcripts close at hand.
 
-![Voicemore Home in English, with dictation controls, setup overview, and sample transcripts](docs/public/images/home-en.png)
+![Voicemore Home in English, with dictation controls, setup overview, and sample transcripts](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/home-en.jpg)
 
 ### A small capsule that follows your words
 
 See your transcript as you speak. Expand it to read the full text, finish with one click, or cancel with **Esc**. The indigo capsule shows listening, transcription, optional cleanup, and the final result. If insertion fails, your words stay available to copy.
 
-![Voicemore indigo capsule: Listening, Transcribing, Tidying up, Inserted, Copied, and Text kept](docs/public/images/capsule-en.png)
+![Voicemore indigo capsule: Listening, Transcribing, Tidying up, Inserted, Copied, and Text kept](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/capsule-en.jpg)
 
 ### Your choice of speech and language models
 
 Run speech recognition on your Mac, or configure a cloud provider. Choose a separate language model for optional text cleanup.
 
-![Voicemore model settings in English, showing local speech recognition and configurable providers](docs/public/images/models-en.png)
+![Voicemore model settings in English, showing local speech recognition and configurable providers](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/models-en.jpg)
 
 <sub>Images captured from the project's English interface demos, using sample text and configuration. They illustrate the interface; native macOS rendering may differ.</sub>
 
@@ -31,13 +40,13 @@ Run speech recognition on your Mac, or configure a cloud provider. Choose a sepa
 
 **Apple Silicon (M-series), macOS 26.2 or later.** Intel Macs are not supported by this package. The current bundled MLX runtime sets the minimum OS requirement. Native installation and local dictation have been verified on macOS 26.2 arm64; local development was also verified on macOS 27.0 arm64.
 
-1. Download **Voicemore-0.3.4-arm64.dmg** from [v0.3.4 Releases](https://github.com/wherexml/Voicemore/releases/tag/v0.3.4).
+1. Download **Voicemore-0.3.5-arm64.dmg** from [v0.3.5 Releases](https://github.com/wherexml/Voicemore/releases/tag/v0.3.5).
 2. Open the disk image and drag **Voicemore** onto **Applications**.
 3. Eject the disk image, then open Voicemore from Applications.
 4. Grant **Microphone**, **Accessibility**, and **Input Monitoring** in System Settings → Privacy & Security. Restart after granting keyboard permissions.
 5. In **Settings → Models**, open the local speech model and choose download/deploy. Wait until it is ready, then try dictation in a text editor.
 
-**Signed and notarized:** v0.3.4 uses Developer ID signing and Apple notarization, with stapled app and DMG tickets. Upgrading from a development-signed preview may require confirming microphone, Accessibility and Input Monitoring permissions again.
+**Signed and notarized:** v0.3.5 uses Developer ID signing and Apple notarization, with stapled app and DMG tickets. Upgrading from a development-signed preview may require confirming microphone, Accessibility and Input Monitoring permissions again.
 
 The DMG includes the inference runtime, but **not model weights**. Initial local setup downloads roughly **2.47 GB** of model files and extracts roughly **0.65 GB** of runtime. Internet access is needed for the download; local recognition works offline after setup. You can also copy a compatible existing model. Cloud recognition needs your own provider credentials and network access.
 
@@ -63,7 +72,7 @@ Input behavior depends on the target app and macOS permissions. TextEdit dictati
 
 ## Module documentation
 
-Remote desktop profiles in Settings → General select a running client, paste shortcut, and clipboard sync delay. Profiles start disabled; text stays on the clipboard and remote insertion is unverified. See the [remote input specification](docs/public/REMOTE-INPUT.md). Cleanup supports filler removal, explicit corrections, and spoken lists; see its [behavior and protection limits](internal/cleanup/README.md). The [module index](docs/public/README.md) links specifications and acceptance procedures. These describe the current source, not necessarily the downloadable release.
+Remote desktop profiles in Settings → Text & Paste select a running client, paste shortcut, and clipboard sync delay. Profiles start disabled; text stays on the clipboard and remote insertion is unverified. See the [remote input specification](docs/public/REMOTE-INPUT.md). Cleanup supports filler removal, explicit corrections, and spoken lists; see its [behavior and protection limits](internal/cleanup/README.md). The [module index](docs/public/README.md) links specifications and acceptance procedures. These describe the current source, not necessarily the downloadable release.
 
 ## Privacy and storage
 

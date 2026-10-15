@@ -15,6 +15,7 @@ BUSY=False
 READY=False
 SR=16000
 STEP=0.6
+PREVIEW_TAIL_SAMPLES=4800  # Refresh once after 300 ms of silence, without finalizing.
 # Silence is not a sentence boundary: retain thinking pauses in the same
 # acoustic context until Stop or a bounded window. VAD still gates speech and
 # trims trailing silence; previews continue independently every STEP.
@@ -79,7 +80,7 @@ async def live(ws:WebSocket):
  wake=asyncio.Event(); finals=collections.deque(); latest=None; stopping=False
  from speech_gate import SpeechGate
  gate=SpeechGate(VAD);pending=np.empty(0,np.float32)
- segment=0; chunks=[]; n=0; silence=0; since=0; speech_n=0; pre=np.empty(0,np.float32)
+ segment=0; chunks=[]; n=0; silence=0; since=0; speech_n=0; pre=np.empty(0,np.float32);tail_previewed=False
  started=time.monotonic()
  async def decode_loop():
   nonlocal latest
@@ -96,27 +97,33 @@ async def live(ws:WebSocket):
    if stopping:
     await ws.send_json({'type':'done','elapsed_s':time.monotonic()-started});return
  def commit():
-  nonlocal chunks,n,silence,since,speech_n,segment,latest
+  nonlocal chunks,n,silence,since,speech_n,segment,latest,tail_previewed
   if chunks and speech_n>=MIN_SPEECH:
    end=min(n,n-silence+TAIL_PAD)
    finals.append((segment,np.concatenate(chunks)[:end],True));segment+=1
    if len(finals)>8:raise ValueError('识别积压过多，请停止后重试。')
    latest=None;wake.set()
-  chunks=[];n=0;silence=0;since=0;speech_n=0
+  chunks=[];n=0;silence=0;since=0;speech_n=0;tail_previewed=False
  def process_frame(a):
-  nonlocal chunks,n,silence,since,speech_n,pre,latest
+  nonlocal chunks,n,silence,since,speech_n,pre,latest,tail_previewed
   voiced=gate.probability(a)>=SPEECH_THRESHOLD
   if not chunks and not voiced:
    pre=np.concatenate([pre,a])[-PRE_ROLL:];return
   if not chunks:
    chunks=[pre];n=len(pre);pre=np.empty(0,np.float32)
   chunks.append(a);n+=len(a);since+=len(a)
-  if voiced:speech_n+=len(a)
+  if voiced:speech_n+=len(a);tail_previewed=False
   silence=0 if voiced else silence+len(a)
   if n>=MAX_SEGMENT*SR:
    commit()
   elif voiced and speech_n>=MIN_SPEECH and n>=int(STEP*SR) and since>=int(STEP*SR):
    latest=(segment,np.concatenate(chunks),False);since=0;wake.set()
+  elif not tail_previewed and speech_n>=MIN_SPEECH and silence>=PREVIEW_TAIL_SAMPLES:
+   # The last voiced frame may fall between periodic previews. Refresh with
+   # the same trailing context as Stop, once per pause. Keep the segment open
+   # so a thinking pause does not lock incomplete words or duplicate speech.
+   end=min(n,n-silence+TAIL_PAD)
+   latest=(segment,np.concatenate(chunks)[:end],False);tail_previewed=True;since=0;wake.set()
  task=asyncio.create_task(decode_loop())
  try:
   await ws.send_json({'type':'ready','sample_rate':SR,'hotword_count':len(hotwords)})

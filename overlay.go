@@ -8,6 +8,7 @@ import (
 	"github.com/egoist/mygo/ui"
 
 	"voiceinput/internal/config"
+	"voiceinput/internal/macos"
 	"voiceinput/internal/session"
 )
 
@@ -18,7 +19,7 @@ import (
 // It is a flyout hung from the tray icon, which MyGo makes a borderless
 // nonactivating panel above other apps' windows: it shows and takes clicks
 // without activating this app, so the target input keeps the keyboard. It
-// is placed at the bottom of the display the recording started on, not
+// is placed at the bottom of the display currently being used, not
 // next to the icon.
 
 const (
@@ -47,7 +48,11 @@ type overlay struct {
 	win              *mygo.Window
 	v                session.View
 	expanded         bool           // the transcript preview is open
-	area             mygo.Rectangle // the work area the dictation started on
+	area             mygo.Rectangle // the work area currently being used
+	followID         uint64
+	pointerArea      mygo.Rectangle
+	activeWindow     uint32
+	activeFrame      macos.SettingsFrame
 	height           int
 	room             int // kept below the capsule for its shadow
 	closing          bool
@@ -97,6 +102,7 @@ func (o *overlay) sync() {
 				time.Sleep(180 * time.Millisecond)
 				o.win.Update(func() {
 					if o.closing && o.fadeID == id {
+						o.followID++
 						o.win.Hide()
 						o.v = session.View{}
 						o.expanded = false
@@ -115,10 +121,13 @@ func (o *overlay) sync() {
 			o.fade(1)
 			o.levels = [session.Levels]float32{}
 			o.levelAt = time.Time{}
-			// The display the pointer is on stands for the one the
-			// user is typing on; the overlay stays there until the
-			// dictation ends.
+			// Start at the pointer, then follow display and focus changes.
 			o.area = mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
+			o.pointerArea = o.area
+			o.activeWindow, o.activeFrame = macos.ActiveOverlayWindow()
+			o.followID++
+			o.follow(o.followID)
+			macos.ConfigureOverlay(o.win.NativeHandle())
 			o.height = 0
 			// A new dictation: the style chosen in Settings applies now.
 			o.classic = o.a.settings.Get().CapsuleStyle == config.CapsuleClassic
@@ -128,6 +137,33 @@ func (o *overlay) sync() {
 		if !o.win.IsVisible() {
 			o.win.ShowInactive()
 		}
+	})
+}
+
+// A session-scoped timer also follows during silence, static results and reduced
+// motion. It stops on hide; generation checks discard callbacks from old sessions.
+func (o *overlay) follow(id uint64) {
+	time.AfterFunc(200*time.Millisecond, func() {
+		o.win.Update(func() {
+			if id != o.followID || o.a.quitting {
+				return
+			}
+			pointer := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
+			window, frame := macos.ActiveOverlayWindow()
+			switch {
+			case pointer != o.pointerArea:
+				o.area = pointer
+			case window != 0 && (window != o.activeWindow || frame != o.activeFrame):
+				o.area = mygo.Screen.DisplayMatching(mygo.Rectangle{X: frame.X, Y: frame.Y, Width: frame.Width, Height: frame.Height}).WorkArea
+			default:
+				// Refresh the work area after Dock/menu-bar or display configuration changes.
+				o.area = mygo.Screen.DisplayMatching(o.area).WorkArea
+			}
+			o.pointerArea = pointer
+			o.activeWindow, o.activeFrame = window, frame
+			o.place()
+			o.follow(id)
+		})
 	})
 }
 
@@ -151,6 +187,7 @@ func (o *overlay) place() {
 	h, w := compactH, overlayW
 	if !o.classic {
 		w = overlayV2W
+		h += v2HintRoom
 	}
 	if k := o.panelKind(); k != panelNone {
 		if o.classic {
@@ -161,16 +198,16 @@ func (o *overlay) place() {
 	}
 	offset := max(0, o.a.settings.Get().OverlayBottomOffset)
 	o.room = min(shadowRoom, offset)
-	if h+o.room == o.height && w == o.width {
-		return
-	}
-	o.height, o.width = h+o.room, w
-	o.win.SetBounds(mygo.Rectangle{
+	bounds := mygo.Rectangle{
 		X:      o.area.X + (o.area.Width-w)/2,
 		Y:      o.area.Y + o.area.Height - h - offset,
 		Width:  w,
 		Height: h + o.room,
-	})
+	}
+	o.height, o.width = h+o.room, w
+	if o.win.Bounds() != bounds {
+		o.win.SetBounds(bounds)
+	}
 }
 
 // What the box above the capsule is, as mock/capsule-states.html has it.

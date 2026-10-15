@@ -35,50 +35,24 @@ func (m *mainWindow) dictView(c *ui.Context) {
 				ui.Text(c, T("noPending")).TextColor(t.TextMuted)
 			}
 			// Three to a page. A page emptied by an accept or an ignore falls
-			// back to the last one that exists; what was typed for a
-			// candidate and whether its sentence is open are kept by its ID.
+			// back to the last one that exists. Original input stays visible.
 			const candPerPage = 3
 			cpages := max(1, (len(pending)+candPerPage-1)/candPerPage)
 			m.cPage = min(max(1, m.cPage), cpages)
 			cfrom := (m.cPage - 1) * candPerPage
 			for _, cand := range pending[cfrom:min(len(pending), cfrom+candPerPage)] {
-				ui.Column(c.Key("cand-"+cand.ID)).Padding(12, 14).Radius(10).Gap(6).Background(cardColor(t)).Border(1, t.Border).Children(func() {
+				ui.Column(c.Key("cand-"+cand.ID)).Padding(18, 20).Radius(14).Gap(10).Background(settingsGroupColor(t)).Children(func() {
 					ui.Textf(c, "%s  →  %s", cand.Wrong, cand.Right).FontSize(14).Selectable()
-					source := cand.Source
-					if k, ok := sourceNames[source]; ok {
-						source = T(k)
-					}
-					ui.Text(c, T("candShort", source, cand.Count)).FontSize(12).TextColor(t.TextMuted)
-					if cand.Conflict != "" {
-						ui.Text(c, T("conflict", cand.Conflict)).FontSize(12).TextColor(t.Danger)
-					}
-					// The sentence it came from, for those who want it.
 					if cand.Sentence != "" {
-						open := m.candOpen[cand.ID]
-						if ui.Collapsible(c.Key("more"), T("context"), &open, func() {
-							ui.Text(c, cand.Sentence).FontSize(12).TextColor(t.TextMuted).Selectable()
-						}).Changed() {
-							m.candOpen[cand.ID] = open
-						}
+						ui.Text(c, T("candOriginal")+cand.Sentence).FontSize(12).TextColor(softText(t)).Selectable()
 					}
-					// An ordinary word may have been heard right: a rule
-					// for it must be limited to a context.
-					common := dict.LooksLikeCommonWord(cand.Wrong)
-					if common {
-						ui.Text(c, T("commonWord", cand.Wrong)).FontSize(12).TextColor(t.Warning)
-					}
-					ctx := m.contexts[cand.ID]
-					if ui.TextInput(c.Key("ctx"), &ctx).Placeholder(T("ctxPlaceholder")).Label(T("ctxLabel")).Changed() {
-						m.contexts[cand.ID] = ctx
-					}
-					ui.Row(c).Gap(8).Children(func() {
-						words := splitWords(ctx)
+					ui.Row(c).Gap(8).Padding(12, 0, 0).BorderWidth(1, 0, 0, 0).BorderColor(settingsGroupLine(c)).Children(func() {
 						if ui.Button(c.Key("hint"), T("acceptHint")).Clicked() {
 							m.report(d.Accept(cand.ID, dict.KindTerm, "", cand.Right, nil), "acceptedHint", cand.Right)
 							m.dPage = 1 // the new entry is first
 						}
-						if ui.Button(c.Key("rule"), T("acceptRule")).Disabled(common && len(words) == 0).Clicked() {
-							m.report(d.Accept(cand.ID, dict.KindRule, cand.Wrong, cand.Right, words), "acceptedRule", cand.Wrong, cand.Right)
+						if ui.Button(c.Key("rule"), T("acceptRule")).Clicked() {
+							m.report(d.Accept(cand.ID, dict.KindRule, cand.Wrong, cand.Right, nil), "acceptedRule", cand.Wrong, cand.Right)
 							m.dPage = 1
 						}
 						ui.Spacer(c)
@@ -92,12 +66,12 @@ func (m *mainWindow) dictView(c *ui.Context) {
 		})
 
 		// Manual additions are keywords, one entry at a time.
-		ui.Column(c.Key("add")).Gap(12).Children(func() {
+		ui.Column(c.Key("add")).Gap(12).Padding(18, 20).Radius(14).Background(settingsGroupColor(t)).Children(func() {
 			ui.Text(c, T("addEntry")).FontSize(12).TextColor(t.TextMuted)
 			term := strings.TrimSpace(m.newTerm)
 			blocked := term == "" || strings.ContainsAny(term, "\r\n")
 			ui.Row(c.Key("fields")).Gap(8).MaxWidth(460).Children(func() {
-				ui.TextInput(c.Key("term"), &m.newTerm).Placeholder(T("right")).Label(T("right")).Grow(1)
+				groupTextInput(c.Key("term"), &m.newTerm, false).Placeholder(T("right")).Label(T("right")).Grow(1)
 				if ui.PrimaryButton(c.Key("ok"), "").Label(T("add")).Disabled(blocked).Children(func() {
 					ui.Icon(c, icPlus).FontSize(13)
 					ui.Text(c, T("add")).SingleLine()
@@ -153,7 +127,7 @@ func (m *mainWindow) dictView(c *ui.Context) {
 					ui.Text(c, T("noRecords")).ColumnSpan(2).Padding(12, 14).TextColor(t.TextMuted)
 				}
 				for _, e := range entries[from:to] {
-					ui.Row(c.Key("entry-"+e.ID)).MinWidth(0).Gap(12).Padding(12, 14).Radius(10).Background(cardColor(t)).Border(1, t.Border).Children(func() {
+					ui.Row(c.Key("entry-"+e.ID)).MinWidth(0).Gap(12).Padding(12, 14).Radius(10).Background(settingsGroupColor(t)).Children(func() {
 						if e.Kind == dict.KindRule {
 							text := e.Wrong + "  →  " + e.Term
 							if len(e.Context) > 0 {

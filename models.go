@@ -81,7 +81,7 @@ func unassign(s *config.Settings, kind, provider, model string) bool {
 func (p *prefsWindow) modelsView(c *ui.Context) {
 	t := c.Theme()
 	s := p.a.settings.Get()
-	ui.Column(c.Key("defaults")).Radius(10).Background(cardColor(t)).Border(1, t.Border).Padding(16, 18, 18).Gap(14).Children(func() {
+	ui.Column(c.Key("defaults")).Radius(14).Background(settingsGroupColor(t)).Border(1, settingsGroupLine(c)).Padding(16, 18, 18).Gap(14).Children(func() {
 		ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
 			ui.Icon(c, icSparkle).FontSize(14).TextColor(t.TextMuted)
 			ui.Text(c, T("defaultModels")).FontSize(12).FontWeight(600).TextColor(t.TextMuted)
@@ -111,11 +111,11 @@ func (p *prefsWindow) defaultBlock(c *ui.Context, kind string, s config.Settings
 		ui.Text(c, T(kindLabels[kind])).FontSize(12.5).FontWeight(600)
 
 		// The trigger: 44 px, the provider's mark, the model, a chevron.
-		border := t.Border
+		border := settingsGroupLine(c)
 		if *open {
-			border = strongLine(t)
+			border = t.Accent
 		}
-		trigger := ui.ButtonBase(c.Key("pick")).Height(44).Padding(0, 12).Gap(10).Radius(10).AlignItems(ui.Center).
+		trigger := ui.ButtonBase(c.Key("pick")).FillWidth().Height(44).Padding(0, 12).Gap(10).Radius(10).AlignItems(ui.Center).
 			Background(t.Background).Border(1, border).Label(T(kindLabels[kind]) + ": " + label)
 		trigger.Children(func() {
 			if a.Provider != "" {
@@ -125,7 +125,11 @@ func (p *prefsWindow) defaultBlock(c *ui.Context, kind string, s config.Settings
 			if err != nil {
 				name.TextColor(t.TextMuted)
 			}
-			ui.Icon(c, icDown).FontSize(11).TextColor(faintText(t))
+			arrow := icDown
+			if *open {
+				arrow = icUp
+			}
+			ui.Icon(c, arrow).FontSize(14).TextColor(faintText(t))
 		})
 		if trigger.Clicked() {
 			*open = !*open
@@ -159,7 +163,7 @@ func (p *prefsWindow) defaultBlock(c *ui.Context, kind string, s config.Settings
 func (p *prefsWindow) picker(c *ui.Context, trigger ui.Element, open *bool, kind string, s config.Settings) {
 	t := c.Theme()
 	ui.PopoverBase(c, trigger, open, func(panel ui.Element) {
-		panel.Margin(6, 0, 0, 0).Padding(5).Radius(12).Width(320).Background(t.Background).Border(1, t.Border).
+		panel.Margin(6, 0, 0, 0).Padding(5).Radius(12).Width(max(240, trigger.Bounds().W)).Background(t.Background).Border(1, settingsGroupLine(c)).
 			Shadow(0, 12, 34, 0, ui.RGBA(30, 38, 48, 0.12))
 		opts := providers.Eligible(kind, s, p.a.secret)
 		if len(opts) == 0 {
@@ -211,7 +215,7 @@ func (p *prefsWindow) picker(c *ui.Context, trigger ui.Element, open *bool, kind
 					ui.Text(c, providerName(o.Provider, s, kind)).FontSize(11).FontWeight(600).TextColor(faintText(t)).Padding(7, 9, 3)
 				}
 				name := modelText(o.Provider, o.Model)
-				row := ui.ButtonBase(c.Key(o.Provider+"|"+o.Model)).MinHeight(34).Padding(5, 9).Gap(10).Radius(8).AlignItems(ui.Center).
+				row := ui.ButtonBase(c.Key(o.Provider+"|"+o.Model)).FillWidth().MinHeight(38).Padding(9, 10).Gap(10).Radius(8).AlignItems(ui.Center).
 					Label(name).Bind(&handles[i])
 				row.Children(func() {
 					logo(c, providerLogo(o.Provider, kind, s), 18)
@@ -221,6 +225,9 @@ func (p *prefsWindow) picker(c *ui.Context, trigger ui.Element, open *bool, kind
 						check.Invisible()
 					}
 				})
+				if usable && i == chosen {
+					row.Background(settingsGroupColor(t))
+				}
 				if row.Hovered() || focused == i {
 					row.Background(hoverColor(t))
 				}
@@ -323,10 +330,10 @@ func (p *prefsWindow) group(c *ui.Context, kind, title string, s config.Settings
 // state, and a footer that says what opening it is for.
 func (p *prefsWindow) providerCard(c *ui.Context, id, name, state string, dot ui.Color, summary string) bool {
 	t := c.Theme()
-	b := ui.ButtonBase(c.Key("card-"+id)).Radius(12).Background(cardColor(t)).Border(1, t.Border).AlignItems(ui.Stretch).
+	b := ui.ButtonBase(c.Key("card-"+id)).Radius(14).Background(settingsGroupColor(t)).Border(1, settingsGroupLine(c)).AlignItems(ui.Stretch).
 		MinHeight(118).Clip().Label(T("providerOf", name) + " — " + state)
 	if b.Hovered() {
-		b.Border(1, strongLine(t))
+		b.Border(1, t.Accent)
 	}
 	b.Children(func() {
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
@@ -428,7 +435,7 @@ func (p *prefsWindow) dialog(c *ui.Context) {
 		}
 		ui.Column(c.Key("add-model")).Width(340).Gap(12).Children(func() {
 			ui.Text(c, T("addModel")).FontSize(14).FontWeight(600)
-			in := ui.TextInput(c.Key("in"), add).Placeholder(T("mModelId")).Label(T("mModelId")).AutoFocus()
+			in := groupTextInput(c.Key("in"), add, true).Placeholder(T("mModelId")).Label(T("mModelId")).AutoFocus()
 			if in.Changed() {
 				p.addErr = ""
 			}
@@ -493,7 +500,7 @@ func (p *prefsWindow) secretField(c *ui.Context, account, label string, edited, 
 	if stored {
 		placeholder = T("mKeyStored")
 	}
-	in := ui.TextInput(c.Key("in"), draft).Placeholder(placeholder).Label(label).Grow(1)
+	in := groupTextInput(c.Key("in"), draft, true).Placeholder(placeholder).Label(label).Grow(1)
 	if !p.shown[account] {
 		in.Password()
 	}
@@ -613,7 +620,7 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 			note = T("eBadSocketURL")
 		}
 		labelled(c, "base", T("endpoint"), note, func() {
-			if ui.TextInput(c.Key("in"), base).Label(T("endpoint")).Grow(1).Changed() {
+			if groupTextInput(c.Key("in"), base, true).Label(T("endpoint")).Grow(1).Changed() {
 				k.invalidate()
 				p.change(func(s *config.Settings) { s.Providers.AliyunBase = strings.TrimSpace(*base) })
 			}
@@ -643,7 +650,7 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 			preview = T("sendsTo", providers.ChatURL(*endpoint))
 		}
 		labelled(c, "endpoint", T("endpoint"), preview, func() {
-			if ui.TextInput(c.Key("in"), endpoint).Label(T("endpoint")).Grow(1).Changed() {
+			if groupTextInput(c.Key("in"), endpoint, true).Label(T("endpoint")).Grow(1).Changed() {
 				k.invalidate()
 				p.change(func(s *config.Settings) { s.Providers.DeepSeekEndpoint = strings.TrimSpace(*endpoint) })
 			}
@@ -662,7 +669,7 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 	// The models. A default can only be one of a provider that can serve.
 	can := modeOK && on && providers.Configured(id, s, p.a.secret)
 	labelled(c, "models", T("gModels"), T("refNote"), func() {
-		ui.Column(c).Grow(1).Radius(10).Border(1, t.Border).Gap(1).Dividers(1, t.Border).Children(func() {
+		ui.Column(c).Grow(1).Radius(10).Background(settingsGroupColor(t)).Border(1, settingsGroupLine(c)).Gap(1).Dividers(1, t.Border).Children(func() {
 			for _, m := range providers.Models(id, s) {
 				ui.Row(c.Key(m.ID)).Gap(8).Padding(8, 12).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, modelText(id, m.ID)).FontSize(12.5).Grow(1).Selectable()
@@ -764,10 +771,11 @@ func (p *prefsWindow) localASR(c *ui.Context, s config.Settings) {
 	ui.Text(c, T("builtinNote")).FontSize(11.5).TextColor(t.TextMuted)
 	labelled(c, "model", T("mModel"), "", func() { ui.Text(c, localasr.Model).FontSize(12.5).Selectable() })
 	ui.Text(c, T("builtinSize", float64(localasr.ModelBytes())/1e9)).FontSize(11.5).TextColor(t.TextMuted)
+	ui.Text(c, T("builtinIdle")).FontSize(11.5).TextColor(t.TextMuted)
 	source := p.draft("asr.source", localasr.DefaultSource)
 	if !state.Installed || state.Phase == "error" {
 		labelled(c, "source", T("builtinSource"), "", func() {
-			ui.TextInput(c.Key("in"), source).Label(T("builtinSource")).Grow(1).Disabled(state.Busy())
+			groupTextInput(c.Key("in"), source, true).Label(T("builtinSource")).Grow(1).Disabled(state.Busy())
 		})
 	}
 	activate := func() {
@@ -879,7 +887,7 @@ func (p *prefsWindow) localCleanup(c *ui.Context, s config.Settings) {
 	url := p.draft("clean.url", s.CleanupURL)
 	model := p.draft("clean.model", s.CleanupModel)
 	labelled(c, "url", T("mUrl"), "", func() {
-		if ui.TextInput(c.Key("in"), url).Label(T("mCleanup") + " — " + T("mUrl")).Grow(1).Changed() {
+		if groupTextInput(c.Key("in"), url, true).Label(T("mCleanup") + " — " + T("mUrl")).Grow(1).Changed() {
 			k.invalidate()
 			p.models = nil // another address: the list no longer applies
 			p.change(func(s *config.Settings) { s.CleanupURL = strings.TrimSpace(*url) })
@@ -992,12 +1000,12 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 	}
 	ui.Text(c, T(note)).FontSize(11.5).TextColor(t.TextMuted)
 	labelled(c, "name", T("provName"), "", func() {
-		if ui.TextInput(c.Key("in"), &d.name).Label(T("provName")).Grow(1).Changed() {
+		if groupTextInput(c.Key("in"), &d.name, true).Label(T("provName")).Grow(1).Changed() {
 			d.err = ""
 		}
 	})
 	labelled(c, "url", T("mUrl"), "", func() {
-		if ui.TextInput(c.Key("in"), &d.url).Placeholder("https://").Label(T("mUrl")).Grow(1).Changed() {
+		if groupTextInput(c.Key("in"), &d.url, true).Placeholder("https://").Label(T("mUrl")).Grow(1).Changed() {
 			d.err = ""
 			k.invalidate()
 		}
@@ -1009,7 +1017,7 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 		placeholder = T("mKeyStored")
 	}
 	labelled(c, "key", T("keyOptional"), T("mKeyHint"), func() {
-		in := ui.TextInput(c.Key("in"), &d.key).Placeholder(placeholder).Label(T("keyOptional")).Grow(1)
+		in := groupTextInput(c.Key("in"), &d.key, true).Placeholder(placeholder).Label(T("keyOptional")).Grow(1)
 		if !p.shown[slot] {
 			in.Password()
 		}
@@ -1038,7 +1046,7 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 				})
 			}
 			ui.Row(c.Key("add")).Gap(6).Children(func() {
-				in := ui.TextInput(c.Key("in"), &d.add).Placeholder(T("addModelId")).Label(T("addModelId")).Grow(1)
+				in := groupTextInput(c.Key("in"), &d.add, true).Placeholder(T("addModelId")).Label(T("addModelId")).Grow(1)
 				submitted := in.Submitted()
 				if labelButton(c.Key("btn"), icPlus, T("add")).Clicked() || submitted {
 					model := strings.TrimSpace(d.add)

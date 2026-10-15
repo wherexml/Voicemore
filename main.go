@@ -265,6 +265,12 @@ func (a *app) ready() {
 	a.ctrl.CopyText = func(s string) { mygo.Clipboard.WriteText(s) }
 	a.ctrl.Tr, a.ctrl.Explain, a.ctrl.CleanupKey = T, explain, a.key
 	// The defaults of Settings → Models decide where a dictation connects.
+	a.ctrl.PrepareASR = func(ctx context.Context, s config.Settings) (func(), error) {
+		if s.ASRAssign.Provider == providers.Local && s.ASRManaged {
+			return a.localASR.Acquire(ctx)
+		}
+		return func() {}, nil
+	}
 	a.ctrl.ResolveASR = func(s config.Settings) (asr.Dialer, error) {
 		if s.ASRAssign.Provider == providers.Local && s.ASRManaged {
 			state := a.localASR.Snapshot()
@@ -350,9 +356,6 @@ func (a *app) ready() {
 	a.bindTrigger()
 	if wantedCleanup {
 		a.setCleanup(true)
-	}
-	if a.settings.Get().ASRManaged && a.localASR.Snapshot().Installed {
-		a.localASR.Start()
 	}
 	if len(loadErrs) > 0 || a.triggerErr != "" {
 		// Something needs the user: say it in the window.

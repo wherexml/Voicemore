@@ -91,6 +91,7 @@ type Controller struct {
 	// the settings are used, as before there were providers. An error
 	// means the default cannot serve (not set, not configured, or a
 	// provider this app has no adapter for): nothing else is tried.
+	PrepareASR     func(context.Context, config.Settings) (func(), error)
 	ResolveASR     func(config.Settings) (asr.Dialer, error)
 	ResolveCleanup func(config.Settings) (cleanup.Options, error)
 
@@ -633,6 +634,14 @@ func (c *Controller) record(r *run, s config.Settings) {
 			r.rec.HotwordNote = c.tr("hotwordSent", n)
 		}
 	}
+	if c.PrepareASR != nil {
+		release, err := c.PrepareASR(r.ctx, s)
+		if err != nil {
+			c.finish(r, s, "", errors.New(c.explain(err)))
+			return
+		}
+		defer release()
+	}
 	dialCtx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
 	service, err := c.dialer(s)
 	if err != nil {
@@ -641,9 +650,12 @@ func (c *Controller) record(r *run, s config.Settings) {
 		return
 	}
 	if !service.Hotwords() && hotwords != nil {
-		// The dictionary's terms go to the local protocol only.
+		// Only adapters without term-hint support omit the dictionary.
 		hotwords = nil
 		r.rec.HotwordNote = c.tr("hotwordCloud")
+	}
+	if hotwords != nil && s.ASRAssign.Provider == "volc" {
+		r.rec.HotwordNote += " " + c.tr("hotwordVolc")
 	}
 	switch err = service.Check(dialCtx); {
 	case errors.Is(err, asr.ErrBusy):
@@ -952,7 +964,18 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		c.done(r, "")
 		return
 	}
-	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs, RemoteInputs: s.RemoteInputs})
+	var observing bool
+	onPasted := func(target *macos.Target) {
+		if !s.ObserveEdits {
+			return
+		}
+		observing = true
+		c.mu.Lock()
+		r.observing = true
+		c.mu.Unlock()
+		go c.observe(r, s, text, target)
+	}
+	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs, RemoteInputs: s.RemoteInputs, OnPasted: onPasted})
 	if errors.Is(err, context.Canceled) {
 		r.release()
 		return
@@ -992,12 +1015,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		rec.Status, rec.StatusDetail, rec.InsertedText = store.StatusInserted, detail, text
 		rec.Timing.FinalToInsertMs = time.Since(r.finalAt).Milliseconds()
 	})
-	if s.ObserveEdits && !res.Remote {
-		c.mu.Lock()
-		r.observing = true
-		c.mu.Unlock()
-		go c.observe(r, s, text, res.Target)
-	} else {
+	if !observing {
 		res.Target.Release()
 	}
 	c.done(r, "")
@@ -1030,37 +1048,20 @@ func (c *Controller) done(r *run, message string) {
 	})
 }
 
-// observe reads the target field once right after the insertion and once
-// after a short while, and proposes what the user changed within the
-// inserted text as dictionary candidates. It reads nothing else, and says
-// in the record when the app does not let it read.
+// observe retains the last correction across send/clear and continued typing.
 func (c *Controller) observe(r *run, s config.Settings, inserted string, target *macos.Target) {
 	defer r.release()
 	defer target.Release()
-	note := func(n string) {
-		c.update(r, func(rec *store.Record) { rec.ObserveNote = n })
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(max(s.ObserveSeconds, 5))*time.Second)
+	defer cancel()
+	revised, status := dict.Observe(ctx, inserted, target.ReadValue)
+	msg := c.tr(status)
+	if revised != "" && strings.TrimSpace(revised) != strings.TrimSpace(inserted) {
+		_, learned := c.Dict.Propose(inserted, revised, "observed-edit", r.id)
+		msg = c.tr("observeLearned", learned)
 	}
-	time.Sleep(400 * time.Millisecond)
-	before, ok := target.ReadValue()
-	at := strings.Index(before, inserted)
-	if !ok || at < 0 {
-		note(c.tr("observeNoRead"))
-		return
-	}
-	time.Sleep(time.Duration(max(s.ObserveSeconds, 5)) * time.Second)
-	after, ok := target.ReadValue()
-	prefix, suffix := before[:at], before[at+len(inserted):]
-	if !ok || len(after) < len(prefix)+len(suffix) || !strings.HasPrefix(after, prefix) || !strings.HasSuffix(after, suffix) {
-		note(c.tr("observeOutside"))
-		return
-	}
-	revised := after[len(prefix) : len(after)-len(suffix)]
-	if revised == inserted || strings.TrimSpace(revised) == "" {
-		note(c.tr("observeSame"))
-		return
-	}
-	_, msg := c.Dict.Propose(inserted, revised, "observed-edit", r.id)
-	note(c.tr("observeLearned", msg))
+	c.update(r, func(rec *store.Record) { rec.ObserveNote = msg })
+	c.historyChanged()
 }
 
 // Revise keeps the user's correction of a record's text as a new version
@@ -1118,6 +1119,13 @@ func (c *Controller) Retranscribe(id string) error {
 	if p, n, err := c.Dict.HotwordParam(); err == nil && n > 0 {
 		hotwords, note = &p, c.tr("hotwordLocal", n)
 	}
+	if c.PrepareASR != nil {
+		release, err := c.PrepareASR(context.Background(), s)
+		if err != nil {
+			return errors.New(c.explain(err))
+		}
+		defer release()
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(max(s.FinalizeTimeoutSec, 5))*time.Second+time.Duration(pcmMs(pcm))*time.Millisecond)
 	defer cancel()
 	service, err := c.dialer(s)
@@ -1126,6 +1134,9 @@ func (c *Controller) Retranscribe(id string) error {
 	}
 	if !service.Hotwords() {
 		hotwords, note = nil, c.tr("hotwordCloud")
+	}
+	if hotwords != nil && s.ASRAssign.Provider == "volc" {
+		note += "; " + c.tr("hotwordVolc")
 	}
 	raw, err := asr.Transcribe(ctx, service, hotwords, pcm)
 	if err != nil && raw == "" {

@@ -213,7 +213,7 @@ func (m *mainWindow) updatePresentation() (string, string, string) {
 		}
 		return label, label, T("updatePauseNote")
 	case u.checking:
-		return "", T("updateChecking"), T("updateAutoNote")
+		return "", T("updateChecking"), ""
 	case u.status == "updateCheckFailed" || u.status == "updateInstallFailed" || u.status == "updateRestartFailed":
 		return T("updateAttention"), T("updateAttention"), T(u.status)
 	case u.available != nil:
@@ -228,9 +228,9 @@ func (m *mainWindow) updatePresentation() (string, string, string) {
 	case u.status == "updateUnavailable":
 		return "", T("updateCheck"), T("updateUnavailable")
 	case u.status == "updateCurrent":
-		return "", T("updateCurrent"), T("updateAutoNote")
+		return "", T("updateCurrent"), ""
 	default:
-		return "", T("updateCheck"), T("updateAutoNote")
+		return "", T("updateCheck"), ""
 	}
 }
 
@@ -318,7 +318,9 @@ func (m *mainWindow) updateView(c *ui.Context) {
 				}
 			})
 			ui.Text(c, T("updateVersion", mygo.App.Version())).FontSize(11).TextColor(t.TextMuted)
-			ui.Text(c, note).FontSize(12).TextColor(t.TextMuted)
+			if note != "" {
+				ui.Text(c, note).FontSize(12).TextColor(t.TextMuted)
+			}
 			if u.installing && u.status != "updateRestarting" {
 				progress := -1.0
 				if u.total > 0 {
