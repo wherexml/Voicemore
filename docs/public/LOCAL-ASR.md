@@ -42,3 +42,5 @@ artifacts/asr-idle/acceptance \
 ```
 
 输入必须是 16 kHz、单声道 PCM16 WAV。报告记录冷启动、热启动、卸载后重载耗时、RSS、实际转写、取消和进程释放；报告和 worker 日志保存在本地 artifacts，不入库。此自动验收不替代原生快捷键、麦克风与界面验收。
+
+- 分段更新：30 秒目标 / 32 秒硬上限与短尾提示防护见 [分段规格](ASR-SEGMENTATION.md)。
