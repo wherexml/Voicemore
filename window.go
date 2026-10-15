@@ -27,32 +27,40 @@ type mainWindow struct {
 	recentCopied map[string]time.Time // record ID → last successful copy
 
 	// History.
-	tileHover   map[string]time.Time
-	query       string
-	hPage       int // from 1
-	selected    string
-	reviseOpen  bool
-	detailsOpen bool   // "Details" is left open: the saved preference
-	detailsPeek string // the record whose details a rerun opened, whatever the preference
-	revBase     string // the text the revision started from
-	revText     string
-	player      *audio.Player
-	playerID    string
-	position    float64 // seconds
+	hRange        int
+	hApp, hStatus string
+	hHour         time.Time
+	heatFocus     map[string]*ui.Handle
+	tileHover     map[string]time.Time
+	query         string
+	hPage         int // from 1
+	selected      string
+	reviseOpen    bool
+	detailsOpen   bool   // "Details" is left open: the saved preference
+	detailsPeek   string // the record whose details a rerun opened, whatever the preference
+	revBase       string // the text the revision started from
+	revText       string
+	player        *audio.Player
+	playerID      string
+	position      float64 // seconds
+
+	legacyAppIDs map[string]string
 
 	// Dictionary.
-	dictQuery string
-	dPage     int
-	cPage     int // the page of the candidates, three to a page
-	newTerm   string
-	contexts  map[string]string // candidate ID → context words typed for it
-	candOpen  map[string]bool   // candidate ID → its context sentence is showing
+	dictKind       int
+	dictReviewJump bool
+	dictQuery      string
+	dPage          int
+	cPage          int // the page of the candidates, three to a page
+	newTerm        string
+	contexts       map[string]string // candidate ID → context words typed for it
+	candOpen       map[string]bool   // candidate ID → its context sentence is showing
 }
 
 const pageSize = 100 // items per page of History and of the Dictionary
 
 func newMainWindow(a *app) *mainWindow {
-	m := &mainWindow{a: a, page: "home", hPage: 1, dPage: 1, cPage: 1, detailsOpen: a.settings.Get().HistoryDetailsOpen, contexts: map[string]string{}, candOpen: map[string]bool{}}
+	m := &mainWindow{a: a, page: "home", hRange: 1, hPage: 1, dPage: 1, cPage: 1, detailsOpen: a.settings.Get().HistoryDetailsOpen, contexts: map[string]string{}, candOpen: map[string]bool{}}
 	m.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:         "Voicemore",
 		Width:         1040,
@@ -186,20 +194,9 @@ func (m *mainWindow) view(c *ui.Context) {
 		})
 
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			// The header is the page's title. Home has none, and no rule
-			// under it. Updates stay in the rail on every page.
-			header := ui.Row(c).Height(52).Padding(0, 28).AlignItems(ui.Center)
-			if m.page != "home" {
-				header.BorderWidth(0, 0, 1, 0).BorderColor(t.Border)
+			if m.page == "home" {
+				ui.Box(c).Height(52).FillWidth().DragWindow()
 			}
-			header.Children(func() {
-				ui.Row(c).Grow(1).Height(52).AlignItems(ui.Center).DragWindow().Children(func() {
-					if m.page != "home" {
-						ui.Text(c, T(pageTitles[m.page])).FontSize(15).FontWeight(600)
-					}
-				})
-
-			})
 			m.problems(c)
 			ui.Column(c.Key("page-" + m.page)).Grow(1).MinHeight(0).Children(func() {
 				switch m.page {

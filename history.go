@@ -77,6 +77,8 @@ func primaryText(r store.Record) (text string, revised bool) {
 func (m *mainWindow) showRecord(id string) {
 	m.goTo("history")
 	m.query, m.hPage = "", 1
+	m.hRange = 3
+	m.hApp, m.hStatus, m.hHour = "", "", time.Time{}
 	for i, r := range m.a.history.List("") {
 		if r.ID == id {
 			m.hPage = i/pageSize + 1
@@ -143,11 +145,13 @@ func searchInput(c *ui.Context, key string, query *string, width float32) ui.Ele
 }
 
 func (m *mainWindow) historyView(c *ui.Context) {
-	records := m.a.history.List(m.query)
+	now := time.Now()
+	all := m.a.history.List("")
+	stats := m.historySummary(all, now)
+	records := m.filteredHistory(m.a.history.List(m.query), stats.start, now)
 	// The time labels are relative to now. A frame at the next minute
 	// redraws them as the minute or the day turns; it only draws, so the
 	// selection, the playback and what is being typed stay as they are.
-	now := time.Now()
 	c.After(untilNextMinute(now))
 	// 100 to a page, newest first as the history keeps them. The detail
 	// only ever shows a record that is on the visible page.
@@ -157,15 +161,16 @@ func (m *mainWindow) historyView(c *ui.Context) {
 		m.stopPlayer()
 		m.selected = ""
 	}
-	ui.Column(c).Fill().Padding(16, 32, 24).Children(func() {
-		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(16).Padding(0, 0, 14).Children(func() {
-			ui.Text(c, T("allRecords")).FontSize(15).FontWeight(600).Grow(1)
+	ui.Scroll(c.Key("history-page")).Fill().Padding(24, 32).Gap(20).Children(func() {
+		m.historyStatsView(c, stats, now)
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(16).Children(func() {
+			ui.Text(c, T("v2Records")).FontSize(15).FontWeight(600).Grow(1)
 			if searchInput(c, "history-search", &m.query, 200).Changed() {
 				m.hPage = 1
 			}
 		})
-		ui.Divider(c)
-		ui.Scroll(c.Key("records")).Grow(1).FillWidth().Children(func() { m.journal(c, visible, now) })
+		m.historyFilterChips(c)
+		ui.Column(c.Key("records")).Role(ui.RoleGroup).Label(T("allRecords")).FillWidth().Children(func() { m.journal(c, visible, now) })
 		pager(c, "pager", &m.hPage, pages)
 	})
 }

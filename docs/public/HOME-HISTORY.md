@@ -27,40 +27,31 @@
 
 模型下拉与触发框同宽，选项填满行、选中态有灰底；箭头收起向下、展开向上。服务商弹窗输入框与模型列表使用灰底和细边界，验收时检查浅深色及键盘选择。
 
-## 应用身份与图标（HTML demo 验证）
+## 应用身份与图标
 
-原生 `CaptureTarget` 通过 `NSWorkspace.frontmostApplication` 读取 `localizedName` 和 `bundleIdentifier`；当前历史仅保存 `targetApp` 名称，尚未持久化 Bundle ID 或图标。名称不代表网站身份，也不保证唯一；例如本机 `com.openai.codex` 的系统名称可以是 ChatGPT。远程桌面只能据此确认本机客户端，不能识别远端输入应用。
+原生捕获目标时保存 `targetApp` 与可选的 `targetBundleID`；旧历史格式可继续读取，不重写旧数据。图标优先由 Bundle ID 经 NSWorkspace 解析；旧记录使用唯一的已安装应用名称，其次唯一的运行中应用名称。辅助进程同名时优先顶层应用 Bundle；同名歧义、卸载或缺失图标保留文字与通用图标，不猜网站或远端应用身份。
 
-本地 `mock/claude.html` 的首页时间轴、历史列表和详情展示应用图标与名称；旧版 `mock/index.html` 的详情也接入相同组件。图标由 `scripts/export-demo-app-icons.swift` 使用 AppKit 导出，优先采用运行中应用的 icon，其次采用 NSWorkspace 的应用文件图标。不包含 Dock 上的通知数字、进度或其他动态覆盖层。图标和应用清单只留在 Git 忽略的 mock 目录。
+图标只在本机缓存，不上传，不包含 Dock 的角标与进度层。新旧记录名称可唯一映射到同一已保存 Bundle ID 时，统计合并；有多个身份时保持区分。首页、历史记录与应用分布共用 20px 系统图标、13px 应用名称。
 
-复现：在项目根目录执行 `swift scripts/export-demo-app-icons.swift mock/assets/apps`，再执行 `python3 -m http.server 48181 --bind 127.0.0.1 --directory mock`，打开 `/claude.html`。导出文件为应用身份快照，不读取私人听写内容；页面仍使用演示转录，不会实时监控前台应用。匹配优先 Bundle ID，其次演示别名及唯一的系统名称；未知、同名歧义或缺失图标保留文字和通用图标。原生产品接入时应在捕获目标时保存 Bundle ID，并按身份缓存系统图标；本次没有修改原生历史格式。
+## V2 原生历史统计
 
-浏览器验收：跳过引导进入首页，核对应用名称、图标；打开全部历史、展开详情，确认身份一致；切换浅色和深色，检查图标透明边缘；图片缺失应保留通用图标与名称。实际证据见本地 `artifacts/app-icons/`。
+历史与词典不绘制顶部标题栏，也不保留其 52px 占位。历史从日期范围开始，默认近 7 天，可选今天、近 30 天、全部。顶部四项为写入字符、语音输入次数、录音时长、写入率。录音时长只到分钟；不足一分钟明确显示，不显示秒。写入率无记录时为横线。
 
-## 历史统计（仅本地 HTML demo）
+统计基于范围内全部真实记录，不受分页、搜索、应用、小时或结果筛选影响。字符仅计成功写入的 `InsertedText`，逐 Unicode 码点去掉空白；后续修订不改变历史写入快照。范围按本机日历日到当前时刻计算。应用百分比以成功写入字符为分母；写入率和结果分段以录音次数为分母。切换范围清除其他筛选。
 
-`mock/claude.html?lang=hans#history` 可直达历史页。顶部提供今日、近 7 天、近 30 天和全部范围，默认近 7 天；展示成功写入字符、录音次数、录音时长、成功写入次数与写入率。时段按本机日历日计算至当前时刻，字符按 Unicode 码点计数并去掉空白；失败、取消、未写入不计入成功字符。写入文本在记录创建时保存，修订与界面翻译不改变历史统计。
+输入趋势与应用分布同为 300px 高，超出内容内部滚动。趋势左边缘与标题对齐，24 个小时列从 0 到 23 左→右排列，日期从新到旧上→下排列。单元格 16px 高，列间距 2px，行间距 3px；无写入为中性底色，未来小时不可选。M/D 日期在右侧保留宽度，悬浮整个趋势面板或键盘焦点进入后显示，不挤动图表。悬浮/聚焦查看完整日期、小时与字符，点击同一格可切换筛选；方向键与 Home/End 对应相邻时段。
 
-趋势图与应用分布使用完整时段数据；日期范围同步筛选下方记录。应用行可点击筛选，搜索和应用筛选不改变顶部统计，分页也不改变总量。删除演示记录后重新计算。未知应用保留名称；无数据时显示零值、空图与应用提示，写入率显示横线。历史页使用单一纵向滚动区，窄窗口统计改为两列，趋势和应用分布上下排列。
+应用行展示图标、名称、字符、百分比与独立细横条，可点击筛选。写入率下方结果横条按已写入、未写入、失败、取消的次数分段，悬浮显示数量/百分比，点击筛选。筛选可组合，芯片可单独移除或统一清除；记录详情、播放、复制、修订、重新处理与删除沿用原逻辑。首页打开指定记录时切换到全部范围并清除筛选。窗口小于 840px 时，概览改两列、两图上下排列。英文、繁中、简中使用同一布局。
 
-统计脚本和样式分别位于本地 `mock/assets/history-stats.js` 与 `history-stats.css`。新增确定性近月演示记录，不读取私人历史文件，刷新恢复；`?history=empty&lang=hans#history` 和 `?history=failed&lang=en#history` 分别复现空数据与全失败。该功能尚未接入原生产品；mock 与截图继续不入库。
+代码入口：`history_stats.go`（聚合与图表）、`history.go`（筛选与详情）、`app_identity.go` 与 `internal/macos/appicon_darwin.go`（本机图标）。词典对应 [词典规格](DICTIONARY.md#v2-原生词典页面)。
 
-验收步骤：切换日期范围，核对图表各柱与应用字符合计等于顶部字符数；点击应用、搜索无匹配文字、清除筛选、删除一条演示记录；近 30 天翻页应保持总量；展开详情并切换浅深色与窄窗口。截图、实测结果和修改前备份保存在本地 `artifacts/history-stats/`。
+## V2 验收步骤
 
-HTML demo 的历史与词典页面隐藏整个顶部标题栏（含标题文案、分隔线及 52px 占位），内容直接从主区域顶部开始；首页仍沿用原布局。浏览器验收两页标题栏实际高度均为 0，内容起点与主区域起点一致。截图见 `artifacts/history-stats/history-no-title.png` 与 `dictionary-no-title.png`。
+1. 按本机签名约定构建，核对新旧签名及 designated requirement 后安装；打开历史核对真实统计，分别检查今天、7 天、30 天与全部。
+2. 将历史文件独立按本地日期聚合，核对字符、次数、分钟、结果数量、应用字符和小时字符总和；不得将私人文本或截图入库。
+3. 依次选择小时、应用、结果分段及无匹配搜索；确认列表变化而总量不变，再清除芯片。未来小时不能选择。
+4. 鼠标进入/离开趋势区，检查右侧日期出现/隐藏、图表位置不变；用 Tab、方向键、Home/End 验证焦点与时段一致。
+5. 打开记录详情检查既有功能入口，切换页面停止播放；真实历史不用于破坏性测试。
+6. 分别检查默认/最小窗口、浅色/深色、三种语言。原生截图与 AX 证据放在本地 `artifacts/native-v2/`，未实测项明确标注。
 
-## V2 对比方案（仅本地 HTML demo）
-
-`mock/compare-v1-v2.html` 提供历史与词典的 V1/V2 并排、单版、语言和外观切换；V2 独立入口为 `mock/claude-v2.html?lang=hans#history` 和 `#dictionary`。V1 文件保持原样，V2 使用独立存储命名空间。两页继续隐藏顶部标题栏。
-
-V2 历史突出写入字符，保留次数、时长与写入率核心数值，移除辅助统计文案。输入趋势为日期 × 小时方格热力图，日期倒序，悬浮查看字符、点击筛选。趋势与应用面板等高，超长内容内部滚动。应用显示系统图标、名称、字符与百分比，每行有独立细横条。字符主卡缩窄，次数标签为「语音输入次数」，时长精确到分钟。写入率横条按结果分段，悬浮或聚焦显示数量与占比，点击筛选记录；支持与应用、小时、搜索组合并清除，顶部汇总保持不变。词典保持上一版。全部统计仍来自演示记录，尚未接入原生产品。
-
-复现：按上一节启动 48181 服务，打开对比入口，切换 History/Dictionary、Light/Dark；在 V2 切换日期范围、选择小时方格再清除筛选，顶部总量应不变；在词典添加临时词、搜索后删除。验收记录及截图见本地 `artifacts/history-stats/v2-acceptance.md`，设计说明见 `mock/v2-design-notes.md`。
-
-V2 dense heatmap: responsive 24-column grid fills available width, 2px horizontal gaps and 16px cell height. Both panels are 300px tall with inner scrolling. Dates use M/D (10/16), newest first; hours increase 0 to 23 left-to-right. No year/month headings. Arrow keys follow visual order; original data indices preserve tooltip and filter mapping. Browser evidence: artifacts/history-stats/v2-dense-final.png.
-
-V2 typography: panel headings use 15px, matching the record heading; app names in both distribution and record rows share 13px text and 20px icons. Distribution numbers use 13px, percentages 12px, axes 11px. Browser measured both panels at 300px and both identity labels at 13px. Evidence: artifacts/history-stats/v2-readable.png.
-
-Date labels are hidden at rest and revealed together when the activity panel is hovered or contains keyboard focus. The date column keeps its width to prevent layout shifts. Touch devices retain visible dates; reduced motion disables the fade.
-
-Date labels occupy the right-hand column; the plot starts flush with the activity heading. Hours increase left-to-right (0, 6, 12, 18, 23), while dates remain newest-first top-to-bottom. Hover/focus date reveal remains unchanged.
+本地 HTML 对照仍保留 `mock/compare-v1-v2.html` 与 `mock/claude-v2.html`（48181 端口），演示数据不进入原生客户端；mock 和验收证据均不入库。

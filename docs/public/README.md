@@ -4,7 +4,7 @@
 
 | 模块 | 规格与验收 | 实现入口 |
 | --- | --- | --- |
-| 首页与历史 | [布局、功能与原生验收](HOME-HISTORY.md) | `home.go`、`journal.go`、`history.go`、`prefs.go` |
+| 首页与历史 | [布局、功能与原生验收](HOME-HISTORY.md) | `home.go`、`journal.go`、`history.go`、`history_stats.go`、`app_identity.go`、`prefs.go` |
 | 权限授权 | [共享拖拽引导与原生验收](PERMISSIONS.md) | `permission_drag.go`、`internal/macos/settings_window_darwin.go` |
 | 开始使用引导 | [窗口布局与原生验收](ONBOARDING.md) | `onboarding.go` |
 | DJI 麦克风按钮 | [设备匹配与原生验收](DJI-BUTTON.md) | `internal/macos/dji_darwin.go` |
@@ -12,7 +12,7 @@
 | 远程桌面输入 | [匹配规则、剪贴板与原生验收](REMOTE-INPUT.md) | `prefs_remote.go`、`internal/macos/remote_darwin.go`、`internal/session/controller.go` |
 | 本地语音模型 | [按需加载、句尾预览与验收](LOCAL-ASR.md) | `internal/localasr/`、`internal/session/controller.go` |
 | 配置持久化 | [远程规则结构及兼容约定](../../internal/config/README.md) | `internal/config/config.go`、`remote.go` |
-| 词典与纠正学习 | [云端热词、发送与追加输入验收](DICTIONARY.md) | `internal/dict/`、`internal/cloudasr/volc.go`、`internal/session/controller.go` |
+| 词典与纠正学习 | [V2 页面、热词与纠正验收](DICTIONARY.md) | `dictionary.go`、`internal/dict/`、`internal/cloudasr/volc.go`、`internal/session/controller.go` |
 | 基础格式与数字 | [数字默认与保留边界](TEXT-FORMATTING.md) | `internal/textstyle/`、`prefs.go` |
 | 文字整理 | [提示词、保护规则与验收边界](../../internal/cleanup/README.md) | `internal/cleanup/cleanup.go` |
 | 客户端更新 | [界面状态与原生验收](UPDATE-UI.md)、[更新协议与发布](UPDATES.md) | `updates.go`、`window.go` |

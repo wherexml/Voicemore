@@ -68,7 +68,7 @@ func (m *mainWindow) journal(c *ui.Context, records []store.Record, now time.Tim
 			ui.Text(c, group).FontSize(12).TextColor(t.TextMuted).Padding(22, 0, 10)
 			day = group
 		}
-		ui.Column(c.Key(r.ID)).FillWidth().Children(func() {
+		ui.Column(c.Key(r.ID)).Role(ui.RoleGroup).Label(r.StartedAt.Format("1/2 15:04")).FillWidth().Children(func() {
 			row := ui.Row(c.Key("row")).FillWidth().MinHeight(66).Gap(10).AlignItems(ui.Start)
 			row.Children(func() {
 				ui.Text(c, r.StartedAt.In(now.Location()).Format("15:04")).Width(64).Padding(13, 0, 0, 0).TextAlign(ui.End).Font("Menlo").FontSize(12).TextColor(t.TextMuted).SingleLine()
@@ -91,6 +91,9 @@ func (m *mainWindow) journal(c *ui.Context, records []store.Record, now time.Tim
 				var meta ui.Element
 				open.Children(func() {
 					ui.Column(c).FillWidth().Gap(4).Children(func() {
+						if r.TargetApp != "" {
+							ui.Row(c).Gap(8).AlignItems(ui.Center).Children(func() { appIdentity(c, r.TargetBundleID, r.TargetApp, false) })
+						}
 						ui.Text(c, shown).FontWeight(400).FontSize(14).LineHeight(1.6).MaxLines(2)
 						meta = ui.Row(c).Height(17).Gap(8).Children(func() {
 							ui.Text(c, timeLabel(r.StartedAt, now)).FontSize(11).TextColor(t.TextMuted)
