@@ -20,7 +20,7 @@ Voicemore is a native macOS dictation app. Press **Fn**, speak, and press **Fn**
 
 Press **Fn** to start, speak, and press it again to insert your words into the app you are using. Home keeps your shortcut, speech model, and recent transcripts close at hand.
 
-![Voicemore Home in English, with dictation controls, setup overview, and sample transcripts](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/home-en.jpg)
+![Voicemore Home in English, with dictation controls, setup overview, and sample transcripts](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/home-en-v035.jpg)
 
 ### A small capsule that follows your words
 

@@ -16,7 +16,7 @@ Voicemore 是原生 macOS 语音输入工具。按下 **Fn** 开始说话，再�
 
 ## 界面预览
 
-![首页与历史概览](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/home-en.jpg)
+![首页与历史概览](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/home-en-v035.jpg)
 
 ![模型设置](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/models-en.jpg)
 
