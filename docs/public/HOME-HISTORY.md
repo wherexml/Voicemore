@@ -57,8 +57,10 @@ V2 历史突出写入字符，保留次数、时长与写入率核心数值，�
 
 复现：按上一节启动 48181 服务，打开对比入口，切换 History/Dictionary、Light/Dark；在 V2 切换日期范围、选择小时方格再清除筛选，顶部总量应不变；在词典添加临时词、搜索后删除。验收记录及截图见本地 `artifacts/history-stats/v2-acceptance.md`，设计说明见 `mock/v2-design-notes.md`。
 
-V2 dense heatmap: responsive 24-column grid fills available width, 2px horizontal gaps and 16px cell height. Both panels are 300px tall with inner scrolling. Dates use M/D (10/16), newest first; hours descend 23 to 0 left-to-right. No year/month headings. Arrow keys follow visual order; original data indices preserve tooltip and filter mapping. Browser evidence: artifacts/history-stats/v2-dense-final.png.
+V2 dense heatmap: responsive 24-column grid fills available width, 2px horizontal gaps and 16px cell height. Both panels are 300px tall with inner scrolling. Dates use M/D (10/16), newest first; hours increase 0 to 23 left-to-right. No year/month headings. Arrow keys follow visual order; original data indices preserve tooltip and filter mapping. Browser evidence: artifacts/history-stats/v2-dense-final.png.
 
 V2 typography: panel headings use 15px, matching the record heading; app names in both distribution and record rows share 13px text and 20px icons. Distribution numbers use 13px, percentages 12px, axes 11px. Browser measured both panels at 300px and both identity labels at 13px. Evidence: artifacts/history-stats/v2-readable.png.
 
 Date labels are hidden at rest and revealed together when the activity panel is hovered or contains keyboard focus. The date column keeps its width to prevent layout shifts. Touch devices retain visible dates; reduced motion disables the fade.
+
+Date labels occupy the right-hand column; the plot starts flush with the activity heading. Hours increase left-to-right (0, 6, 12, 18, 23), while dates remain newest-first top-to-bottom. Hover/focus date reveal remains unchanged.
