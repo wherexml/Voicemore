@@ -497,6 +497,20 @@ func (a *app) bindTrigger() {
 	if a.updates.installing {
 		return
 	}
+	defer func() {
+		stopDJI, err := macos.StartDJIButton(a.ctrl.Toggle)
+		if err != nil {
+			log.Printf("trigger: %v", err)
+			return
+		}
+		stopKeyboard := a.stopHotkey
+		a.stopHotkey = func() {
+			stopDJI()
+			if stopKeyboard != nil {
+				stopKeyboard()
+			}
+		}
+	}()
 	key := a.settings.Get().TriggerKey
 	if macos.IsModifierKey(key) {
 		macos.InputMonitoringGranted(true)
