@@ -13,3 +13,5 @@
 - DJI 接收器按钮与键盘触发的边界、原生验收见[触发键规格](docs/public/DJI-BUTTON.md)。
 
 - 应用身份、系统图标、历史统计与 HTML demo 验证边界：[首页与历史规格](docs/public/HOME-HISTORY.md#应用身份与图标html-demo-验证)。
+
+- 数字默认格式、保护范围与真实音频验收：[基础格式规格](docs/public/TEXT-FORMATTING.md)。

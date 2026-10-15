@@ -13,9 +13,10 @@ type Options struct {
 	CalmExclamations bool `json:"calmExclamations"`
 	RemoveFillers    bool `json:"removeFillers"`
 	JoinAcronyms     bool `json:"joinAcronyms"`
+	ArabicNumbers    bool `json:"arabicNumbers"`
 }
 
-func Defaults() Options { return Options{true, true, true, true} }
+func Defaults() Options { return Options{true, true, true, true, true} }
 
 var protected = regexp.MustCompile("(?s)```.*?(?:```|$)|`[^`\\n]*(?:`|$)|“[^”]*(?:”|$)|「[^」]*(?:」|$)|『[^』]*(?:』|$)|\"[^\"\\n]*(?:\"|$)|https?://[^\\s<>]+")
 var letters = regexp.MustCompile(`[A-Z](?:[ \t]+[A-Z])+`)
@@ -131,6 +132,9 @@ func Apply(text string, o Options, terms []string) (string, []string) {
 		}
 	}
 	plain := func(t string) string {
+		if o.ArabicNumbers {
+			t = record("阿拉伯数字", t, arabicNumbers(t))
+		}
 		if o.JoinAcronyms {
 			old := t
 			var b strings.Builder

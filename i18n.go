@@ -40,6 +40,8 @@ func init() {
 	texts["formatCalmHint"] = [3]string{"Use periods for ordinary prose; preserve quotes and code.", "一般敘述改用句號，保留引文與程式碼。", "普通叙述改用句号，保留引文与代码。"}
 	texts["formatFillers"] = [3]string{"Remove common fillers", "移除常見語氣詞", "删除常见语气词"}
 	texts["formatFillersHint"] = [3]string{"Remove standalone 嗯 / 呃 / 啊 and sentence-ending 啊. No cleanup model needed.", "移除獨立的嗯／呃／啊和句尾啊，無需整理模型。", "删除独立的嗯／呃／啊和句尾啊，无需整理模型。"}
+	texts["formatNumbers"] = [3]string{"Use Arabic numerals", "數字使用阿拉伯數字", "数字使用阿拉伯数字"}
+	texts["formatNumbersHint"] = [3]string{"Write clear numbers as digits, e.g. 二零二六年 → 2026年. Keep quoted text unchanged.", "將明確數字轉為 2026年、15個等形式，保留引用原文。", "将明确数字转为 2026年、15个等形式，保留引用原文。"}
 	texts["formatAcronyms"] = [3]string{"Join spelled-out terms", "合併拼讀詞彙", "合并拼读词汇"}
 	texts["formatAcronymsHint"] = [3]string{"Join known terms such as A P P → APP and dictionary words.", "合併 A P P → APP 等已知縮寫及詞典詞彙。", "合并 A P P → APP 等已知缩写及词典词汇。"}
 
