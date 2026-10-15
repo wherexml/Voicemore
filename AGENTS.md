@@ -11,3 +11,5 @@
 
 - 文字整理的错误分类、延迟排查和 HTTP 验收见 [整理模块规格](internal/cleanup/README.md)；保留响应体读取阶段的超时与取消原因。
 - DJI 接收器按钮与键盘触发的边界、原生验收见[触发键规格](docs/public/DJI-BUTTON.md)。
+
+- 应用身份、系统图标与 HTML demo 验证边界：[首页与历史规格](docs/public/HOME-HISTORY.md#应用身份与图标html-demo-验证)。

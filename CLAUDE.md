@@ -6,3 +6,5 @@
 - 文字整理、超时分类与延迟诊断：[整理模块规格](internal/cleanup/README.md)。
 - 先列故障场景，再做隔离实现；优先真实链路验收，不在代码实现后补写单元测试。验收证据放在 Git 忽略的 `artifacts/`。
 - 键盘与 DJI 接收器按钮触发：[全局触发键规格](docs/public/DJI-BUTTON.md)。
+
+- 应用身份、系统图标与 HTML demo 验证边界：[首页与历史规格](docs/public/HOME-HISTORY.md#应用身份与图标html-demo-验证)。

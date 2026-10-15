@@ -1,0 +1,7 @@
+.app-identity { display:inline-flex; align-items:center; gap:5px; vertical-align:middle; font-size:11px; color:var(--t3, var(--muted)); white-space:nowrap; }
+.app-icon-wrap { display:inline-grid; width:20px; height:20px; flex:none; place-items:center; position:relative; }
+.app-icon-fallback { color:var(--t3, #888); font-size:17px; }
+.native-app-icon { position:absolute; inset:0; width:20px; height:20px; object-fit:contain; background:var(--win, #fff); }
+.vh .entry .body > .app-identity { display:flex; width:fit-content; margin-bottom:4px; }
+.native-app-icon { background:transparent; }
+.app-icon-wrap:has(.native-app-icon) .app-icon-fallback { visibility:hidden; }

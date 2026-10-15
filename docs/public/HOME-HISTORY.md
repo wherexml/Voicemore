@@ -26,3 +26,13 @@
 分段按钮选中态与开启的开关使用靛蓝色。默认主题取消装饰性边框，以底色和留白区分控件；保留时间轴、四栏内分隔及高对比度与键盘焦点提示。首页四栏设置箭头默认隐藏，指针停留整栏 500ms 后显示，离开即隐藏；键盘聚焦该栏时立即显示。验收时检查快速掠过、持续悬浮、移出与 Tab 聚焦四种状态。
 
 模型下拉与触发框同宽，选项填满行、选中态有灰底；箭头收起向下、展开向上。服务商弹窗输入框与模型列表使用灰底和细边界，验收时检查浅深色及键盘选择。
+
+## 应用身份与图标（HTML demo 验证）
+
+原生 `CaptureTarget` 通过 `NSWorkspace.frontmostApplication` 读取 `localizedName` 和 `bundleIdentifier`；当前历史仅保存 `targetApp` 名称，尚未持久化 Bundle ID 或图标。名称不代表网站身份，也不保证唯一；例如本机 `com.openai.codex` 的系统名称可以是 ChatGPT。远程桌面只能据此确认本机客户端，不能识别远端输入应用。
+
+本地 `mock/claude.html` 的首页时间轴、历史列表和详情展示应用图标与名称；旧版 `mock/index.html` 的详情也接入相同组件。图标由 `scripts/export-demo-app-icons.swift` 使用 AppKit 导出，优先采用运行中应用的 icon，其次采用 NSWorkspace 的应用文件图标。不包含 Dock 上的通知数字、进度或其他动态覆盖层。图标和应用清单只留在 Git 忽略的 mock 目录。
+
+复现：在项目根目录执行 `swift scripts/export-demo-app-icons.swift mock/assets/apps`，再执行 `python3 -m http.server 48181 --bind 127.0.0.1 --directory mock`，打开 `/claude.html`。导出文件为应用身份快照，不读取私人听写内容；页面仍使用演示转录，不会实时监控前台应用。匹配优先 Bundle ID，其次演示别名及唯一的系统名称；未知、同名歧义或缺失图标保留文字和通用图标。原生产品接入时应在捕获目标时保存 Bundle ID，并按身份缓存系统图标；本次没有修改原生历史格式。
+
+浏览器验收：跳过引导进入首页，核对应用名称、图标；打开全部历史、展开详情，确认身份一致；切换浅色和深色，检查图标透明边缘；图片缺失应保留通用图标与名称。实际证据见本地 `artifacts/app-icons/`。
