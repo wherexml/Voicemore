@@ -718,6 +718,7 @@ func (p *prefsWindow) formatting(c *ui.Context) {
 			{"formatCalm", s.TextStyle.CalmExclamations, func(s *config.Settings, v bool) { s.TextStyle.CalmExclamations = v }},
 			{"formatFillers", s.TextStyle.RemoveFillers, func(s *config.Settings, v bool) { s.TextStyle.RemoveFillers = v }},
 			{"formatAcronyms", s.TextStyle.JoinAcronyms, func(s *config.Settings, v bool) { s.TextStyle.JoinAcronyms = v }},
+			{"formatNumbers", s.TextStyle.ArabicNumbers, func(s *config.Settings, v bool) { s.TextStyle.ArabicNumbers = v }},
 		} {
 			setting(c, row.key, nil, T(row.key), T(row.key+"Hint"), func() {
 				on := row.on
