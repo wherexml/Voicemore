@@ -56,3 +56,5 @@ HTML demo 的历史与词典页面隐藏整个顶部标题栏（含标题文案�
 V2 历史突出写入字符，保留次数、时长与写入率核心数值，移除辅助统计文案。输入趋势为日期 × 小时方格热力图，日期倒序，悬浮查看字符、点击筛选。趋势与应用面板等高，超长内容内部滚动。应用显示系统图标、名称、字符与百分比，每行有独立细横条。字符主卡缩窄，次数标签为「语音输入次数」，时长精确到分钟。写入率横条按结果分段，悬浮或聚焦显示数量与占比，点击筛选记录；支持与应用、小时、搜索组合并清除，顶部汇总保持不变。词典保持上一版。全部统计仍来自演示记录，尚未接入原生产品。
 
 复现：按上一节启动 48181 服务，打开对比入口，切换 History/Dictionary、Light/Dark；在 V2 切换日期范围、选择小时方格再清除筛选，顶部总量应不变；在词典添加临时词、搜索后删除。验收记录及截图见本地 `artifacts/history-stats/v2-acceptance.md`，设计说明见 `mock/v2-design-notes.md`。
+
+V2 compact heatmap: fixed 12px squares with 3px spacing; day labels use two-digit numbers, with a year/month heading only at each month boundary. Full dates remain in tooltips. Newest-first ordering and equal panel heights remain. Chrome acceptance: 12px measured width; 30-day view groups October and September separately. Evidence: artifacts/history-stats/v2-compact-grid.png.
