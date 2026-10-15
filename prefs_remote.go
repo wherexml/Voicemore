@@ -16,7 +16,7 @@ func (p *prefsWindow) remoteInput(c *ui.Context) {
 			ui.Column(c.Key(fmt.Sprint(i))).Padding(12).Gap(8).Children(func() {
 				ui.Row(c).Gap(12).Children(func() {
 					ui.Text(c, rule.AppName).Grow(1)
-					choices := []string{T("remoteOff"), "Mac · ⌘V", "Windows · Ctrl+V"}
+					choices := []string{T("remoteOff"), "Command+V (⌘V)", "Control+V (⌃V)"}
 					chosen := choices[0]
 					if rule.Shortcut == "cmd-v" {
 						chosen = choices[1]

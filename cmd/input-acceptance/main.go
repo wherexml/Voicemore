@@ -13,11 +13,16 @@ import (
 	"runtime"
 	"strings"
 	"time"
+	"voiceinput/internal/config"
 	"voiceinput/internal/macos"
 )
 
 func main() {
 	runtime.LockOSThread()
+	if len(os.Args) > 1 && os.Args[1] == "--remote" {
+		remoteAcceptance(os.Args[2:])
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "--probe" {
 		target := macos.CaptureTarget()
 		defer target.Release()
@@ -40,7 +45,7 @@ func main() {
 	dir, _ := filepath.Abs("artifacts/current-input")
 	os.Remove(filepath.Join(dir, "command"))
 	os.Remove(filepath.Join(dir, "state"))
-	fixture := exec.Command(filepath.Join(dir, "fixture"), dir)
+	fixture := exec.Command(filepath.Join(dir, "Fixture.app/Contents/MacOS/fixture"), dir)
 	if err := fixture.Start(); err != nil {
 		panic(err)
 	}
@@ -53,6 +58,9 @@ func main() {
 			var state map[string]string
 			json.Unmarshal(b, &state)
 			if state["command"] == cmd {
+				if state["active"] != "true" || state["keyWindow"] != "true" {
+					panic("fixture lost foreground focus; aborting keyboard acceptance: " + cmd)
+				}
 				return state
 			}
 			time.Sleep(50 * time.Millisecond)
@@ -98,6 +106,64 @@ func main() {
 	}
 	state = command("read-opaque")
 	results = append(results, map[string]any{"case": "custom editor without AX writable input", "passed": err == nil && !res.ClipboardOnly && !res.FocusVerified && state["opaque"] == "自绘输入框验证", "state": state, "result": res})
+
+	// Exercise remote profiles using real keyboard delivery to an opaque native
+	// canvas, including Ctrl+V; this proves dispatch, not network clipboard sync.
+	for _, shortcut := range []string{"cmd-v", "ctrl-v"} {
+		command("remote-" + shortcut)
+		target := macos.CaptureTarget()
+		rules := []config.RemoteInput{{BundleID: target.BundleID, Shortcut: shortcut, SyncDelayMs: 300}}
+		target.Release()
+		text := "远程快捷键 " + shortcut
+		res, err = macos.Insert(text, macos.InsertOptions{RemoteInputs: rules})
+		if res.Target != nil {
+			res.Target.Release()
+		}
+		// CGEventPost is asynchronous; allow the native event loop to consume it.
+		time.Sleep(200 * time.Millisecond)
+		state = command("read-remote-" + shortcut)
+		results = append(results, map[string]any{"case": "remote " + shortcut, "passed": err == nil && res.Remote && !res.ClipboardOnly && !res.ClipboardRestored && state["opaque"] == text && clipboard() == text, "state": state, "result": res})
+	}
+	for _, interruptAfter := range []time.Duration{200 * time.Millisecond, 700 * time.Millisecond} {
+		for _, scenario := range []string{"cancel", "clipboard", "focus"} {
+			command("remote-protection-" + scenario)
+			target := macos.CaptureTarget()
+			rules := []config.RemoteInput{{BundleID: target.BundleID, Shortcut: "cmd-v", SyncDelayMs: 1000}}
+			target.Release()
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				time.Sleep(interruptAfter)
+				switch scenario {
+				case "cancel":
+					cancel()
+				case "clipboard":
+					setClipboard("new clipboard must survive")
+				case "focus":
+					command("second")
+				}
+			}()
+			res, err = macos.Insert("must not paste", macos.InsertOptions{Context: ctx, RemoteInputs: rules})
+			<-done
+			cancel()
+			if res.Target != nil {
+				res.Target.Release()
+			}
+			state = command("read-protection-" + scenario)
+			passed := !res.Remote && state["opaque"] == "" && state["second"] == "当前输入位置验证"
+			if scenario == "cancel" {
+				passed = passed && err == context.Canceled
+			} else {
+				passed = passed && err == nil && res.ClipboardOnly
+			}
+			if scenario == "clipboard" {
+				passed = passed && clipboard() == "new clipboard must survive"
+			}
+			results = append(results, map[string]any{"case": fmt.Sprintf("remote guard %s at %s", scenario, interruptAfter), "passed": passed, "state": state, "result": res, "error": fmt.Sprint(err)})
+		}
+
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	before := clipboard()

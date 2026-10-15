@@ -83,10 +83,14 @@ type Manager struct {
 	cmd              *exec.Cmd
 	exited           chan struct{}
 	closed, stopping bool
+	idleTimeout      time.Duration
+	idleTimer        *time.Timer
+	idleGeneration   uint64
+	users            int
 }
 
 func New(root, archive string, port ...int) *Manager {
-	m := &Manager{Root: root, Archive: archive, Port: 48132}
+	m := &Manager{Root: root, Archive: archive, Port: 48132, idleTimeout: 5 * time.Minute}
 	if len(port) > 0 {
 		if port[0] < 10000 || port[0] > 65535 {
 			panic("invalid ASR port")
@@ -181,18 +185,26 @@ func (m *Manager) Stop() {
 		return
 	}
 	m.stopping = true
+	m.disarmIdleLocked()
 	if m.cancel != nil {
 		m.cancel()
 	}
 	m.mu.Unlock()
+	m.finishStop()
+}
+func (m *Manager) finishStop() {
 	m.phase("stopping", "正在释放模型内存")
 	go func() {
 		m.op.Lock()
 		m.stopProcess()
 		m.mu.Lock()
 		m.stopping = false
+		m.state.Phase, m.state.Detail = "stopped", "模型已停止"
+		cb := m.Changed
 		m.mu.Unlock()
-		m.phase("stopped", "模型已停止")
+		if cb != nil {
+			cb()
+		}
 		m.op.Unlock()
 	}()
 }
@@ -200,6 +212,7 @@ func (m *Manager) Close() {
 	m.mu.Lock()
 	m.closed = true
 	m.stopping = true
+	m.disarmIdleLocked()
 	if m.cancel != nil {
 		m.cancel()
 	}
@@ -321,6 +334,7 @@ func (m *Manager) start(ctx context.Context) error {
 					return errors.New("模型启动已取消或进程已退出")
 				}
 				m.state.Phase, m.state.Detail = "ready", "模型已就绪 · 完全本地运行"
+				m.armIdleLocked()
 				cb := m.Changed
 				m.mu.Unlock()
 				if cb != nil {

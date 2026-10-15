@@ -15,6 +15,8 @@ Updates live in the bottom-left rail, directly above Settings, on every page. Th
 | Failure | Indigo retry icon | Retry; technical details in tooltip |
 | Relaunch failure | Indigo retry icon | Restart now, without downloading again |
 
+Idle/current panels show the current version and check action without an automatic-check explanation. Errors and download status remain visible.
+
 ## Repeatable native E2E
 
 1. Build the app, then run `scripts/prepare-update-fixture.sh` with `SIGNING_IDENTITY`. Quit the regular app, run `python3 scripts/update-fixture.py`, and launch `artifacts/updater-e2e/Voicemore.app`.

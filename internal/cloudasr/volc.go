@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"slices"
+	"strings"
 
 	"github.com/coder/websocket"
 
@@ -72,10 +74,10 @@ type Volc struct {
 }
 
 func (v Volc) Label() string               { return volcURL }
-func (v Volc) Hotwords() bool              { return false }
+func (v Volc) Hotwords() bool              { return true }
 func (v Volc) Check(context.Context) error { return nil }
 
-func (v Volc) Dial(ctx context.Context, _ *string) (asr.Stream, error) {
+func (v Volc) Dial(ctx context.Context, hotwords *string) (asr.Stream, error) {
 	resource := v.Resource
 	if resource == "" {
 		resource = VolcHourly
@@ -98,13 +100,35 @@ func (v Volc) Dial(ctx context.Context, _ *string) (asr.Stream, error) {
 	conn.SetReadLimit(4 << 20)
 	s := &volcStream{conn: conn}
 	s.done = make(chan struct{})
+	options := map[string]any{
+		"model_name": "bigmodel", "enable_itn": true, "enable_punc": true,
+		"show_utterances": true, "result_type": "full",
+	}
+	// corpus.context must be a serialized JSON string, not a nested object.
+	// https://docs.volcengine.com/docs/DoubaoVoice/hot-words-and-context
+	if hotwords != nil {
+		var words []map[string]string
+		// Streaming recognition keeps only the first 100 tokens. Prioritize
+		// recent additions; send all terms without silently dropping any locally.
+		terms := strings.Split(*hotwords, ",")
+		slices.Reverse(terms)
+		for _, word := range terms {
+			if word = strings.TrimSpace(word); word != "" {
+				words = append(words, map[string]string{"word": word})
+			}
+		}
+		if len(words) > 0 {
+			contextJSON, _ := json.Marshal(map[string]any{"hotwords": words})
+			options["corpus"] = map[string]any{"context": string(contextJSON)}
+			// The second pass supports the full dictionary (up to 5000 words),
+			// rather than just the streaming decoder's first 100 tokens.
+			options["enable_nonstream"] = true
+		}
+	}
 	request, _ := json.Marshal(map[string]any{
-		"user":  map[string]any{"uid": "voice-input"},
-		"audio": map[string]any{"format": "pcm", "codec": "raw", "rate": asr.SampleRate, "bits": 16, "channel": 1},
-		"request": map[string]any{
-			"model_name": "bigmodel", "enable_itn": true, "enable_punc": true,
-			"show_utterances": true, "result_type": "full",
-		},
+		"user":    map[string]any{"uid": "voice-input"},
+		"audio":   map[string]any{"format": "pcm", "codec": "raw", "rate": asr.SampleRate, "bits": 16, "channel": 1},
+		"request": options,
 	})
 	if err := s.write(ctx, volcFullRequest, 0, volcJSON, request); err != nil {
 		conn.CloseNow()

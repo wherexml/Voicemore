@@ -21,6 +21,7 @@ var (
 	railSettings = railIcon(`<path d="M3 5.6h10M3 10.4h10"/>`) // two plain strokes
 
 	icBack    = icon(`<path d="M10 4L6 8l4 4"/>`)
+	icUp      = icon(`<path d="M4 10l4-4 4 4"/>`)
 	icDown    = icon(`<path d="M4 6l4 4 4-4"/>`)
 	icCheck   = icon(`<path d="M3.4 8.4l3 3 6.2-7"/>`)
 	icSparkle = icon(`<path d="M7 2.5l1.2 3.3L11.5 7 8.2 8.2 7 11.5 5.8 8.2 2.5 7l3.3-1.2zM12.2 10.6l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z"/>`)
@@ -35,6 +36,7 @@ var (
 	icPause    = icon(`<path d="M5.6 3.8v8.4M10.4 3.8v8.4" stroke-width="2"/>`)
 	icCopy     = icon(`<rect x="5.5" y="5.5" width="8" height="8" rx="1.8"/><path d="M10.5 3.2H4.3a1.6 1.6 0 0 0-1.6 1.6v6.2"/>`)
 	icMore     = icon(`<g fill="currentColor" stroke="none"><circle cx="3.5" cy="8" r="1.2"/><circle cx="8" cy="8" r="1.2"/><circle cx="12.5" cy="8" r="1.2"/></g>`)
+	icDetails  = icon(`<circle cx="8" cy="8" r="6"/><path d="M8 4.5v4M8 11h.01"/>`)
 	icTrash    = icon(`<path d="M3 4.5h10M6.2 4.5V3h3.6v1.5M4.4 4.5l.6 8.3h6l.6-8.3"/>`)
 	icRefresh  = icon(`<path d="M12.6 8a4.6 4.6 0 1 1-1.5-3.4M12.8 2.4v2.8H10"/>`)
 	icPencil   = icon(`<path d="M3 13l.6-2.8 7-7a1.4 1.4 0 0 1 2 2l-7 7zM9.6 4.2l2.2 2.2"/>`)

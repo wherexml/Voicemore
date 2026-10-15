@@ -335,6 +335,9 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 	if res.ClipboardOnly {
 		return res, nil
 	}
+	if o.OnPasted != nil {
+		o.OnPasted(current)
+	}
 	time.Sleep(time.Duration(max(o.RestoreDelayMs, 200)) * time.Millisecond)
 	OnMain(func() {
 		if objc.Send[int](pasteboard(), sel("changeCount")) == change {

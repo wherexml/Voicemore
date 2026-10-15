@@ -43,7 +43,10 @@ func tokenize(s string) []string {
 	return out
 }
 
-type hunk struct{ from, to []string }
+type hunk struct {
+	from, to []string
+	trailing bool
+}
 
 // diff returns the replaced runs between two token lists, by their longest
 // common subsequence. Runs only deleted or only inserted have an empty side.
@@ -86,6 +89,7 @@ func diff(a, b []string) []hunk {
 	}
 	cur.from = append(cur.from, a[i:]...)
 	cur.to = append(cur.to, b[j:]...)
+	cur.trailing = true
 	flush()
 	return hunks
 }

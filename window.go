@@ -23,12 +23,11 @@ type mainWindow struct {
 	updateOpen bool
 	starting   bool // the 3-second countdown before a dictation
 
-	// Home: the focus of the recent rows' two buttons, by row.
-	recentOpen   [4]ui.Handle
-	recentCopy   [4]ui.Handle
+	// Shared copy feedback for the Home and History timelines.
 	recentCopied map[string]time.Time // record ID → last successful copy
 
 	// History.
+	tileHover   map[string]time.Time
 	query       string
 	hPage       int // from 1
 	selected    string
@@ -199,6 +198,7 @@ func (m *mainWindow) view(c *ui.Context) {
 						ui.Text(c, T(pageTitles[m.page])).FontSize(15).FontWeight(600)
 					}
 				})
+
 			})
 			m.problems(c)
 			ui.Column(c.Key("page-" + m.page)).Grow(1).MinHeight(0).Children(func() {

@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 
 	"voiceinput/internal/config"
@@ -24,11 +23,22 @@ import (
 type prefsWindow struct {
 	a      *app
 	win    *mygo.Window
-	cat    string // "general", "perms", "models" or "privacy"
+	cat    string // one of the six settings categories
 	status func() string
 
-	dragWin    *mygo.Window
-	dragPane   string
+	dragWin       *mygo.Window
+	dragPane      string
+	dragActive    bool
+	dragging      bool
+	dragStarted   time.Time
+	dragSeen      time.Time
+	dragChecked   time.Time
+	dragGranted   time.Time
+	dragTracked   time.Time
+	dragError     bool
+	dragDirection int
+	dragBounds    mygo.Rectangle
+
 	bundlePath string // exact running bundle, never a backup or guessed install path
 	audioDays  float64
 	fnConflict string // what the system does on Fn
@@ -111,9 +121,6 @@ func (p *prefsWindow) visible() bool { return p != nil && p.win != nil && p.win.
 
 // open shows the settings, at a category when one is named.
 func (p *prefsWindow) open(category string) {
-	if category == "dictation" {
-		category = "general"
-	}
 	if category != "" {
 		p.dlgOpen, p.addOpen = false, false
 		p.cat = category
@@ -127,9 +134,7 @@ func (p *prefsWindow) open(category string) {
 
 // close hides the settings and gives the main window the keyboard back.
 func (p *prefsWindow) close() {
-	if p.dragWin != nil {
-		p.dragWin.Hide()
-	}
+	p.hidePermissionDrag()
 	p.guideReturn = 0
 	p.win.Hide()
 	if p.a.main.win.IsVisible() {
@@ -237,8 +242,10 @@ var categories = []struct {
 	icon      *ui.SVG
 }{
 	{"general", "gGeneral", icSliders},
-	{"perms", "gPerms", icShield},
 	{"models", "gModels", icSparkle},
+	{"dictation", "catDictation", icKeyboard},
+	{"output", "catOutput", icPencil},
+	{"perms", "gPerms", icShield},
 	{"privacy", "gPrivacy", icLock},
 }
 
@@ -302,12 +309,18 @@ func (p *prefsWindow) view(c *ui.Context) {
 			})
 			// The window scrolls inside; a category keeps its own scroll.
 			ui.Scroll(c.Key("cat-"+p.cat)).Grow(1).Padding(28, 30).Children(func() {
-				ui.Column(c).FillWidth().MaxWidth(720).Gap(10).Children(func() {
+				ui.Column(c).FillWidth().MaxWidth(720).Gap(16).Children(func() {
 					switch p.cat {
 					case "perms":
 						p.permissions(c)
 					case "models":
 						p.modelsView(c)
+					case "dictation":
+						p.audio(c)
+						p.dictation(c)
+					case "output":
+						p.formatting(c)
+						p.remoteInput(c)
 					case "privacy":
 						p.privacy(c)
 					default:
@@ -326,10 +339,23 @@ func (p *prefsWindow) view(c *ui.Context) {
 	p.dialog(c)
 }
 
-// card is a box of rows with hairlines between them.
+// Settings groups use their own surfaces and hairlines, independent of the
+// borderless main-window theme. Keep the system's high-contrast line when set.
+func settingsGroupColor(t *ui.Theme) ui.Color {
+	return pick(t, "#f1f1f1", "#242424")
+}
+
+func settingsGroupLine(c *ui.Context) ui.Color {
+	if c.Preferences().HighContrast {
+		return c.Theme().Border
+	}
+	return pick(c.Theme(), "#dedede", "#3a3a3a")
+}
+
+// card is a rounded group of related rows with visible hairlines.
 func card(c *ui.Context, key string, rows func()) {
 	t := c.Theme()
-	ui.Column(c.Key(key)).Radius(10).Background(cardColor(t)).Border(1, t.Border).Gap(1).Dividers(1, t.Border).Children(rows)
+	ui.Column(c.Key(key)).Radius(14).Background(settingsGroupColor(t)).Border(1, settingsGroupLine(c)).Gap(1).Dividers(1, settingsGroupLine(c)).Children(rows)
 }
 
 // hintDelay is how long the pointer rests on a row before its hint shows,
@@ -446,9 +472,6 @@ func (p *prefsWindow) general(c *ui.Context) {
 			}
 		})
 	})
-	p.audio(c)
-	p.dictation(c)
-	p.remoteInput(c)
 }
 
 // loginItem is the app's entry in System Settings → Login Items. macOS
@@ -484,6 +507,31 @@ func (p *prefsWindow) loginItem(c *ui.Context) {
 func (p *prefsWindow) audio(c *ui.Context) {
 	t := c.Theme()
 	s := p.a.settings.Get()
+	names, uids, hint, notice := p.microphoneOptions(c, s)
+	ui.Text(c, T("gAudio")).FontSize(16).TextColor(t.Text)
+	card(c, "audio", func() {
+		settingRow(c, "mic", nil, T("sMicDevice"), hint, notice, func() {
+			p.microphoneSelect(c, s, names, uids, 240)
+		})
+		setting(c, "sounds", nil, T("sSounds"), T("sSoundsHint"), func() {
+			on := s.InteractionSounds
+			if ui.Switch(c.Key("sw"), &on).Label(T("sSounds")).Changed() {
+				p.change(func(s *config.Settings) { s.InteractionSounds = on })
+				if on {
+					macos.PlayRecordingCue(true) // a sample of what it sounds like
+				}
+			}
+		})
+		setting(c, "mute", nil, T("sMuteOutput"), T("sMuteOutputHint"), func() {
+			on := s.MuteOutput
+			if ui.Switch(c.Key("sw"), &on).Label(T("sMuteOutput")).Changed() {
+				p.change(func(s *config.Settings) { s.MuteOutput = on })
+			}
+		})
+	})
+}
+
+func (p *prefsWindow) microphoneOptions(c *ui.Context, s config.Settings) ([]string, []string, string, bool) {
 	// Microphones are plugged in and out while the page is open.
 	c.After(2 * time.Second)
 	if time.Since(p.micsAt) >= 2*time.Second {
@@ -513,46 +561,36 @@ func (p *prefsWindow) audio(c *ui.Context) {
 		names = append(names, T("micDisconnected", name))
 		hint, notice = T("micDisconnectedHint"), true
 	}
-	ui.Text(c, T("gAudio")).FontSize(16).TextColor(t.Text)
-	card(c, "audio", func() {
-		settingRow(c, "mic", nil, T("sMicDevice"), hint, notice, func() {
-			chosen := names[0]
-			for i, uid := range uids {
-				if uid == s.InputDevice {
-					chosen = names[i]
+	return names, uids, hint, notice
+}
+
+func (p *prefsWindow) microphoneSelect(c *ui.Context, s config.Settings, names, uids []string, width float32) {
+	chosen := names[0]
+	for i, uid := range uids {
+		if uid == s.InputDevice {
+			chosen = names[i]
+		}
+	}
+	sel := ui.Select(c.Key("sel"), &chosen, names).Label(T("sMicDevice"))
+	if width > 0 {
+		sel.Width(width)
+	} else {
+		sel.FillWidth().MinWidth(0).Height(28).Padding(0, 10)
+	}
+	if sel.Changed() {
+		for i, n := range names {
+			if n != chosen || uids[i] == s.InputDevice {
+				continue
+			}
+			uid, name := uids[i], ""
+			for _, m := range p.mics {
+				if m.UID == uid {
+					name = m.Name
 				}
 			}
-			if ui.Select(c.Key("sel"), &chosen, names).Label(T("sMicDevice")).Width(240).Changed() {
-				for i, n := range names {
-					if n != chosen || uids[i] == s.InputDevice {
-						continue
-					}
-					uid, name := uids[i], ""
-					for _, m := range p.mics {
-						if m.UID == uid {
-							name = m.Name
-						}
-					}
-					p.change(func(s *config.Settings) { s.InputDevice, s.InputDeviceName = uid, name })
-				}
-			}
-		})
-		setting(c, "sounds", nil, T("sSounds"), T("sSoundsHint"), func() {
-			on := s.InteractionSounds
-			if ui.Switch(c.Key("sw"), &on).Label(T("sSounds")).Changed() {
-				p.change(func(s *config.Settings) { s.InteractionSounds = on })
-				if on {
-					macos.PlayRecordingCue(true) // a sample of what it sounds like
-				}
-			}
-		})
-		setting(c, "mute", nil, T("sMuteOutput"), T("sMuteOutputHint"), func() {
-			on := s.MuteOutput
-			if ui.Switch(c.Key("sw"), &on).Label(T("sMuteOutput")).Changed() {
-				p.change(func(s *config.Settings) { s.MuteOutput = on })
-			}
-		})
-	})
+			p.change(func(s *config.Settings) { s.InputDevice, s.InputDeviceName = uid, name })
+		}
+	}
 }
 
 // permissions shows the three permissions as macOS reports them, each with
@@ -622,61 +660,6 @@ func runningAppBundle() string {
 	return bundle
 }
 
-// showPermissionDrag shows the app drag card above other apps while the user
-// grants Accessibility or Input Monitoring. It exports the actual file URL.
-func (p *prefsWindow) showPermissionDrag(pane string) {
-	macos.OpenPrivacySettings(pane)
-	if p.bundlePath == "" {
-		return
-	}
-	p.dragPane = pane
-	if p.dragWin == nil {
-		p.dragWin = mygo.NewFlyout(mygo.FlyoutOptions{
-			Tray: p.a.tray, Width: 248, Height: 112, Hidden: true,
-			Content: ui.View(p.permissionDragView),
-		})
-		p.dragWin.SetAlwaysOnTop(true)
-		p.dragWin.OnClose(func(e *mygo.CloseEvent) {
-			if !p.a.quitting {
-				e.PreventDefault()
-				p.dragWin.Hide()
-			}
-		})
-	}
-	area := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
-	p.dragWin.SetBounds(mygo.Rectangle{X: area.X + area.Width - 280, Y: area.Y + area.Height/2 - 56, Width: 248, Height: 112})
-	p.dragWin.ShowInactive()
-}
-
-func (p *prefsWindow) permissionDragView(c *ui.Context) {
-	useTheme(c)
-	c.Root().Background(ui.Transparent)
-	c.After(time.Second)
-	granted := p.dragPane == "Privacy_Accessibility" && macos.AccessibilityTrusted(false) || p.dragPane == "Privacy_ListenEvent" && macos.InputMonitoringGranted(false)
-	if granted {
-		p.dragWin.Hide()
-		p.a.refreshAll()
-		return
-	}
-	data, err := transfer.FileData(p.bundlePath)
-	if err != nil {
-		return
-	}
-	ui.Column(c.Key("drag-app")).Size(248, 112).Padding(16).Gap(10).Radius(18).Background(cardColor(c.Theme())).Label(T("permDragApp")).
-		DragData(data, transfer.DragOptions{Operations: transfer.Copy, Done: func(r transfer.Result) {
-			if r.Err != nil {
-				p.status = func() string { return T("permDragFailed") }
-				p.refresh()
-			}
-		}}).Children(func() {
-		ui.Row(c).Gap(12).AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Size(44, 44).Draw(drawAppMark)
-			ui.Text(c, "Voicemore").FontSize(17).FontWeight(600)
-		})
-		ui.Text(c, T("permDragHint")).FontSize(12).TextColor(c.Theme().TextMuted)
-	})
-}
-
 var fnActions = map[string]string{
 	"change the input source": "fnInput", "show Emoji & Symbols": "fnEmoji", "start Dictation": "fnDictation",
 }
@@ -719,6 +702,11 @@ func (p *prefsWindow) dictation(c *ui.Context) {
 		})
 	})
 
+}
+
+func (p *prefsWindow) formatting(c *ui.Context) {
+	t := c.Theme()
+	s := p.a.settings.Get()
 	ui.Text(c, T("basicFormat")).FontSize(16).TextColor(t.Text)
 	card(c, "basic-format", func() {
 		for _, row := range []struct {
@@ -743,7 +731,7 @@ func (p *prefsWindow) dictation(c *ui.Context) {
 
 // triggerKey chooses among the modifier keys. A custom shortcut saved in
 // settings.json stays selected and is shown as such.
-func (p *prefsWindow) triggerKey(c *ui.Context, s config.Settings) {
+func (p *prefsWindow) triggerKey(c *ui.Context, s config.Settings, compact ...bool) {
 	keys := []string{macos.KeyFn, macos.KeyRightOption, macos.KeyRightCommand, macos.KeyRightControl}
 	names := make([]string, len(keys))
 	for i, key := range keys {
@@ -759,7 +747,13 @@ func (p *prefsWindow) triggerKey(c *ui.Context, s config.Settings) {
 			chosen = names[i]
 		}
 	}
-	if ui.Select(c.Key("sel"), &chosen, names).Label(T("sKey")).Width(170).Changed() {
+	sel := ui.Select(c.Key("sel"), &chosen, names).Label(T("sKey"))
+	if len(compact) > 0 && compact[0] {
+		sel.Grow(1).MinWidth(0).Height(28).Padding(0, 8)
+	} else {
+		sel.Width(170)
+	}
+	if sel.Changed() {
 		for i, n := range names {
 			if n == chosen && keys[i] != s.TriggerKey {
 				key := keys[i]
@@ -837,4 +831,14 @@ func (p *prefsWindow) clearHistory() {
 			p.say("cleared")
 		}
 	})
+}
+
+// groupTextInput keeps editable fields distinct from their container.
+func groupTextInput(c *ui.Context, value *string, inset bool) ui.Element {
+	t := c.Theme()
+	fill := pick(t, "#ffffff", "#303030")
+	if inset {
+		fill = settingsGroupColor(t)
+	}
+	return ui.TextInput(c, value).Background(fill).Border(1, settingsGroupLine(c)).Radius(8)
 }

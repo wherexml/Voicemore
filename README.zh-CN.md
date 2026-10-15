@@ -1,21 +1,38 @@
-<p align="center"><img src="resources/icon.png" width="112" alt="Voicemore 图标"></p>
+<p align="center"><img src="https://raw.githubusercontent.com/wherexml/Voicemore/main/resources/icon.png" width="112" alt="Voicemore 图标"></p>
 <h1 align="center">Voicemore</h1>
 <p align="center">自然说话，文字落在光标所在处。</p>
-<p align="center"><a href="README.md">English</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.4">下载 Apple Silicon 版</a></p>
+<p align="center"><a href="README.md">English</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.5">下载 Apple Silicon 版</a></p>
 
 Voicemore 是原生 macOS 语音输入工具。按下 **Fn** 开始说话，再按一次 **Fn**，识别结果就会写入当前输入框。支持本地识别、云端服务，以及按需使用语言模型整理表达。
+
+## 0.3.5 更新
+
+- 设置与词典恢复清晰的分组底色，输入框更易辨认，模型下拉菜单统一对齐。
+- 纠正建议直接展示原始输入，可一键添加关键词或接受替换规则。
+- 更新首页、历史时间轴和首次使用权限引导。
+- 本地语音模型按需加载、空闲释放内存，改善停顿后的句尾预览。
+- 改善发送或追加输入后的纠正学习、云端热词与远程桌面输入。
+- 听写胶囊随当前焦点跟随屏幕与桌面。
+
+## 界面预览
+
+![首页与历史概览](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/home-en.jpg)
+
+![模型设置](https://raw.githubusercontent.com/wherexml/Voicemore/main/docs/public/images/models-en.jpg)
+
+图片使用英文界面示例数据，原生 macOS 渲染可能略有不同。
 
 ## 下载与安装
 
 **需要 Apple Silicon（M 系列）芯片及 macOS 26.2 或更新系统。** 此安装包不支持 Intel Mac。最低系统版本由内置 MLX 运行库决定；已在 macOS 26.2 arm64 完成原生安装与本地听写验收，本地开发也已在 macOS 27.0 arm64 验证。
 
-1. 从 [v0.3.4 发布页](https://github.com/wherexml/Voicemore/releases/tag/v0.3.4)下载 **Voicemore-0.3.4-arm64.dmg**。
+1. 从 [v0.3.5 发布页](https://github.com/wherexml/Voicemore/releases/tag/v0.3.5)下载 **Voicemore-0.3.5-arm64.dmg**。
 2. 打开 DMG，将 **Voicemore 拖到 Applications（应用程序）**。
 3. 推出磁盘映像，从“应用程序”启动 Voicemore。
 4. 在“系统设置 → 隐私与安全性”授予**麦克风、辅助功能、输入监控**权限；授予键盘相关权限后重启应用。
 5. 在“设置 → 模型”管理本地语音模型，选择下载部署；显示“已就绪”后即可在文本编辑器中尝试听写。
 
-**签名与公证：** v0.3.4 已完成 Developer ID 正式签名与 Apple 公证，App 和 DMG 均附带公证票据。从开发签名旧版升级后，macOS 可能要求重新确认麦克风、辅助功能与输入监控权限。
+**签名与公证：** v0.3.5 已完成 Developer ID 正式签名与 Apple 公证，App 和 DMG 均附带公证票据。从开发签名旧版升级后，macOS 可能要求重新确认麦克风、辅助功能与输入监控权限。
 
 DMG **包含推理运行环境，不包含模型权重**。首次本地部署会下载约 **2.47 GB** 模型文件，并解压约 **0.65 GB** 运行环境。下载时需要联网，完成后本地识别可离线使用；也可复制已有的兼容模型。云端识别需要自行配置服务商账号、凭证并保持联网。
 
@@ -41,7 +58,7 @@ DMG **包含推理运行环境，不包含模型权重**。首次本地部署会
 
 ## 模块说明
 
-远程桌面可在“设置 → 通用”添加已运行客户端，选择粘贴快捷键及同步等待时间；默认关闭，文字保留在剪贴板，远端实际写入需自行确认。详见[远程输入规格](docs/public/REMOTE-INPUT.md)。文字整理支持去口癖、明确改口与顺序列表，保护边界见[整理模块](internal/cleanup/README.md)。开发维护从[模块文档索引](docs/public/README.md)继续阅读。
+远程桌面可在“设置 → 文字与粘贴”添加已运行客户端，选择粘贴快捷键及同步等待时间；默认关闭，文字保留在剪贴板，远端实际写入需自行确认。详见[远程输入规格](docs/public/REMOTE-INPUT.md)。文字整理支持去口癖、明确改口与顺序列表，保护边界见[整理模块](internal/cleanup/README.md)。开发维护从[模块文档索引](docs/public/README.md)继续阅读。
 
 ## 隐私与数据
 
@@ -53,7 +70,7 @@ DMG **包含推理运行环境，不包含模型权重**。首次本地部署会
 ~/Library/Application Support/Voice Input/
 ```
 
-保留旧目录名称是为了兼容改名前的安装。API 凭证使用本机 AES-GCM 加密存储；加密密钥也存于本机，并使用严格文件权限。这能避免普通明文暴露，但不能抵御以同一 macOS 用户身份运行的软件。默认保存录音，保留期限设置为 30 天，可在“设置 → 历史与隐私”调整。
+保留旧目录名称是为了兼容改名前的安装。API 凭证使用本机 AES-GCM 加密存储；加密密钥也存于本机，并使用严格文件权限。这能避免普通明文暴露，但不能抵御以同一 macOS 用户身份运行的软件。默认保存录音，保留期限设置为 30 天，可在“设置 → 隐私”调整。
 
 ## 从源码构建
 

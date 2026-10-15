@@ -23,6 +23,15 @@ var (
 )
 
 func init() {
+	texts["modeToggleShort"] = [3]string{"Toggle", "切換", "切换"}
+	texts["modeHoldShort"] = [3]string{"Hold", "按住", "按住"}
+	texts["catDictation"] = [3]string{"Dictation", "聽寫", "听写"}
+	texts["catOutput"] = [3]string{"Text & paste", "文字與貼上", "文字与粘贴"}
+	texts["allRecords"] = [3]string{"All records", "全部記錄", "全部记录"}
+	texts["today"] = [3]string{"Today", "今天", "今天"}
+	texts["homeTry"] = [3]string{"Try dictating", "在這裡試一次", "在这里试一次"}
+	texts["homeCountdown"] = [3]string{"Starting in 3 seconds — switch to your input field", "3 秒後開始，請切換到輸入位置", "3 秒后开始，请切换到输入位置"}
+	texts["homeFinish"] = [3]string{"Finish & insert", "結束並寫入", "结束并写入"}
 
 	texts["basicFormat"] = [3]string{"Basic formatting", "基礎格式", "基础格式"}
 	texts["formatPeriod"] = [3]string{"Omit the final period", "省略末尾句號", "省略末尾句号"}
@@ -217,6 +226,11 @@ var texts = map[string][3]string{
 	"obContinue":     {"Continue", "繼續", "继续"},
 	"obFinish":       {"Finish", "完成", "完成"},
 	"obNotYet":       {"Not done yet", "尚未完成", "尚未完成"},
+	"obStepOf":       {"Step %d of %d", "第 %d 步，共 %d 步", "第 %d 步，共 %d 步"},
+	"obStDone":       {"done", "已完成", "已完成"},
+	"obStTodo":       {"not done", "未完成", "未完成"},
+	"obAgain":        {"Try again", "再試一次", "再试一次"},
+	"obFix":          {"Go there", "前往", "前往"},
 	"obLater":        {"Later", "稍後", "稍后"},
 	"obComplete":     {"Voicemore is set up.", "Voicemore 已設定完成。", "Voicemore 已设置完成。"},
 	"obCompleteText": {"Press %s in any app to dictate. This guide stays available in Settings → General.", "在任何 App 中按 %s 即可聽寫。此指引可在「設定 → 一般」再次打開。", "在任何应用中按 %s 即可听写。此指引可在“设置 → 通用”中再次打开。"},
@@ -268,7 +282,8 @@ var texts = map[string][3]string{
 	"builtinStarting":   {"Loading model", "正在載入模型", "正在加载模型"},
 	"builtinReady":      {"Ready", "已就緒", "已就绪"},
 	"builtinStopping":   {"Stopping", "正在停止", "正在停止"},
-	"builtinStopped":    {"Stopped", "已停止", "已停止"},
+	"builtinStopped":    {"Standby · loads on dictation", "待機 · 聽寫時自動載入", "待机 · 听写时自动加载"},
+	"builtinIdle":       {"Unloads after 5 idle minutes; automatically loads for dictation. Audio is buffered while loading.", "閒置 5 分鐘後釋放記憶體；聽寫時自動載入，載入期間保留錄音。", "空闲 5 分钟后释放内存；听写时自动加载，加载期间保留录音。"},
 	"builtinError":      {"Needs attention", "需要處理", "需要处理"},
 	"builtinLocation":   {"Stored locally: %s", "本機儲存：%s", "本机存储：%s"},
 	// Navigation and the tray.
@@ -374,6 +389,7 @@ var texts = map[string][3]string{
 	"hotOver":        {"The local dictionary exceeds the recognizer's limits and is not sent: %s", "本機詞典超出辨識服務的限制，不會傳送：%s", "本机词典超出识别服务的限制，不会发送：%s"},
 	"pending":        {"Waiting for confirmation (%d)", "等待確認（%d）", "等待确认（%d）"},
 	"noPending":      {"Revise a transcript in History and corrections of names appear here. Nothing applies before you accept it.", "在歷史中修訂轉寫後，專有名詞的更正會出現在這裡。確認前不會生效。", "在历史中修订转写后，专有名词的纠正会出现在这里。确认前不会生效。"},
+	"candOriginal":   {"Original input: ", "原始輸入：", "原始输入："},
 	"candShort":      {"%s · seen %d×", "%s · 出現 %d 次", "%s · 出现 %d 次"},
 	"context":        {"Context", "上下文", "上下文"},
 	"srcRevision":    {"history revision", "歷史修訂", "历史修订"},
@@ -410,10 +426,13 @@ var texts = map[string][3]string{
 	"ignored":        {"Ignored. The same correction will not be proposed again.", "已忽略。同樣的更正不會再提出。", "已忽略。同样的纠正不会再提出。"},
 
 	// Settings.
-	"gPerms":         {"Permissions", "權限", "权限"},
-	"permDragHint":   {"Drag into System Settings to allow access", "拖入系統設定以授權", "拖入系统设置以授权"},
-	"permDragApp":    {"Drag Voicemore to System Settings", "拖移 Voicemore 到系統設定", "拖拽 Voicemore 到系统设置"},
-	"permDragFailed": {"Could not drag the app. Try again.", "無法拖移應用程式，請重試。", "无法拖拽应用，请重试。"},
+	"gPerms":              {"Permissions", "權限", "权限"},
+	"permDragHint":        {"Drag into the list above to allow access.", "拖入上方列表，開啟權限", "拖入上方列表，开启权限"},
+	"permDragSide":        {"Drag into the list to allow access.", "拖入列表，開啟權限", "拖入列表，开启权限"},
+	"permDragGranted":     {"Access allowed", "已開啟權限", "已开启权限"},
+	"permDragUnavailable": {"Open the installed app to drag it here.", "請開啟已安裝的應用程式以拖移授權。", "请打开已安装的应用以拖拽授权。"},
+	"permDragApp":         {"Drag Voicemore to System Settings", "拖移 Voicemore 到系統設定", "拖拽 Voicemore 到系统设置"},
+	"permDragFailed":      {"Could not drag the app. Try again.", "無法拖移應用程式，請重試。", "无法拖拽应用，请重试。"},
 
 	"gGeneral":          {"General", "一般", "通用"},
 	"gTriggerClean":     {"Trigger and text cleanup", "觸發與文字整理", "触发与文字整理"},
@@ -446,7 +465,7 @@ var texts = map[string][3]string{
 	"sDays":             {"Keep audio for (days)", "錄音保留天數", "录音保留天数"},
 	"sDaysHint":         {"Expired audio is deleted; text stays. 0 keeps it", "到期會刪除錄音，文字保留。0 表示不自動刪除", "到期会删除录音，文字保留。0 表示不自动删除"},
 	"sObserve":          {"Learn from edits after insertion", "從寫入後的修改學習", "从写入后的修改学习"},
-	"sObserveHint":      {"Reads the same input back once to see how you corrected the inserted text. Off by default", "寫入後讀回同一個輸入框一次，查看你如何更正剛寫入的文字。預設關閉", "写入后读回同一个输入框一次，查看你如何纠正刚写入的文字。默认关闭"},
+	"sObserveHint":      {"Watches corrections until send or timeout; ignores appended text. Suggestions need confirmation. Off by default", "持續觀察修正至傳送或逾時，忽略追加文字；候選詞需確認。預設關閉", "持续观察纠正至发送或超时，忽略追加文字；候选词需确认。默认关闭"},
 	"clearAll":          {"Clear all history and audio…", "清除全部歷史與錄音…", "清空全部历史与录音…"},
 	"clearAsk":          {"Clear all history?", "要清除全部歷史嗎？", "要清空全部历史吗？"},
 	"clearDetail":       {"Every record and recording is deleted. This cannot be undone. The dictionary is not affected.", "所有記錄與錄音都會刪除，無法還原。詞典不受影響。", "所有记录与录音都会删除，无法撤销。词典不受影响。"},
@@ -601,7 +620,8 @@ var texts = map[string][3]string{
 	"eCloudUnreachable": {"The provider cannot be reached: %s", "無法連上供應商：%s", "无法连接服务商：%s"},
 	"eCloudProtocol":    {"The provider answered in an unexpected way: %s", "供應商的回應不符預期：%s", "服务商的响应不符合预期：%s"},
 	"eCloudService":     {"The provider reported an error (%s): %s", "供應商回報錯誤（%s）：%s", "服务商报告错误（%s）：%s"},
-	"hotwordCloud":      {"The dictionary's term hints are not sent to cloud recognizers.", "詞典的詞彙提示不會傳送給雲端辨識服務。", "词典的词汇提示不会发送给云端识别服务。"},
+	"hotwordVolc":       {"Doubao prioritizes recent terms in live preview (100 tokens) and uses the submitted dictionary in the final second pass. Hints do not force replacements.", "豆包即時預覽優先使用新詞（100 tokens），最終二遍辨識使用提交的詞典；熱詞不保證強制替換。", "豆包实时预览优先使用新词（100 tokens），最终二遍识别使用提交的词典；热词不保证强制替换。"},
+	"hotwordCloud":      {"This recognizer does not support dictionary term hints.", "目前辨識服務不支援詞典詞彙提示。", "当前识别服务不支持词典词汇提示。"},
 
 	// Errors of the model services.
 	"eNotConfigured":    {"Text cleanup is not set up: set its URL and model in Settings → Models → Text cleanup.", "尚未設定文字整理：請在「設定 → 模型 → 文字整理」填寫網址與模型。", "尚未配置文字整理：请在“设置 → 模型 → 文字整理”中填写地址与模型。"},
@@ -648,7 +668,7 @@ var texts = map[string][3]string{
 	"detailPractice":   {"practice in the setup guide; not inserted into any app", "設定指引中的練習；未寫入任何 App", "设置指引中的练习；未写入任何应用"},
 	"detailNoElement":  {"the app exposed no focused element, so only the app could be checked", "該 App 未提供焦點元素，只能核對 App 本身", "该应用未提供焦点元素，只能核对应用本身"},
 	"remoteTitle":      {"Remote desktops", "遠端桌面", "远程桌面"},
-	"remoteHelp":       {"Add any running client and choose its paste shortcut. Enable clipboard sync in the client. Click the remote input before dictating. Text stays on the clipboard. For clients that map shortcuts, choose Mac · ⌘V even for Windows.", "加入正在執行的客戶端並選擇貼上快捷鍵。請開啟客戶端剪貼簿同步，聽寫前點選遠端輸入框。文字會保留在剪貼簿。客戶端若會轉換快捷鍵，Windows 也可選 Mac · ⌘V。", "添加任意已打开的客户端并选择粘贴快捷键。请开启客户端剪贴板同步，听写前点击远端输入框。文字会保留在剪贴板。客户端若会转换快捷键，Windows 也可选 Mac · ⌘V。"},
+	"remoteHelp":       {"Add any running client and choose its paste shortcut. Enable clipboard sync in the client. Click the remote input before dictating. Text stays on the clipboard. Choose the shortcut that works when you paste manually in this client, regardless of the remote operating system.", "加入正在執行的客戶端並選擇貼上快捷鍵。請開啟客戶端剪貼簿同步，聽寫前點選遠端輸入框。文字會保留在剪貼簿。請選擇在此客戶端手動貼上時有效的快捷鍵，與遠端系統無關。", "添加任意已打开的客户端并选择粘贴快捷键。请开启客户端剪贴板同步，听写前点击远端输入框。文字会保留在剪贴板。请选择在此客户端手动粘贴时有效的快捷键，与远端系统无关。"},
 	"remoteOff":        {"Off", "關閉", "关闭"},
 	"remoteShortcut":   {"Paste shortcut", "貼上快捷鍵", "粘贴快捷键"},
 	"remoteRemove":     {"Remove", "移除", "移除"},

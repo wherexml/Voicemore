@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.5
+
+- Restore visible Settings and Dictionary groups, clearer provider fields, and aligned model pickers.
+- Simplify correction candidates to original input and direct keyword/replacement actions.
+- Refresh Home, history timeline, onboarding and shared permission guidance.
+- Load local ASR on demand, release idle model memory, and refresh sentence-tail previews after pauses.
+- Improve cloud hotwords, correction learning after send/append, and remote desktop input.
+- Keep dictation capsules with the active display and desktop.
+- Fix README image links and update interface documentation.
+
+恢复设置与词典分组底色，简化纠正候选，优化模型选择与输入框；更新首页、历史时间轴及权限引导；本地模型按需加载并在空闲时释放内存，改善句尾预览、云端热词、发送与追加输入后的纠正学习及远程输入；胶囊跟随当前屏幕和桌面。修复 README 图片链接。
+
 ## 0.3.4
 
 - Ship Developer ID signed, Apple-notarized app and DMG with stapled tickets.

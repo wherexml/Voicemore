@@ -40,6 +40,9 @@ type InsertOptions struct {
 	// the earlier content is put back.
 	RestoreDelayMs int
 	RemoteInputs   []config.RemoteInput
+	// OnPasted starts observation before clipboard restoration. Local successful pastes only.
+	// The callback may retain Target until observation finishes; the caller owns its release.
+	OnPasted func(*Target)
 }
 
 // InsertResult says what could be checked about an insertion.

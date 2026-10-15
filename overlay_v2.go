@@ -2,9 +2,9 @@ package main
 
 import (
 	"math"
-	"strings"
 	"time"
 
+	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
 
 	"voiceinput/internal/session"
@@ -21,7 +21,7 @@ import (
 //
 // Spacing, as the mock's tokens: inset 8 + pad 10 from the pill's edge to
 // the mark; mark to label 9; label to divider 9, divider to words 11;
-// words or label to Finish 6, Finish to the edge 8; Close 8 outside.
+// symmetric pill padding; Close 8 outside.
 
 const (
 	overlayV2W   = 520 // room for the widest pill and Close on either side
@@ -30,15 +30,15 @@ const (
 	v2Pad        = 10
 	v2Gap        = 9
 	v2TextPad    = 11
-	v2Ctl        = 24 // the Close and Finish circles
+	v2Ctl        = 24 // the Close circle
 	v2Hit        = 32 // their hit targets, 4 px around the circles
 	v2HitOut     = (v2Hit - v2Ctl) / 2
-	v2CtlGap     = 6
 	v2CloseGap   = 8
 	v2Mark       = 27 // the 27×18 slot of the bars, the star or a glyph
 	v2LiveMax    = 240
 	v2FontSize   = 12
 	v2PanelW     = 300
+	v2HintRoom   = 20 // space above Close for the Esc hint
 	v2PanelGap   = 8
 	v2PanelInner = v2PanelW - 2*14 - 2
 	v2LeaveDelay = 500 * time.Millisecond
@@ -65,7 +65,7 @@ type v2State struct {
 	heard   bool      // the microphone has heard speech: Listening, not Waiting for speech
 	hoverAt time.Time // when the pointer was last over the pill or Close
 	panelH  int       // the measured height of the card, for the window
-	// keyFocus is that Close or Finish had the keyboard focus, shown, in
+	// keyFocus is that Close had the keyboard focus, shown, in
 	// the last frame: Close stays out while it does.
 	keyFocus bool
 	// scroll is the expanded transcript's; it follows the newest words
@@ -191,9 +191,13 @@ func (o *overlay) viewV2(c *ui.Context) {
 	}
 	kind := o.v2Kind()
 	label := T(v2Labels[kind])
-	canFinish := v.Phase == session.Recording && strings.TrimSpace(v.Final+v.Pending) != ""
 	canExpand := kind == v2Listening || kind == v2Quiet || kind == v2Transcribing || kind == v2Cleaning
 	canClose := !o.closing && v.Phase != session.Inserting
+	if canClose {
+		// Keep pointer visibility correct even with Reduce Motion enabled
+		// or while a terminal notice is otherwise idle.
+		c.After(100 * time.Millisecond)
+	}
 	rise := float32(8) * (1 - alpha)
 	if still {
 		rise = 0
@@ -213,7 +217,7 @@ func (o *overlay) viewV2(c *ui.Context) {
 			wrap := ui.Row(c.Key("v2wrap")).AlignItems(ui.Center).Gap(v2CloseGap - v2HitOut)
 			// Keyboard focus shows Close as hovering does; a click, which
 			// focuses without showing it, does not keep it out.
-			hovered := wrap.Hovered() || o.v2.keyFocus
+			hovered := o.v2PointerOver(wrap) || o.v2.keyFocus
 			if hovered {
 				o.v2.hoverAt = now
 			}
@@ -223,8 +227,8 @@ func (o *overlay) viewV2(c *ui.Context) {
 			}
 			wrap.Children(func() {
 				closeFocus := o.v2Close(c, reveal, canClose)
-				finishFocus := o.v2Pill(c, kind, label, canFinish, canExpand)
-				o.v2.keyFocus = closeFocus || finishFocus
+				o.v2Pill(c, kind, label, canExpand)
+				o.v2.keyFocus = closeFocus
 			})
 			ui.Box(c).Size(v2Hit+v2CloseGap-v2HitOut, v2H)
 		})
@@ -236,6 +240,22 @@ func (o *overlay) viewV2(c *ui.Context) {
 			c.After(16 * time.Millisecond)
 		}
 	}
+}
+
+// A reused nonactivating panel can retain the UI engine's last pointer
+// position when it hides or moves. Read the desktop pointer instead of
+// letting a stale Hovered() keep Close visible throughout the next session.
+func (o *overlay) v2PointerOver(wrap ui.Element) bool {
+	if o.win == nil {
+		return wrap.Hovered() // headless renderer
+	}
+	// Also check while stationary: a panel can appear under the pointer,
+	// and mouse-exit events are not guaranteed while the panel is hidden.
+	r := wrap.Bounds()
+	b := o.win.ContentBounds()
+	p := mygo.Screen.CursorScreenPoint()
+	x, y := float32(p.X-b.X), float32(p.Y-b.Y)
+	return r.W > 0 && r.H > 0 && x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
 }
 
 // v2Close is the cancel just outside the pill's left edge: nothing is
@@ -254,13 +274,14 @@ func (o *overlay) v2Close(c *ui.Context, reveal, can bool) bool {
 		return false
 	}
 	b := ui.ButtonBase(c.Key("v2close")).Size(v2Hit, v2Hit).FocusRing(false).
-		Label(T("ovCancel")).Tooltip(T("v2CancelTip"))
+		Label(T("ovCancel"))
 	focus := b.FocusVisible()
 	target := float32(0)
 	if reveal || focus {
 		target = 1
 	}
 	r := b.Animate("reveal", target, 200*time.Millisecond)
+	showHint := r > 0.5 && (o.v2PointerOver(b) || focus)
 	bg := v2CloseBg
 	if r > 0.5 && b.Hovered() {
 		bg = v2CloseHov
@@ -277,6 +298,13 @@ func (o *overlay) v2Close(c *ui.Context, reveal, can bool) bool {
 		var x ui.Path
 		x.MoveTo(cx-d, cy-d).LineTo(cx+d, cy+d).MoveTo(cx+d, cy-d).LineTo(cx-d, cy+d)
 		p.StrokePath(&x, 1.6, v2Ink)
+		if showHint {
+			span := ui.Span{Text: "Esc", Size: 10, Weight: 500, Color: v2Ink}
+			w, h := p.MeasureText(0, span)
+			hint := ui.Rect{X: cx - (w+10)/2, Y: circle.Y - h - 9, W: w + 10, H: h + 4}
+			p.Fill(hint, v2CloseBg, 4)
+			p.RichText(cx-w/2, hint.Y+2, 0, span)
+		}
 	})
 	if r > 0.5 || focus {
 		b.Cursor(ui.CursorPointer)
@@ -287,10 +315,8 @@ func (o *overlay) v2Close(c *ui.Context, reveal, can bool) bool {
 	return focus
 }
 
-// v2Pill builds the pill, and reports whether Finish has the keyboard
-// focus, shown.
-func (o *overlay) v2Pill(c *ui.Context, kind int, label string, canFinish, canExpand bool) (finishFocus bool) {
-	ctrl := o.a.ctrl
+// v2Pill builds the status and live transcript. The trigger key ends recording.
+func (o *overlay) v2Pill(c *ui.Context, kind int, label string, canExpand bool) {
 	inline := o.v2Inline(kind)
 	labelW, _ := c.MeasureText(0, ui.Span{Text: label, Size: v2FontSize, Weight: 500})
 	textW := float32(0)
@@ -300,34 +326,20 @@ func (o *overlay) v2Pill(c *ui.Context, kind int, label string, canFinish, canEx
 	// The words take what the window leaves, up to 20 em: the fixed parts
 	// of the pill and Close's room on both sides come off first.
 	fixed := float32(2*v2Inset+2*v2Pad+v2Mark+v2Gap) + labelW
-	if canFinish {
-		fixed += v2Ctl + v2CtlGap - v2Pad
-	}
 	textCap := max(0, min(v2LiveMax, overlayV2W-2*(v2Hit+v2CloseGap-v2HitOut)-fixed-(v2Gap+1+v2TextPad)))
 	liveTarget := float32(0)
 	if inline != "" {
 		liveTarget = v2Gap + 1 + v2TextPad + min(textW+1, textCap)
 	}
 
-	// With Finish, its 32 px hit target takes 4 px of the inset on its
-	// right and of the gap on its left: the circle stays 6 from the words
-	// and 8 from the edge.
-	edge := float32(v2Inset)
-	if canFinish {
-		edge = v2Inset - v2HitOut
-	}
-	pill := ui.Row(c.Key("v2pill")).Height(v2H).Radius(v2H/2).Padding(0, edge, 0, v2Inset).AlignItems(ui.Center).
+	pill := ui.Row(c.Key("v2pill")).Height(v2H).Radius(v2H/2).Padding(0, v2Inset).AlignItems(ui.Center).
 		Gradient(v2Indigo, v2IndigoEnd, 135).Border(0.5, ui.RGBA(255, 255, 255, 0.11)).
 		Shadow(0, 10, 24, -8, ui.RGBA(20, 27, 56, 0.44)).Label(T("v2Group"))
 	pill.Children(func() {
-		right := float32(v2Pad)
-		if canFinish {
-			right = v2CtlGap - v2HitOut
-		}
-		body := ui.Row(c.Key("v2body")).Height(v2H).Radius(v2H/2).Padding(0, right, 0, v2Pad).AlignItems(ui.Center).
+		body := ui.Row(c.Key("v2body")).Height(v2H).Radius(v2H/2).Padding(0, v2Pad).AlignItems(ui.Center).
 			Label(label)
 		if canExpand {
-			body.Role(ui.RoleButton).Expanded(o.expanded).Tooltip(T("v2PreviewTip")).Cursor(ui.CursorPointer)
+			body.Role(ui.RoleButton).Expanded(o.expanded).Cursor(ui.CursorPointer)
 			if body.Clicked() {
 				// After this frame: resizing the window is not part of building it.
 				go o.win.Update(func() {
@@ -373,37 +385,8 @@ func (o *overlay) v2Pill(c *ui.Context, kind int, label string, canFinish, canEx
 				}
 			})
 		})
-		if canFinish {
-			// Finish ends the recording once.
-			f := ui.ButtonBase(c.Key("v2finish")).Size(v2Hit, v2Hit).FocusRing(false).
-				Label(T("v2FinishTip")).Tooltip(T("v2FinishTip"))
-			finishFocus = f.FocusVisible()
-			bg := ui.RGBA(255, 255, 255, 0.11)
-			if f.Hovered() {
-				bg = ui.RGBA(255, 255, 255, 0.2)
-			}
-			f.Draw(func(p *ui.Painter, r ui.Rect) {
-				cx, cy := r.X+r.W/2, r.Y+r.H/2
-				circle := ui.Rect{X: cx - v2Ctl/2, Y: cy - v2Ctl/2, W: v2Ctl, H: v2Ctl}
-				p.Fill(circle, bg, v2Ctl/2)
-				if finishFocus {
-					p.FocusRing(circle, [4]float32{v2Ctl / 2, v2Ctl / 2, v2Ctl / 2, v2Ctl / 2})
-				}
-				// The mock's 12-unit check, drawn at 11 px.
-				k := float32(11) / 12
-				check := (&ui.Path{}).MoveTo(cx+(2.6-6)*k, cy+(6.3-6)*k).LineTo(cx+(4.8-6)*k, cy+(8.5-6)*k).
-					LineTo(cx+(9.4-6)*k, cy+(3.6-6)*k)
-				p.StrokePath(check, 1.6, v2Ink)
-			})
-			if !o.closing {
-				f.Cursor(ui.CursorPointer)
-				if f.Clicked() {
-					go ctrl.Confirm()
-				}
-			}
-		}
+
 	})
-	return finishFocus
 }
 
 // v2DrawMark paints the 27×18 slot: five bars while working, the mint star
@@ -717,9 +700,6 @@ func init() {
 		"v2MicLost":      {"Microphone lost", "麥克風已斷開", "麦克风已断开"},
 		"v2Failed":       {"Couldn’t dictate", "無法聽寫", "无法听写"},
 		"v2Group":        {"Dictation status", "聽寫狀態", "听写状态"},
-		"v2CancelTip":    {"Cancel (Esc)", "取消（Esc）", "取消（Esc）"},
-		"v2FinishTip":    {"Finish and insert", "結束並寫入", "结束并写入"},
-		"v2PreviewTip":   {"Show or hide the full text", "展開或收起全文", "展开或收起全文"},
 		"v2LiveCap":      {"Live transcript", "即時轉寫", "实时转写"},
 		"v2CleaningCap":  {"Original transcript", "原始轉寫", "原始转写"},
 		"v2NoWords":      {"No words yet", "尚無文字", "尚无文字"},

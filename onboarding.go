@@ -16,11 +16,12 @@ import (
 )
 
 // onboardWindow is the first-run guide: a window of its own, about
-// 820×600, laid out as a setup wizard as mock/claude.html has it. A slim
-// title bar with the brand, a four-step progress bar, a padded content
-// region that starts at its top, and a footer with Back on the left and
-// Later and the one primary action on the right. While it shows, the main
-// window is hidden.
+// 1040×600, one focus per screen as mock/claude.html has it (its default
+// Flat surface). A bare title bar with only the window controls; a stage
+// of at most 540 px, centered, with the step's visual, "Step n of 4", the
+// title and the one thing to do; and a footer with Back on the left, the
+// progress as four dots in the middle, and Later beside the one primary
+// action on the right. While it shows, the main window is hidden.
 //
 // Everything in it is real. A step is complete when the app is actually
 // ready for it, never because Continue was pressed:
@@ -51,6 +52,13 @@ type onboardWindow struct {
 	practice    string // the text of the practice field
 	practiceRun int    // counts practice runs and their discards: a sink of an earlier count is stale
 	permsWere   bool   // the permissions were all granted when last looked at
+
+	// The stage is centered in the height between the title bar and the
+	// footer, from its height in the last frame (stageH) for the content
+	// it showed (stageKey).
+	stageKey    string
+	stageH      float32
+	practicedAt time.Time // when the last practice transcript arrived, for the result's entrance
 }
 
 // The steps, by the text key of their name; the heading's key adds "h".
@@ -60,9 +68,9 @@ func newOnboardWindow(a *app) *onboardWindow {
 	o := &onboardWindow{a: a}
 	o.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:           T("obTitle"),
-		Width:           820,
+		Width:           1040,
 		Height:          600,
-		MinWidth:        640,
+		MinWidth:        900,
 		MinHeight:       480,
 		Hidden:          true,
 		StateKey:        "onboarding",
@@ -180,6 +188,10 @@ func (o *onboardWindow) done(i int, s config.Settings) bool {
 	return s.Onboarding.Practiced
 }
 
+// icInsert is the third move of the introduction: lines of text and the
+// cursor they are inserted at, in the family of icons.go.
+var icInsert = icon(`<path d="M2.4 4.4h6.4M2.4 8h4.4M2.4 11.6h5.6M12 3.4v9.2M10.6 3.4h2.8M10.6 12.6h2.8"/>`)
+
 func (o *onboardWindow) view(c *ui.Context) {
 	t := useTheme(c)
 	bar := c.TitleBar()
@@ -217,142 +229,215 @@ func (o *onboardWindow) view(c *ui.Context) {
 	if c.Shortcut(ui.Cmd, ui.KeyW) {
 		o.leave()
 	}
-	ui.Column(c).Fill().Children(func() {
-		// The title bar: the brand, centered; the window controls are macOS's.
-		ui.Row(c.Key("title")).Height(max(bar.Height, 40)).FillWidth().Gap(7).Justify(ui.Center).AlignItems(ui.Center).
-			Background(fillColor(t)).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).DragWindow().Children(func() {
-			ui.Box(c).Size(16, 16).Draw(drawAppMark)
-			ui.Text(c, "Voicemore").FontSize(12.5).FontWeight(500).SingleLine()
-			ui.Text(c, "·").FontSize(12.5).TextColor(t.TextMuted)
-			ui.Text(c, T("obTitle")).FontSize(12.5).TextColor(t.TextMuted).SingleLine()
-		})
+	titleH := max(bar.Height, 40)
+	const footH = 64
+	ui.Column(c).Fill().Background(t.Background).Children(func() {
+		// The title bar is bare: the window controls are macOS's, and the
+		// strip only moves the window. It shares the window's surface.
+		ui.Box(c.Key("title")).Height(titleH).FillWidth().DragWindow()
 
-		// The progress bar: four steps joined by a line that fills as they complete.
-		ui.Row(c.Key("steps")).Height(60).Padding(0, 40).AlignItems(ui.Center).BorderWidth(0, 0, 1, 0).BorderColor(t.Border).Children(func() {
-			for i, name := range obSteps {
-				o.stepButton(c, i, T(name), done[i], !fin && i == step, true)
-				if i < len(obSteps)-1 {
-					line := t.Border
-					if done[i] {
-						line = t.Success
-					}
-					ui.Box(c).Grow(1).MinWidth(14).Height(2).Radius(1).Background(line)
+		// The stage: one centered column, at most 540 wide (the practice
+		// step excepted), centered in the
+		// height left by the title bar and the footer. Its height is that of
+		// the last frame; when it changes, the frame is drawn again once.
+		key := fmt.Sprintf("stage-%d-%t", step, fin)
+		top := float32(8)
+		if b := o.win.ContentBounds(); b.Height > 0 && o.stageKey == key {
+			room := float32(b.Height) - titleH - footH - 32
+			top = max(8, (room-o.stageH)/2)
+		}
+		ui.Scroll(c.Key("body-"+key)).Grow(1).Padding(top, 48, 24).AlignItems(ui.Center).Children(func() {
+			// The practice field keeps the earlier native rule: it widens with
+			// the window, between equal margins. The other steps keep to 540.
+			stage := ui.Column(c.Key(key)).FillWidth()
+			if fin || step != len(obSteps)-1 {
+				stage.MaxWidth(540)
+			}
+			if h := stage.Bounds().H; h > 0 && (o.stageKey != key || abs32(h-o.stageH) > 1) {
+				o.stageKey, o.stageH = key, h
+				c.After(0)
+			}
+			stage.Children(func() {
+				if fin {
+					o.finished(c, s)
+					return
 				}
-			}
-		})
-
-		// The content: one padded region, starting at its top.
-		ui.Scroll(c.Key(fmt.Sprintf("body-%d-%t", step, fin))).Grow(1).Padding(30, 48, 24).Children(func() {
-			if fin {
-				o.finished(c, s)
-				return
-			}
-			if step == len(obSteps)-1 {
-				// The practice surface is the subject here: a quieter title.
-				ui.Text(c, T(obSteps[step]+"h")).FontSize(20).FontWeight(600)
-				ui.Box(c).Height(16)
-			} else {
-				ui.Text(c, T(obSteps[step]+"h")).FontSize(26).FontWeight(600)
+				ui.Row(c.Key("visual")).Height(56).AlignItems(ui.Center).Children(func() { o.visual(c, step, s) })
 				ui.Box(c).Height(22)
-			}
-			switch step {
-			case 0:
-				o.intro(c, s)
-			case 1:
-				o.speech(c, s)
-			case 2:
-				o.permissions(c)
-			default:
-				o.firstDictation(c, s, done[1] && done[2])
-			}
+				ui.Text(c, T("obStepOf", step+1, len(obSteps))+" · "+T(obSteps[step])).FontSize(12).TextColor(t.TextMuted).SingleLine()
+				ui.Box(c).Height(6)
+				ui.Text(c, T(obSteps[step]+"h")).FontSize(24).FontWeight(600)
+				ui.Box(c).Height(22)
+				switch step {
+				case 0:
+					o.intro(c, s)
+				case 1:
+					o.speech(c, s)
+				case 2:
+					o.permissions(c)
+				default:
+					o.firstDictation(c, s, done[1] && done[2])
+				}
+				// Continue waits for the speech model and the permissions; say
+				// so beside the step, not in the footer.
+				if (step == 1 || step == 2) && !done[step] {
+					ui.Box(c).Height(12)
+					ui.Text(c, T("obNeedStep")).FontSize(12.5).TextColor(t.TextMuted)
+				}
+			})
 		})
 
-		// The footer keeps its places in every step: Back, then Later, then
-		// the primary action.
-		ui.Row(c.Key("foot")).Height(60).Padding(0, 24).Gap(10).AlignItems(ui.Center).
-			Background(fillColor(t)).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
-			if fin {
-				if ui.Button(c.Key("review"), T("obReview")).Clicked() {
-					o.review = true
+		// The footer: Back on the left, the progress as dots in the middle,
+		// Later and the one primary action on the right, always in the same
+		// places. Divided by a hairline only.
+		ui.Row(c.Key("foot")).Height(footH).Padding(0, 22).Gap(10).AlignItems(ui.Center).
+			BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
+			ui.Row(c.Key("left")).Grow(1).Basis(0).MinWidth(0).AlignItems(ui.Center).Children(func() {
+				if fin {
+					if quietButton(c, "review", T("obReview"), nil).Clicked() {
+						o.review = true
+					}
+					return
 				}
-				ui.Spacer(c)
-				if ui.PrimaryButton(c.Key("enter"), T("obEnter")).Clicked() {
+				// None on the first step; the zones keep the dots centered.
+				if step > 0 && quietButton(c, "back", T("obBack"), icBack).Clicked() {
+					o.goStep(step - 1)
+				}
+			})
+			o.dots(c, step, done, fin, count)
+			ui.Row(c.Key("right")).Grow(1).Basis(0).MinWidth(0).Gap(8).Justify(ui.End).AlignItems(ui.Center).Children(func() {
+				if fin {
+					if ui.PrimaryButton(c.Key("enter"), T("obEnter")).MinWidth(96).Clicked() {
+						o.leave()
+					}
+					return
+				}
+				later := "obLater"
+				if all {
+					later = "obEnter"
+				}
+				if quietButton(c, "later", T(later), nil).Clicked() {
 					o.leave()
 				}
-				return
-			}
-			if ui.Button(c.Key("back"), T("obBack")).Disabled(step == 0).Clicked() {
-				o.goStep(step - 1)
-			}
-			ui.Spacer(c)
-			if step != 0 && !done[step] {
-				hint := "obNotYet"
-				if step < len(obSteps)-1 {
-					hint = "obNeedStep" // Continue waits for the step; Later does not
+				if step == len(obSteps)-1 {
+					if ui.PrimaryButton(c.Key("finish"), T("obFinish")).MinWidth(96).Disabled(!all).Clicked() {
+						o.leave()
+					}
+				} else if ui.PrimaryButton(c.Key("next"), T("obContinue")).MinWidth(96).Disabled(!canEnter(step + 1)).Clicked() {
+					o.goStep(step + 1)
 				}
-				ui.Text(c, T(hint)).FontSize(12.5).TextColor(t.TextMuted).SingleLine()
-			}
-			later := "obLater"
-			if all {
-				later = "obEnter"
-			}
-			if ui.Button(c.Key("later"), T(later)).Clicked() {
-				o.leave()
-			}
-			if step == len(obSteps)-1 {
-				if ui.PrimaryButton(c.Key("finish"), T("obFinish")).Disabled(!all).Clicked() {
-					o.leave()
-				}
-			} else if ui.PrimaryButton(c.Key("next"), T("obContinue")).Disabled(!canEnter(step + 1)).Clicked() {
-				o.goStep(step + 1)
-			}
+			})
 		})
 	})
 }
 
-// stepButton is a step of the progress bar: a numbered dot, or a check
-// once it is complete, and its name. It goes to its step.
-func (o *onboardWindow) stepButton(c *ui.Context, i int, name string, done, current, enabled bool) {
+func abs32(x float32) float32 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// quietButton is a footer action without a frame: secondary text that
+// takes a fill under the pointer.
+func quietButton(c *ui.Context, key, label string, svg *ui.SVG) ui.Element {
 	t := c.Theme()
-	b := ui.ButtonBase(c.Key("step-"+itoa(i))).Gap(9).Padding(6, 8).Radius(8).AlignItems(ui.Center).Label(name)
-	if enabled && b.Hovered() {
+	b := ui.ButtonBase(c.Key(key)).Height(32).Padding(0, 12).Gap(5).Radius(8).AlignItems(ui.Center).Label(label)
+	if b.Hovered() {
 		b.Background(hoverColor(t))
 	}
 	b.Children(func() {
-		dot := ui.Row(c).Size(24, 24).Radius(12).Justify(ui.Center).AlignItems(ui.Center)
-		switch {
-		case done:
-			dot.Background(okTint(t))
-		case current:
-			dot.Background(t.Accent)
-		default:
-			dot.Border(1, strongLine(t))
+		if svg != nil {
+			ui.Icon(c, svg).FontSize(12).TextColor(softText(t))
 		}
-		dot.Children(func() {
-			switch {
-			case done:
-				ui.Icon(c, icCheck).FontSize(13).TextColor(t.Success)
-			case current:
-				ui.Text(c, itoa(i+1)).FontSize(12).FontWeight(500).TextColor(t.AccentText)
-			default:
-				ui.Text(c, itoa(i+1)).FontSize(12).FontWeight(500).TextColor(t.TextMuted)
-			}
-		})
-		col, weight := t.TextMuted, 400
-		if done {
-			col = softText(t)
-		}
-		if current {
-			col, weight = t.Text, 600
-		}
-		ui.Text(c, name).FontSize(13).FontWeight(weight).TextColor(col).SingleLine()
+		ui.Text(c, label).FontSize(13).TextColor(softText(t)).SingleLine()
 	})
-	if b.Clicked() && enabled { // a step behind an unfinished requirement is not entered from here
-		o.goStep(i)
+	return b
+}
+
+// dots is the progress: one dot per step, the current one a short bar,
+// the done ones darker. Each goes to its step.
+func (o *onboardWindow) dots(c *ui.Context, step int, done [4]bool, fin bool, count int) {
+	t := c.Theme()
+	ui.Row(c.Key("dots")).Shrink(0).Gap(2).AlignItems(ui.Center).Label(T("obTitle") + " — " + T("obProgress", count, len(obSteps))).Children(func() {
+		for i, name := range obSteps {
+			current := !fin && i == step
+			state := T("obStTodo")
+			if done[i] {
+				state = T("obStDone")
+			}
+			w, dw := float32(18), float32(6)
+			if current {
+				w, dw = 30, 18
+			}
+			b := ui.ButtonBase(c.Key("dot-"+itoa(i))).Size(w, 22).Radius(6).Justify(ui.Center).AlignItems(ui.Center).Label(T(name) + ", " + state)
+			col := strongLine(t)
+			switch {
+			case current:
+				col = t.Text
+			case done[i] || b.Hovered():
+				col = softText(t)
+			}
+			b.Children(func() { ui.Box(c).Size(dw, 6).Radius(3).Background(col) })
+			if b.Clicked() {
+				o.goStep(i)
+			}
+		}
+	})
+}
+
+// visual is a step's one quiet picture: the app icon, the two line
+// drawings of the guide (speech becoming text, a switch turned on), and
+// the trigger key.
+func (o *onboardWindow) visual(c *ui.Context, step int, s config.Settings) {
+	switch step {
+	case 0:
+		ui.Box(c).Size(56, 56).Draw(drawAppMark)
+	case 1:
+		ui.Box(c).Size(52, 52).Draw(func(p *ui.Painter, r ui.Rect) { drawSpeechToText(p, r, c.Theme()) })
+	case 2:
+		ui.Box(c).Size(52, 52).Draw(func(p *ui.Painter, r ui.Rect) { drawAllowSwitch(p, r, c.Theme()) })
+	default:
+		keycap(c, keyName(s.TriggerKey), 46, 15)
 	}
 }
 
-// intro is the first step: press the key, speak, the text appears.
+// ink is the theme's text color at an opacity, for the line drawings.
+func ink(t *ui.Theme, a float32) ui.Color {
+	if t.Dark {
+		return ui.RGBA(250, 250, 250, a)
+	}
+	return ui.RGBA(38, 38, 38, a)
+}
+
+// drawSpeechToText is mock/assets/onboarding-speech-to-text.svg: four
+// level bars beside three lines of text, on a 48 grid centered in r.
+func drawSpeechToText(p *ui.Painter, r ui.Rect, t *ui.Theme) {
+	u := float32(1)
+	x0, y0 := r.X+(r.W-48)/2, r.Y+(r.H-48)/2
+	const w = 2.25
+	for _, b := range [][3]float32{{8, 20, 28}, {12.5, 16, 32}, {17, 13, 35}, {21.5, 19, 29}} {
+		p.Fill(ui.Rect{X: x0 + (b[0]-w/2)*u, Y: y0 + (b[1]-w/2)*u, W: w, H: (b[2] - b[1] + w) * u}, ink(t, 1), w/2)
+	}
+	for _, l := range [][3]float32{{28, 40, 18}, {28, 40, 24}, {28, 35, 30}} {
+		p.Fill(ui.Rect{X: x0 + (l[0]-w/2)*u, Y: y0 + (l[2]-w/2)*u, W: (l[1] - l[0] + w) * u, H: w}, ink(t, 0.42), w/2)
+	}
+}
+
+// drawAllowSwitch is mock/assets/onboarding-allow-switch.svg: a System
+// Settings switch turned on, with a light check where the knob was.
+func drawAllowSwitch(p *ui.Painter, r ui.Rect, t *ui.Theme) {
+	x0, y0 := r.X+(r.W-48)/2, r.Y+(r.H-48)/2
+	track := ui.Rect{X: x0 + 5, Y: y0 + 13, W: 38, H: 22}
+	p.Fill(track, ink(t, 0.06), 11)
+	p.Stroke(track, ink(t, 1), 11, 2)
+	p.Fill(ui.Rect{X: x0 + 25, Y: y0 + 17, W: 14, H: 14}, ink(t, 1), 7)
+	check := (&ui.Path{}).MoveTo(x0+11.8, y0+24.3).LineTo(x0+14.3, y0+26.8).LineTo(x0+19.2, y0+21.4)
+	p.StrokePath(check, 2, ink(t, 0.45))
+}
+
+// intro is the first step: press the key, speak, the text appears. One
+// sequence on the sunken well, each move's picture in a 64 px column.
 func (o *onboardWindow) intro(c *ui.Context, s config.Settings) {
 	t := c.Theme()
 	key := keyName(s.TriggerKey)
@@ -360,34 +445,44 @@ func (o *onboardWindow) intro(c *ui.Context, s config.Settings) {
 	if s.TriggerMode == config.TriggerHold {
 		first, third = T("obI1holdText"), T("obI3holdText")
 	}
-	item := func(k string, n int, visual func(), title, text string) {
-		ui.Column(c.Key(k)).Grow(1).Basis(0).MinWidth(0).Children(func() {
-			ui.Row(c).Height(52).AlignItems(ui.Center).Children(visual)
-			ui.Box(c).Height(14)
-			ui.Row(c).Gap(7).AlignItems(ui.Center).Children(func() {
-				ui.Text(c, itoa(n)).FontSize(11).FontWeight(500).TextColor(t.TextMuted)
-				ui.Text(c, title).FontSize(15).FontWeight(600)
+	item := func(k string, visual func(), title, text string) {
+		ui.Row(c.Key(k)).Gap(14).Padding(12, 0).AlignItems(ui.Center).Children(func() {
+			ui.Row(c).Width(64).Height(40).Shrink(0).Justify(ui.Center).AlignItems(ui.Center).Clip().Children(visual)
+			ui.Column(c).Grow(1).MinWidth(0).Gap(1).Children(func() {
+				ui.Text(c, title).FontSize(14).FontWeight(600)
+				ui.Text(c, text).FontSize(13).LineHeight(1.5).TextColor(t.TextMuted)
 			})
-			ui.Box(c).Height(5)
-			ui.Text(c, text).FontSize(14).LineHeight(1.55).TextColor(softText(t))
 		})
 	}
-	ui.Row(c).Gap(32).AlignItems(ui.Start).Children(func() {
-		item("press", 1, func() { keycap(c, key, 38, 13) }, T("obI1", key), first)
-		item("speak", 2, func() { ui.Box(c).Size(146, 34).Draw(drawPillPreview) }, T("obI2"), T("obI2text"))
-		item("text", 3, func() { ui.Box(c).Size(96, 20).Draw(drawCaretLine) }, T("obI3"), third)
+	ui.Column(c.Key("intro")).Radius(12).Background(fillColor(t)).Padding(4, 18).Gap(1).Dividers(1, t.Border).Children(func() {
+		item("press", func() { keycap(c, key, 30, 12.5) }, T("obI1", key), first)
+		item("speak", func() { capsuleMini(c, s) }, T("obI2"), T("obI2text"))
+		item("text", func() { ui.Icon(c, icInsert).FontSize(24).TextColor(softText(t)) }, T("obI3"), third)
 	})
 }
 
-// drawCaretLine pictures inserted text: three words and a caret after them.
-func drawCaretLine(p *ui.Painter, r ui.Rect) {
-	grey := ui.RGBA(128, 127, 120, 0.45)
-	x, cy := r.X, r.Y+r.H/2
-	for _, w := range []float32{26, 38, 16} {
-		p.Fill(ui.Rect{X: x, Y: cy - 3, W: w, H: 6}, grey, 3)
-		x += w + 4
+// capsuleMini is the capsule of the chosen style, small: Indigo is
+// overlay_v2.go's pill with five 3 px bars, the last mint, 28 px high;
+// Classic is the black pill of overlay.go with its level wave.
+func capsuleMini(c *ui.Context, s config.Settings) {
+	if s.CapsuleStyle == config.CapsuleClassic {
+		ui.Row(c).Height(28).Padding(0, 10).Gap(3).Radius(14).AlignItems(ui.Center).Background(ui.RGB(42, 44, 50)).Children(func() {
+			for _, h := range []float32{4, 8, 12, 6, 13, 9, 5} {
+				ui.Box(c).Size(2, h).Radius(1).Background(ui.RGBA(255, 255, 255, 0.8))
+			}
+		})
+		return
 	}
-	p.Fill(ui.Rect{X: x, Y: cy - 9, W: 1.5, H: 18}, ui.RGB(50, 102, 173), 0.75)
+	ui.Row(c).Height(28).Padding(0, 10).Gap(3).Radius(14).AlignItems(ui.Center).
+		Gradient(v2Indigo, v2IndigoEnd, 135).Border(0.5, ui.RGBA(255, 255, 255, 0.11)).Children(func() {
+		for i, h := range []float32{8, 13, 17, 11, 7} {
+			col := v2Ink
+			if i == 4 {
+				col = v2Mint
+			}
+			ui.Box(c).Size(3, h).Radius(1.5).Background(col)
+		}
+	})
 }
 
 // choice is one of the two options of the speech step, drawn as a card
@@ -396,9 +491,10 @@ func (o *onboardWindow) choice(c *ui.Context, key, title, text string, on bool) 
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key(key)).Grow(1).Basis(0).MinWidth(0).Padding(14, 16).Gap(12).Radius(12).Justify(ui.Start).AlignItems(ui.Start).Label(title)
 	border := t.Border
+	b.Background(cardColor(t))
 	if on {
-		border = strongLine(t)
-		b.Background(hoverColor(t))
+		border = t.TextMuted
+		b.Background(fillColor(t))
 	} else if b.Hovered() {
 		border = strongLine(t)
 	}
@@ -444,8 +540,15 @@ func (o *onboardWindow) speech(c *ui.Context, s config.Settings) {
 			o.change(func(ob *config.Onboarding) { ob.Cloud = true })
 		}
 	})
-	ui.Box(c).Height(20)
+	ui.Box(c).Height(14)
+	ui.Column(c.Key("branch")).Radius(12).Background(fillColor(t)).Padding(14, 16).Children(func() { o.speechBranch(c, s) })
+}
 
+// speechBranch is the state and the actions of the chosen branch, on the
+// sunken well under the two choices.
+func (o *onboardWindow) speechBranch(c *ui.Context, s config.Settings) {
+	t := c.Theme()
+	cloud := s.Onboarding.Cloud
 	a := s.ASRAssign
 	if cloud {
 		// Nothing is said here until there is something to report: a cloud
@@ -527,66 +630,108 @@ func (o *onboardWindow) speech(c *ui.Context, s config.Settings) {
 	})
 }
 
-// permissions is the third step. The states are what macOS reports, and
-// the buttons do what those of Settings → Permissions do: ask, or open the
-// pane of System Settings where the permission is given.
+// permissions is the third step, revealed in order. The states are what
+// macOS reports. Granted rows fold to a quiet line; the first missing one
+// is the focus, with its reason and the primary button; the ones after it
+// wait with a plain button. The buttons do what those of Settings →
+// Permissions do: ask for the microphone, or open System Settings with the
+// drag helper for Accessibility and Input Monitoring.
 func (o *onboardWindow) permissions(c *ui.Context) {
 	t := c.Theme()
 	c.After(time.Second) // they are granted outside the app: look again
 	mic := macos.MicrophoneStatus()
 	ax, input := macos.AccessibilityTrusted(false), macos.InputMonitoringGranted(false)
-	row := func(key string, svg *ui.SVG, name, why string, control func()) {
-		ui.Row(c.Key(key)).Gap(14).MinHeight(62).Padding(10, 0).AlignItems(ui.Center).Children(func() {
-			ui.Icon(c, svg).FontSize(18).TextColor(t.TextMuted)
-			ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
-				ui.Text(c, name).FontSize(14).FontWeight(500)
-				ui.Text(c, why).FontSize(13).TextColor(t.TextMuted)
-			})
-			ui.Row(c).Shrink(0).Gap(8).AlignItems(ui.Center).Children(control)
-		})
+	type perm struct {
+		key     string
+		svg     *ui.SVG
+		name    string
+		why     string
+		granted bool
+		act     func(c *ui.Context, primary bool)
 	}
-	granted := func() {
-		ui.Box(c).Size(8, 8).Radius(4).Background(t.Success)
-		ui.Text(c, T("granted")).FontSize(13).SingleLine()
+	button := func(c *ui.Context, key, label string, primary bool) bool {
+		if primary {
+			return ui.PrimaryButton(c.Key(key), label).Clicked()
+		}
+		return ui.Button(c.Key(key), label).Clicked()
 	}
-	ui.Column(c.Key("perms")).Radius(12).Background(cardColor(t)).Border(1, t.Border).Padding(0, 16).Gap(1).Dividers(1, t.Border).Children(func() {
-		row("mic", icMic, T("pMic"), T("obWhyMic"), func() {
-			switch mic {
-			case "authorized":
-				granted()
-			case "undetermined":
-				if ui.Button(c.Key("ask"), T("request")).Clicked() {
+	perms := []perm{
+		{"mic", icMic, T("pMic"), T("obWhyMic"), mic == "authorized", func(c *ui.Context, primary bool) {
+			if mic == "undetermined" {
+				if button(c, "ask", T("request"), primary) {
 					macos.RequestMicrophone(func(bool) { o.a.refreshAll() })
 				}
-			default: // denied: macOS will not ask again
-				ui.Text(c, T("obDenied")).FontSize(13).TextColor(t.Danger).SingleLine()
-				if ui.Button(c.Key("open"), T("openSettings")).Clicked() {
-					macos.OpenPrivacySettings("Privacy_Microphone")
+				return
+			}
+			// Denied: macOS will not ask again.
+			ui.Text(c, T("obDenied")).FontSize(13).TextColor(t.Danger).SingleLine()
+			if button(c, "open", T("openSettings"), primary) {
+				macos.OpenPrivacySettings("Privacy_Microphone")
+			}
+		}},
+		{"ax", icPerson, T("pAx"), T("obWhyAx"), ax, func(c *ui.Context, primary bool) {
+			if button(c, "ask", T("request"), primary) {
+				o.a.prefs.showPermissionDrag("Privacy_Accessibility")
+			}
+		}},
+		{"input", icKeyboard, T("pInput"), T("obWhyInput"), input, func(c *ui.Context, primary bool) {
+			if button(c, "ask", T("request"), primary) {
+				o.a.prefs.showPermissionDrag("Privacy_ListenEvent")
+			}
+		}},
+	}
+	next := -1
+	for i, p := range perms {
+		if !p.granted {
+			next = i
+			break
+		}
+	}
+	ui.Column(c.Key("perms")).Radius(12).Background(fillColor(t)).Padding(0, 16).Gap(1).Dividers(1, t.Border).Children(func() {
+		for i, p := range perms {
+			focus := i == next
+			height := float32(52)
+			switch {
+			case p.granted:
+				height = 44
+			case focus:
+				height = 64
+			}
+			ui.Row(c.Key(p.key)).Gap(14).MinHeight(height).Padding(10, 0).AlignItems(ui.Center).Children(func() {
+				if p.granted {
+					ui.Row(c).Size(18, 18).Radius(9).Justify(ui.Center).AlignItems(ui.Center).Background(okTint(t)).Children(func() {
+						ui.Icon(c, icCheck).FontSize(11).TextColor(t.Success)
+					})
+				} else {
+					col := t.TextMuted
+					if focus {
+						col = softText(t)
+					}
+					ui.Icon(c, p.svg).FontSize(18).TextColor(col)
 				}
-			}
-		})
-		row("ax", icPerson, T("pAx"), T("obWhyAx"), func() {
-			if ax {
-				granted()
-				return
-			}
-			ui.Text(c, T("notGranted")).FontSize(13).TextColor(t.Danger).SingleLine()
-			if ui.Button(c.Key("ask"), T("request")).Clicked() {
-				macos.AccessibilityTrusted(true)
-			}
-		})
-		row("input", icKeyboard, T("pInput"), T("obWhyInput"), func() {
-			if input {
-				granted()
-				return
-			}
-			ui.Text(c, T("notGranted")).FontSize(13).TextColor(t.Danger).SingleLine()
-			if ui.Button(c.Key("open"), T("openSettings")).Clicked() {
-				macos.OpenPrivacySettings("Privacy_ListenEvent")
-			}
-		})
+				ui.Column(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
+					name := ui.Text(c, p.name).FontSize(14)
+					switch {
+					case p.granted:
+						name.TextColor(softText(t))
+					case focus:
+						name.FontWeight(500)
+						ui.Text(c, p.why).FontSize(12.5).TextColor(t.TextMuted)
+					default:
+						name.TextColor(t.TextMuted)
+					}
+				})
+				ui.Row(c).Shrink(0).Gap(8).AlignItems(ui.Center).Children(func() {
+					if p.granted {
+						ui.Box(c).Size(8, 8).Radius(4).Background(t.Success)
+						ui.Text(c, T("granted")).FontSize(13).SingleLine()
+						return
+					}
+					p.act(c, focus)
+				})
+			})
+		}
 	})
-	ui.Box(c).Height(14)
 	note := T("obPermsNote")
 	switch {
 	case mic != "authorized" && mic != "undetermined":
@@ -597,7 +742,8 @@ func (o *onboardWindow) permissions(c *ui.Context) {
 		note = ""
 	}
 	if note != "" {
-		ui.Text(c, note).FontSize(13).TextColor(t.TextMuted)
+		ui.Box(c).Height(12)
+		ui.Text(c, note).FontSize(12.5).TextColor(t.TextMuted)
 	}
 }
 
@@ -608,6 +754,9 @@ func (o *onboardWindow) permissions(c *ui.Context) {
 // clipboard and is never observed (internal/session). The step is complete
 // when that run delivers a transcript that is not empty, and from nothing
 // else: the history is not consulted and typing in the field does not count.
+//
+// Above the field: what is still missing, each with the way to it, while
+// the run cannot start; or, once a dictation is in, the result line.
 func (o *onboardWindow) firstDictation(c *ui.Context, s config.Settings, ready bool) {
 	t := c.Theme()
 	ctrl := o.a.ctrl
@@ -616,13 +765,74 @@ func (o *onboardWindow) firstDictation(c *ui.Context, s config.Settings, ready b
 	practicing := ctrl.Practicing()
 	recording := practicing && phase == session.Recording
 	failed := practicing && phase == session.Failed
+	// A run that is Done has delivered its transcript; the controller keeps
+	// it Practicing until the capsule's dismissal, so Done counts as finished
+	// here, or the result would miss its entrance.
+	practiced := s.Onboarding.Practiced && (!practicing || phase == session.Done)
+
+	if !ready && !practicing {
+		type need struct {
+			step       int
+			name, what string
+		}
+		var needs []need
+		if !o.speechReady(s) {
+			what := T("obStTodo")
+			if st := o.a.localASR.Snapshot(); s.ASRAssign.Provider == providers.Local && st.Busy() {
+				what = localASRState(st)
+			}
+			needs = append(needs, need{1, T("obS2"), what})
+		}
+		if !permissionsGranted() {
+			needs = append(needs, need{2, T("obS3"), T("obStTodo")})
+		}
+		ui.Column(c.Key("needs")).Radius(12).Background(noticeColor(t)).Padding(12, 14).Gap(2).Children(func() {
+			ui.Text(c, T("obNeedFirst")).FontSize(13).FontWeight(500)
+			for _, n := range needs {
+				ui.Row(c.Key("need-"+itoa(n.step))).MinHeight(34).Gap(10).AlignItems(ui.Center).Children(func() {
+					ui.Text(c, n.name).FontSize(13).SingleLine()
+					ui.Text(c, n.what).FontSize(12.5).TextColor(t.TextMuted).SingleLine()
+					ui.Spacer(c)
+					if ui.Button(c.Key("go"), T("obFix")).Clicked() {
+						o.goStep(n.step)
+					}
+				})
+			}
+		})
+		ui.Box(c).Height(14)
+	}
+
+	// The result rises in once, with the field's edge turning green.
+	since := time.Since(o.practicedAt)
+	fresh := !o.practicedAt.IsZero() && since < 1200*time.Millisecond && !c.Preferences().ReduceMotion
+	if fresh {
+		c.After(16 * time.Millisecond)
+	}
+	if practiced {
+		alpha, rise := float32(1), float32(0)
+		if fresh && since < 320*time.Millisecond {
+			k := float32(since) / float32(320*time.Millisecond)
+			alpha, rise = k, 4*(1-k)
+		}
+		ui.Row(c.Key("result")).Gap(9).AlignItems(ui.Center).Opacity(alpha).Translate(0, rise).Children(func() {
+			ui.Row(c).Size(18, 18).Radius(9).Justify(ui.Center).AlignItems(ui.Center).Background(okTint(t)).Children(func() {
+				ui.Icon(c, icCheck).FontSize(11).TextColor(t.Success)
+			})
+			ui.Text(c, T("obPracticed")).FontSize(13.5).FontWeight(500)
+		})
+		ui.Box(c).Height(10)
+	}
+
 	// One surface: the field, and under a hairline its recording state and
-	// actions. Its edge darkens with the focus, as a field's would.
+	// the action. Its edge darkens with the focus, as a field's would.
 	edge := t.Border
-	surface := ui.Column(c.Key("practice-surface")).FillWidth().MaxWidth(600).Radius(12).Background(cardColor(t)).Clip()
+	if practiced {
+		edge = successEdge(t, fresh)
+	}
+	surface := ui.Column(c.Key("practice-surface")).FillWidth().Radius(12).Background(cardColor(t)).Clip()
 	surface.Children(func() {
-		area := ui.TextArea(c.Key("practice"), &o.practice).Lines(5, 10).Label(T("obField")).
-			FillWidth().Padding(14, 16).BorderWidth(0).Background(ui.Transparent)
+		area := ui.TextArea(c.Key("practice"), &o.practice).Lines(4, 8).Label(T("obField")).Placeholder(T("obFieldPh")).
+			FillWidth().Padding(14, 16).FontSize(15).BorderWidth(0).Background(ui.Transparent)
 		if area.Focused() || recording {
 			edge = t.TextMuted
 		}
@@ -657,12 +867,23 @@ func (o *onboardWindow) firstDictation(c *ui.Context, s config.Settings, ready b
 					o.discardPractice()
 				}
 			default:
-				// Starting again appends to what is in the field.
+				// Starting again appends to what is in the field. Before the
+				// first dictation it is the primary action; after, Try again.
 				busy := phase != session.Idle && phase != session.Done && phase != session.Failed
-				start := ui.Button(c.Key("start"), "").Label(T("obStart")).Disabled(!ready || busy || o.a.updates.installing).Children(func() {
+				label := T("obStart")
+				if practiced {
+					label = T("obAgain")
+				}
+				content := func() {
 					ui.Icon(c, icMic).FontSize(13)
-					ui.Text(c, T("obStart")).SingleLine()
-				})
+					ui.Text(c, label).SingleLine()
+				}
+				var start ui.Element
+				if practiced {
+					start = ui.Button(c.Key("start"), "").Label(label).Disabled(!ready || busy || o.a.updates.installing).Children(content)
+				} else {
+					start = ui.PrimaryButton(c.Key("start"), "").Label(label).Disabled(!ready || busy || o.a.updates.installing).Children(content)
+				}
 				if start.Clicked() {
 					o.startPractice()
 				}
@@ -670,6 +891,21 @@ func (o *onboardWindow) firstDictation(c *ui.Context, s config.Settings, ready b
 		})
 	})
 	surface.Border(1, edge)
+	ui.Box(c).Height(12)
+	ui.Text(c, T("obPracticeNote")).FontSize(12.5).TextColor(t.TextMuted)
+}
+
+// successEdge is the practice field's edge once a dictation is in: green,
+// stronger for a moment after it arrives.
+func successEdge(t *ui.Theme, fresh bool) ui.Color {
+	a := float32(0.45)
+	if fresh {
+		a = 0.9
+	}
+	if t.Dark {
+		return ui.RGBA(52, 211, 153, a)
+	}
+	return ui.RGBA(4, 120, 87, a)
 }
 
 // startPractice starts the practice run and gives it its sink. The sink is
@@ -688,6 +924,7 @@ func (o *onboardWindow) startPractice() {
 				o.practice = strings.TrimRight(o.practice, " \n") + " "
 			}
 			o.practice += text
+			o.practicedAt = time.Now() // the result line rises in
 			o.change(func(ob *config.Onboarding) { ob.Practiced = true })
 			o.refresh()
 		})
@@ -703,17 +940,17 @@ func (o *onboardWindow) discardPractice() {
 	o.a.ctrl.CancelPractice()
 }
 
-// finished is the completion view, in the same frame: its actions are in
-// the footer.
+// finished is the completion view, on the same stage, centered: its
+// actions are in the footer.
 func (o *onboardWindow) finished(c *ui.Context, s config.Settings) {
 	t := c.Theme()
-	ui.Column(c.Key("finished")).FillWidth().AlignItems(ui.Center).Padding(56, 0, 0).Children(func() {
-		ui.Row(c).Size(48, 48).Radius(24).Justify(ui.Center).AlignItems(ui.Center).Background(okTint(t)).Children(func() {
-			ui.Icon(c, icCheck).FontSize(24).TextColor(t.Success)
+	ui.Column(c.Key("finished")).FillWidth().AlignItems(ui.Center).Children(func() {
+		ui.Row(c).Size(52, 52).Radius(26).Justify(ui.Center).AlignItems(ui.Center).Background(okTint(t)).Children(func() {
+			ui.Icon(c, icCheck).FontSize(26).TextColor(t.Success)
 		})
-		ui.Box(c).Height(18)
-		ui.Text(c, T("obComplete")).FontSize(26).FontWeight(600)
+		ui.Box(c).Height(22)
+		ui.Text(c, T("obComplete")).FontSize(24).FontWeight(600).TextAlign(ui.Center)
 		ui.Box(c).Height(8)
-		ui.Text(c, T("obCompleteText", keyName(s.TriggerKey))).FontSize(15).TextColor(softText(t)).MaxWidth(440)
+		ui.Text(c, T("obCompleteText", keyName(s.TriggerKey))).FontSize(14).LineHeight(1.55).TextColor(softText(t)).TextAlign(ui.Center).MaxWidth(440)
 	})
 }
