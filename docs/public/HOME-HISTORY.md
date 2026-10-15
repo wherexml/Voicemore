@@ -60,3 +60,5 @@ V2 历史突出写入字符，保留次数、时长与写入率核心数值，�
 V2 dense heatmap: responsive 24-column grid fills available width, 2px horizontal gaps and 16px cell height. Both panels are 300px tall with inner scrolling. Dates use M/D (10/16), newest first; hours descend 23 to 0 left-to-right. No year/month headings. Arrow keys follow visual order; original data indices preserve tooltip and filter mapping. Browser evidence: artifacts/history-stats/v2-dense-final.png.
 
 V2 typography: panel headings use 15px, matching the record heading; app names in both distribution and record rows share 13px text and 20px icons. Distribution numbers use 13px, percentages 12px, axes 11px. Browser measured both panels at 300px and both identity labels at 13px. Evidence: artifacts/history-stats/v2-readable.png.
+
+Date labels are hidden at rest and revealed together when the activity panel is hovered or contains keyboard focus. The date column keeps its width to prevent layout shifts. Touch devices retain visible dates; reduced motion disables the fade.
