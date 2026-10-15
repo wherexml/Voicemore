@@ -116,9 +116,17 @@ func (o Options) do(ctx context.Context, method, path string, body []byte) ([]by
 		return nil, fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	defer res.Body.Close()
-	raw, _ := io.ReadAll(io.LimitReader(res.Body, 4<<20))
 	if res.StatusCode != http.StatusOK {
 		return nil, &StatusError{Code: res.StatusCode, Status: res.Status, Model: o.Model}
+	}
+	raw, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	if err != nil {
+		// Headers can arrive before the body stalls or disconnects. Preserve
+		// cancellation/timeout instead of parsing a partial response as JSON.
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		return nil, fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	return raw, nil
 }

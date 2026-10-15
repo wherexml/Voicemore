@@ -8,3 +8,5 @@
 
 - 修改相关行为时同步维护[文档索引](docs/public/README.md)引用的模块规格与验收步骤。
 - Sprint 草稿与本地验收证据不入库，目录约定见[文档索引](docs/public/README.md#维护约定)。
+
+- 文字整理的错误分类、延迟排查和 HTTP 验收见 [整理模块规格](internal/cleanup/README.md)；保留响应体读取阶段的超时与取消原因。
