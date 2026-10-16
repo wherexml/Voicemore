@@ -884,13 +884,13 @@ func (c *Controller) clean(r *run, s config.Settings) {
 	}
 	if err != nil {
 		c.update(r, func(rec *store.Record) {
-			rec.CleanupError, rec.Timing.CleanupMs = c.explain(err), took
+			rec.CleanupError, rec.Timing.CleanupMs = c.cleanupFailure(err), took
 			rec.CleanupModel = opts.Model
-			rec.StatusDetail = c.tr("detailCleanup")
+			rec.StatusDetail = c.cleanupFailure(err)
 		})
 		c.mu.Lock()
 		if c.active(r) {
-			c.view = View{Phase: Failed, Cleanup: true, CleanupFailed: true, Text: r.text, Message: c.tr("cleanupFailed", c.explain(err))}
+			c.view = View{Phase: Failed, Cleanup: true, CleanupFailed: true, Text: r.text, Message: c.cleanupFailure(err)}
 		}
 		c.mu.Unlock()
 		c.changed()
@@ -1170,7 +1170,7 @@ func (c *Controller) Recleanup(id, base string) error {
 		cleaned, err = cleanup.Run(ctx, opts, base)
 	}
 	if err != nil {
-		return errors.New(c.explain(err))
+		return errors.New(c.cleanupFailure(err))
 	}
 	cleaned, _ = textstyle.Apply(cleaned, s.TextStyle, c.Dict.Hotwords())
 	c.History.Update(id, func(rec *store.Record) {

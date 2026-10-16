@@ -17,6 +17,8 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+
+	"voiceinput/internal/textstyle"
 )
 
 var (
@@ -246,18 +248,55 @@ func KindOf(id string) string {
 	return KindText
 }
 
-var keyTokens = regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?|[A-Za-z][A-Za-z0-9]*`)
+// Match whole identifiers and numbers, never substrings such as 1 in 10.
+var keyTokens = regexp.MustCompile(`[A-Za-z][A-Za-z0-9]*|[-+]?[0-9]+(?:\.[0-9]+)*`)
+var listLabel = regexp.MustCompile(`(?m)^[ \t]*[0-9]+(?:[.)．][ \t]+|、)`)
+var spokenList = regexp.MustCompile(`(?:第)?[0-9]+个是`)
 
-// Missing lists the numbers and Latin words of the transcript that the
-// cleaned text no longer has. It does not judge negations or conditions
-// in Chinese, which only a reader can.
+// canonicalGuard permits spelling equivalents, not semantic guesses. Actual
+// quantities remain protected even when another occurrence is a filler.
+func canonicalGuard(s string) string {
+	s, _ = textstyle.Apply(s, textstyle.Options{ArabicNumbers: true, JoinAcronyms: true}, nil)
+	// A list label cannot stand in for a quantity missing from the body.
+	s = listLabel.ReplaceAllString(s, "")
+	if strings.Contains(s, "第2个是") && strings.Contains(s, "1个是") {
+		s = spokenList.ReplaceAllString(s, "")
+	}
+	// Closed set of non-quantitative phrases; never exempt arbitrary “1个”.
+	for _, pair := range [][2]string{
+		{"这1个功能", "这个功能"}, {"這1個功能", "這個功能"},
+		{"进行1个视觉上的", "进行视觉上的"},
+		{"没有1个正确的认知", "没有正确的认知"},
+	} {
+		s = strings.ReplaceAll(s, pair[0], pair[1])
+	}
+	return s
+}
+
+func guardToken(s string) string {
+	s = strings.ToLower(s)
+	// Only explicit morphology; no translations or general stemming of names.
+	switch s {
+	case "skills":
+		return "skill"
+	case "icons":
+		return "icon"
+	}
+	return s
+}
+
+// Missing checks lexical preservation, not Chinese semantic fidelity. Repeated
+// mentions may be merged; a changed quantity or missing English word is rejected.
 func Missing(original, cleaned string) []string {
-	low := strings.ToLower(cleaned)
+	have := map[string]bool{}
+	for _, t := range keyTokens.FindAllString(canonicalGuard(cleaned), -1) {
+		have[guardToken(t)] = true
+	}
 	var missing []string
 	seen := map[string]bool{}
-	for _, t := range keyTokens.FindAllString(original, -1) {
-		k := strings.ToLower(t)
-		if !seen[k] && !strings.Contains(low, k) {
+	for _, t := range keyTokens.FindAllString(canonicalGuard(original), -1) {
+		k := guardToken(t)
+		if !seen[k] && !have[k] {
 			missing = append(missing, t)
 		}
 		seen[k] = true

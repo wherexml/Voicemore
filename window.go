@@ -138,7 +138,11 @@ func (m *mainWindow) do(busyKey string, fn func() error, okKey string) {
 		err := fn()
 		m.win.Update(func() {
 			m.busy = nil
-			m.report(err, okKey)
+			if busyKey == "recleaning" && err != nil {
+				m.say("cleanFailedWhy", err.Error())
+			} else {
+				m.report(err, okKey)
+			}
 		})
 	}()
 }
