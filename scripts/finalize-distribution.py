@@ -38,13 +38,8 @@ def main():
     app = Path(candidate['app'])
     run('xcrun', 'stapler', 'staple', app)
     run('xcrun', 'stapler', 'validate', app)
-    stage = work / 'final-dmg-stage'
-    stage.mkdir()  # Fail rather than silently overwrite a previous finalization.
-    run('ditto', app, stage / app.name)
-    (stage / 'Applications').symlink_to('/Applications')
     image = work / ('Voicemore-' + candidate['version'] + '-arm64-notarized.dmg')
-    run('hdiutil', 'create', '-volname', 'Voicemore', '-srcfolder', stage,
-        '-format', 'UDZO', image)
+    run(Path(__file__).with_name('build-dmg.sh'), app, image)
     run('codesign', '--force', '--timestamp', '--sign', IDENTITY, image)
     with (work / 'dmg-notary.json').open('w') as output:
         run('xcrun', 'notarytool', 'submit', image, '--keychain-profile',

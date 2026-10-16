@@ -44,7 +44,7 @@ ditto -c -k --keepParent build/darwin-arm64/Voicemore.app app-notary.zip
 xcrun notarytool submit app-notary.zip --keychain-profile voicemore-skylance --wait --output-format json > app-notary.json
 ```
 
-Require `Accepted` in both reports; obtain `notarytool log` for any rejection. Then run `python3 scripts/finalize-distribution.py /absolute/candidate-workspace --keychain-profile voicemore-skylance` from the project. This staples the app, creates a new DMG containing it and an Applications link, signs/submits/staples the DMG, and runs the read-only verification gate. It refuses an existing staging directory instead of overwriting a previous result. An interrupted finalization needs inspection before retrying. Successful local verification does not claim cross-Mac E2E. Publication still requires user authorization, which an explicit release request supplies.
+Require `Accepted` in both reports; obtain `notarytool log` for any rejection. Then run `python3 scripts/finalize-distribution.py /absolute/candidate-workspace --keychain-profile voicemore-skylance` from the project. This staples the app, creates a new DMG containing it and an Applications link, signs/submits/staples the DMG, and runs the read-only verification gate. It refuses an existing output DMG instead of overwriting a previous result. An interrupted finalization needs inspection before retrying. Successful local verification does not claim cross-Mac E2E. Publication still requires user authorization, which an explicit release request supplies.
 
 ## Production acceptance requirements
 
@@ -93,3 +93,7 @@ The release app uses committed client source from `33c4b89`, with the version ch
 On the second Apple Silicon Mac (macOS 26.2), Chrome downloaded the final DMG over HTTPS with its normal quarantine attribute. Finder drag-install replaced the old app. Strict signature verification, Gatekeeper, app/DMG tickets and byte-for-byte installed-app comparison all passed. Gatekeeper remained enabled. The existing local model loaded using the new signed runtime. BlackHole 2ch supplied a synthetic Chinese speech fixture to the real microphone capture path; the transcript was automatically inserted into an empty TextEdit document. History, playback progress, permissions and relaunch were verified. This test used the tray start/stop command, not a physical microphone or a physical Fn key. It reused existing model weights and permissions rather than testing a fresh model download or first-time permission grants.
 
 The exact DMG SHA-256 is `c90fd16ae149f3a6d012c9dffc299e17bbdc4f8745de408971c3309f7f1481c4`. Repeatable steps, native screenshots, browser quarantine evidence, verification logs and the publication gate report are kept locally under `artifacts/release-0.3.4/` and are not committed. The three static website language pages are updated; no production website has been deployed.
+
+## Finder installer presentation
+
+Both local and notarized packaging use `scripts/build-dmg.sh`; see [DMG installer specification](DMG-INSTALLER.md) for artwork, native language resolution and acceptance. The shared builder preserves the signed/stapled app and refuses existing output paths. Formal signing/notarization gates remain after layout packaging.
