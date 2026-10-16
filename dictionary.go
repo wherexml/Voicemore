@@ -20,6 +20,7 @@ func (m *mainWindow) dictView(c *ui.Context) {
 	t := c.Theme()
 	d := m.a.dict
 	ui.Scroll(c).Fill().Padding(24, 32).Gap(24).FontWeight(400).Children(func() {
+		ui.Text(c, T("dictTitle")).FontSize(24).FontWeight(600)
 		// Only an exception is said here: a dictionary the recognizer
 		// cannot take. How terms normally travel needs no sentence.
 		if _, _, err := d.HotwordParam(); err != nil {
