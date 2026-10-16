@@ -17,6 +17,12 @@ Updates live in the bottom-left rail, directly above Settings, on every page. Th
 
 Idle/current panels show the current version and check action without an automatic-check explanation. Errors and download status remain visible.
 
+## Refresh icon
+
+The idle/current and retry states use a dedicated 24 px rail icon with a 1.2-unit stroke in a 16-unit viewBox, matching the Settings control. The clockwise arc ends exactly at the arrow tip (13, 5.5), with a clear opening below it. Rounded caps and joins stay consistent with the rail. Model-list refresh keeps its separate compact icon.
+
+Visual acceptance: inspect the idle icon at native display scale, open its popover, close with Escape, and confirm the icon remains centered above Settings without a detached arrow or heavy junction. Save a native screenshot locally under `artifacts/update-ui/`.
+
 ## Repeatable native E2E
 
 1. Build the app, then run `scripts/prepare-update-fixture.sh` with `SIGNING_IDENTITY`. Quit the regular app, run `python3 scripts/update-fixture.py`, and launch `artifacts/updater-e2e/Voicemore.app`.
