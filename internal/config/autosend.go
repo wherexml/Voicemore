@@ -4,6 +4,7 @@ package config
 // application at recording start. Unknown shortcuts fail closed.
 type AutoSend struct {
 	ApplicationsInitialized bool          `json:"applicationsInitialized,omitempty"`
+	DelayMs                 *int          `json:"delayMs,omitempty"`
 	Enabled                 bool          `json:"enabled"`
 	Default                 string        `json:"default"`
 	Apps                    []AutoSendApp `json:"apps,omitempty"`
@@ -14,7 +15,24 @@ type AutoSendApp struct {
 	Shortcut string `json:"shortcut"`
 }
 
-func (a AutoSend) Clone() AutoSend { a.Apps = append([]AutoSendApp(nil), a.Apps...); return a }
+func (a AutoSend) Clone() AutoSend {
+	a.Apps = append([]AutoSendApp(nil), a.Apps...)
+	if a.DelayMs != nil {
+		n := *a.DelayMs
+		a.DelayMs = &n
+	}
+	return a
+}
+func (a AutoSend) Delay() int {
+	if a.DelayMs == nil {
+		return 2000
+	}
+	switch *a.DelayMs {
+	case 0, 1000, 2000, 3000, 5000:
+		return *a.DelayMs
+	}
+	return 2000
+}
 func (a AutoSend) Shortcut(bundle string) string {
 	if !a.Enabled || bundle == "" {
 		return ""

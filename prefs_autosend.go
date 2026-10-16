@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/egoist/mygo/ui"
+	"strconv"
 	"time"
 	"voiceinput/internal/config"
 	"voiceinput/internal/macos"
@@ -26,6 +27,18 @@ func (p *prefsWindow) autoSend(c *ui.Context) {
 			if ui.Switch(c, &enabled).Label(T("sendAfterInput")).Changed() {
 				p.change(func(s *config.Settings) { s.AutoSend.Enabled = enabled })
 			}
+		})
+		ui.Row(c.Key("delay")).Padding(12, 16).Gap(12).AlignItems(ui.Center).Children(func() {
+			ui.Text(c, T("sendDelay")).Grow(1)
+			opts := []selectOption{{Value: "0", Label: T("sendImmediately"), Group: T("sendDelay")}}
+			for _, n := range []int{1000, 2000, 3000, 5000} {
+				opts = append(opts, selectOption{Value: strconv.Itoa(n), Label: strconv.Itoa(n/1000) + " s", Group: T("sendDelay")})
+			}
+			p.standardSelect(c, "send-delay", T("sendDelay"), strconv.Itoa(s.Delay()), "2 s", 220, !s.Enabled, opts, func(v string) {
+				n, _ := strconv.Atoi(v)
+				p.change(func(s *config.Settings) { s.AutoSend.DelayMs = &n })
+			})
+			ui.Box(c).Width(28)
 		})
 		ui.Row(c.Key("all")).Padding(12, 16).Gap(12).AlignItems(ui.Center).BorderWidth(1, 0, 0, 0).BorderColor(settingsGroupLine(c)).Children(func() {
 			ui.Icon(c, icAllApps).FontSize(24).TextColor(c.Theme().TextMuted)

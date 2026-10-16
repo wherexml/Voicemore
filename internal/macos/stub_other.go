@@ -12,11 +12,15 @@ func InputDeviceMissing() bool { return false }
 
 type Target struct{ AppName, BundleID string }
 
-func CaptureTarget() *Target                { return &Target{} }
-func (t *Target) Release()                  {}
-func (t *Target) PasteAvailable() bool      { return false }
-func (t *Target) HasElement() bool          { return false }
-func (t *Target) ReadValue() (string, bool) { return "", false }
+func CaptureTarget() *Target                                  { return &Target{} }
+func (t *Target) Retain() *Target                             { copy := *t; return &copy }
+func (t *Target) StillFocused() bool                          { return false }
+func (t *Target) ReplaceValue(string, string) bool            { return false }
+func (t *Target) EditableSnapshot(string) (string, int, bool) { return "", 0, false }
+func (t *Target) Release()                                    {}
+func (t *Target) PasteAvailable() bool                        { return false }
+func (t *Target) HasElement() bool                            { return false }
+func (t *Target) ReadValue() (string, bool)                   { return "", false }
 func Insert(string, InsertOptions) (InsertResult, error) {
 	return InsertResult{}, errUnsupported
 }

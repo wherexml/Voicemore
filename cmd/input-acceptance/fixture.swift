@@ -50,9 +50,10 @@ let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
 }
 var last = ""
 let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
- guard let cmd = try? String(contentsOfFile: dir + "/command", encoding: .utf8), cmd != last else { return }
+ guard let cmd = try? String(contentsOfFile: dir + "/command", encoding: .utf8) else { return }
+ if cmd != last {
  last = cmd
- if cmd.hasPrefix("send-reset-") { second.isEditable=true;second.stringValue="";sendEvents=0;sentText="";sendFlags="";window.makeFirstResponder(second) }
+ if cmd.hasPrefix("send-reset-") { window.makeKeyAndOrderFront(nil);app.activate(ignoringOtherApps: true);second.isEditable=true;second.stringValue="";sendEvents=0;sentText="";sendFlags="";window.makeFirstResponder(second) }
  switch cmd {
  case "first": window.makeFirstResponder(first)
  case "second": second.isEditable = true; window.makeFirstResponder(second)
@@ -63,6 +64,7 @@ let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
  default:
   if cmd.hasPrefix("remote-") { opaque.text = ""; window.makeFirstResponder(opaque) }
   break
+ }
  }
  submenu.update()
  let state = ["sendEvents": String(sendEvents), "sentText": sentText, "sendFlags": sendFlags, "command": cmd, "first": first.stringValue, "second": second.stringValue, "opaque": opaque.text, "keyWindow": String(window.isKeyWindow), "active": String(app.isActive), "firstResponder": String(describing: window.firstResponder), "keyEventCount": String(keyEventCount)]

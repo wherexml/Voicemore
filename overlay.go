@@ -90,6 +90,14 @@ func newOverlay(a *app) *overlay {
 func (o *overlay) sync() {
 	v := o.a.ctrl.View()
 	o.win.Update(func() {
+		if o.a.sendPreview != nil && o.a.sendPreview.visible {
+			if v.Phase == session.Preparing {
+				o.a.sendPreview.close()
+			} else {
+				o.win.Hide()
+				return
+			}
+		}
 		was := o.v.Phase
 		if v.Phase == session.Idle {
 			if o.closing || !o.win.IsVisible() {

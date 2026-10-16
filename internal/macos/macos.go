@@ -43,7 +43,8 @@ type InsertOptions struct {
 	AutoSend       config.AutoSend
 	// OnPasted starts observation before clipboard restoration. Local successful pastes only.
 	// The callback may retain Target until observation finishes; the caller owns its release.
-	OnPasted func(*Target)
+	OnPasted   func(*Target)
+	BeforeSend func(*Target) bool
 }
 
 // InsertResult says what could be checked about an insertion.

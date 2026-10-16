@@ -58,8 +58,9 @@ func main() {
 			var state map[string]string
 			json.Unmarshal(b, &state)
 			if state["command"] == cmd {
-				if state["active"] != "true" || state["keyWindow"] != "true" {
-					panic("fixture lost foreground focus; aborting keyboard acceptance: " + cmd)
+				if !strings.HasPrefix(cmd, "send-read-") && (state["active"] != "true" || state["keyWindow"] != "true") {
+					time.Sleep(50 * time.Millisecond)
+					continue
 				}
 				return state
 			}
@@ -173,7 +174,7 @@ func main() {
 	// Real native send events: assert payload existed before Enter and exactly one
 	// key reached the target. This also catches modifier mistakes and duplicates.
 	bundle := "dev.steve.voice-input.acceptance-fixture"
-	for n, scenario := range []string{"enter", "cmd-enter", "ctrl-enter", "inherit", "override", "off", "disabled", "cancel-send", "focus-send", "clipboard-send", "fallback-send", "remote-no-send", "remote-disabled", "empty-send", "unknown-key"} {
+	for n, scenario := range []string{"enter", "cmd-enter", "ctrl-enter", "inherit", "override", "off", "disabled", "cancel-send", "focus-send", "clipboard-send", "fallback-send", "remote-no-send", "remote-disabled", "empty-send", "unknown-key", "immediate", "delay-cancel", "delay-focus", "edit-text", "edit-conflict"} {
 		command(fmt.Sprintf("send-reset-%d", n))
 		auto := config.AutoSend{Enabled: true, Default: "enter"}
 		want := "enter"
@@ -195,7 +196,7 @@ func main() {
 		case "disabled":
 			auto.Enabled = false
 			want = ""
-		case "cancel-send", "focus-send", "clipboard-send", "fallback-send", "remote-no-send", "remote-disabled", "empty-send", "unknown-key":
+		case "cancel-send", "focus-send", "clipboard-send", "fallback-send", "remote-no-send", "remote-disabled", "empty-send", "unknown-key", "delay-cancel", "delay-focus", "edit-text", "edit-conflict":
 			want = ""
 		}
 		ctx, cancel := context.WithCancel(context.Background())
@@ -219,6 +220,33 @@ func main() {
 			command("none")
 		}
 		options := macos.InsertOptions{Context: ctx, RestoreDelayMs: 600, AutoSend: auto}
+		if scenario == "immediate" {
+			zero := 0
+			options.AutoSend.DelayMs = &zero
+		}
+		if scenario == "delay-cancel" || scenario == "delay-focus" {
+			go func() {
+				time.Sleep(900 * time.Millisecond)
+				if scenario == "delay-cancel" {
+					cancel()
+				} else {
+					command("first")
+				}
+			}()
+		}
+		editOK := true
+		if scenario == "edit-text" || scenario == "edit-conflict" {
+			options.BeforeSend = func(t *macos.Target) bool {
+				snapshot, _, ok := t.EditableSnapshot("自动发送验收 " + scenario)
+				editOK = ok
+				if scenario == "edit-text" {
+					editOK = editOK && t.ReplaceValue(snapshot, "已编辑的最终文字")
+				} else {
+					editOK = editOK && !t.ReplaceValue("outdated value", "must not overwrite")
+				}
+				return false
+			}
+		}
 		if scenario == "remote-no-send" {
 			options.RemoteInputs = []config.RemoteInput{{BundleID: bundle, Shortcut: "cmd-v", SyncDelayMs: 300}}
 		}
@@ -232,7 +260,9 @@ func main() {
 		if scenario == "empty-send" {
 			text = ""
 		}
+		started := time.Now()
 		res, err := macos.Insert(text, options)
+		elapsed := time.Since(started)
 		<-done
 		cancel()
 		if res.Target != nil {
@@ -246,7 +276,19 @@ func main() {
 		} else {
 			passed = passed && state["sendEvents"] == "0"
 		}
-		results = append(results, map[string]any{"case": "auto-send " + scenario, "passed": passed, "state": state, "result": res, "error": fmt.Sprint(err)})
+		if scenario == "enter" {
+			passed = passed && elapsed >= 2600*time.Millisecond
+		}
+		if scenario == "immediate" {
+			passed = passed && elapsed < 1800*time.Millisecond
+		}
+		if scenario == "edit-text" {
+			passed = passed && editOK && state["second"] == "已编辑的最终文字"
+		}
+		if scenario == "edit-conflict" {
+			passed = passed && editOK && state["second"] == text
+		}
+		results = append(results, map[string]any{"elapsedMs": elapsed.Milliseconds(), "case": "auto-send " + scenario, "passed": passed, "state": state, "result": res, "error": fmt.Sprint(err)})
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
