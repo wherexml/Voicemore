@@ -1013,6 +1013,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 	}
 	c.update(r, func(rec *store.Record) {
 		rec.TargetApp = res.Target.AppName
+		rec.TargetBundleID = res.Target.BundleID
 		rec.Status, rec.StatusDetail, rec.InsertedText = store.StatusInserted, detail, text
 		rec.Timing.FinalToInsertMs = time.Since(r.finalAt).Milliseconds()
 	})
