@@ -13,24 +13,30 @@ import (
 // All mutable preview state belongs to the UI thread. The insertion goroutine
 // waits on one buffered decision; editing/cancel and expiry cannot both win.
 type sendPreviewWindow struct {
-	a                        *app
-	win                      *mygo.Window
-	visible, pending         bool
-	draft, expected, applied string
-	offset                   int
-	writable                 bool
-	target                   *macos.Target
-	end                      time.Time
-	duration                 time.Duration
-	decision                 chan bool
-	generation               uint64
-	area                     mygo.Rectangle
-	panelHeight              int
-	guardValue               string
-	guardReadable            bool
-	onEdit                   func(string)
-	lastEscape               time.Time
-	stopOutside              func()
+	a                          *app
+	win                        *mygo.Window
+	visible, pending           bool
+	editing                    bool
+	recentText, recentExpected string
+	recentOffset               int
+	recentWritable             bool
+	recentTarget               *macos.Target
+	recentEdit                 func(string)
+	draft, expected, applied   string
+	offset                     int
+	writable                   bool
+	target                     *macos.Target
+	end                        time.Time
+	duration                   time.Duration
+	decision                   chan bool
+	generation                 uint64
+	area                       mygo.Rectangle
+	panelHeight                int
+	guardValue                 string
+	guardReadable              bool
+	onEdit                     func(string)
+	lastEscape                 time.Time
+	stopOutside                func()
 }
 
 func newSendPreview(a *app) *sendPreviewWindow {
@@ -81,6 +87,66 @@ func (p *sendPreviewWindow) close() {
 		p.target = nil
 	}
 }
+
+// remember owns a separate target reference; closing UI never discards the last result.
+func (p *sendPreviewWindow) remember(text string, target *macos.Target, onEdit func(string)) {
+	retained := target.Retain()
+	expected, offset, writable := target.EditableSnapshot(text)
+	p.win.Update(func() {
+		if p.recentTarget != nil {
+			p.recentTarget.Release()
+		}
+		p.recentTarget = retained
+		p.recentText, p.recentExpected = text, expected
+		p.recentOffset, p.recentWritable, p.recentEdit = offset, writable, onEdit
+	})
+}
+func (p *sendPreviewWindow) showRecent() {
+	if p.pending && p.target != nil {
+		if p.recentTarget != nil {
+			p.recentTarget.Release()
+		}
+		p.recentTarget = p.target.Retain()
+		p.recentText, p.recentExpected, p.recentOffset, p.recentWritable, p.recentEdit = p.draft, p.expected, p.offset, p.writable, p.onEdit
+	}
+	p.close()
+	text := p.recentText
+	if text == "" {
+		var latest time.Time
+		for _, r := range p.a.history.List("") {
+			if r.InsertedText != "" && r.StartedAt.After(latest) {
+				text, latest = r.InsertedText, r.StartedAt
+			}
+		}
+	}
+	if text == "" {
+		return
+	}
+	p.draft, p.applied = text, text
+	p.expected, p.offset, p.writable = p.recentExpected, p.recentOffset, p.recentWritable
+	p.onEdit = p.recentEdit
+	if p.recentTarget != nil {
+		p.target = p.recentTarget.Retain()
+	}
+	p.editing, p.visible = true, true
+	p.area = mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
+	p.panelHeight = -1
+	p.a.overlay.win.Hide()
+	macos.ConfigureOverlay(p.win.NativeHandle())
+	p.place(58)
+	p.win.ShowInactive()
+	p.win.Focus()
+	gen := p.generation
+	p.stopOutside = macos.WatchOutsideClicks(p.win.NativeHandle(), func() {
+		p.win.Update(func() {
+			if p.visible && p.generation == gen {
+				p.close()
+			}
+		})
+	})
+	p.poll(context.Background(), gen)
+}
+
 func (p *sendPreviewWindow) wait(ctx context.Context, text string, target *macos.Target, delay time.Duration, onEdit func(string)) bool {
 	decision := make(chan bool, 1)
 	p.win.Update(func() {
@@ -96,14 +162,15 @@ func (p *sendPreviewWindow) wait(ctx context.Context, text string, target *macos
 		p.onEdit = onEdit
 		p.decision = decision
 		p.pending = true
+		p.editing = false
 		p.visible = true
 		p.duration = delay
 		p.end = time.Now().Add(delay)
 		p.area = mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
-		p.panelHeight = 0
+		p.panelHeight = -1
 		p.a.overlay.win.Hide()
 		macos.ConfigureOverlay(p.win.NativeHandle())
-		p.place(58)
+		p.place(0)
 		p.win.ShowInactive()
 		gen := p.generation
 		p.stopOutside = macos.WatchOutsideClicks(p.win.NativeHandle(), func() {
@@ -147,13 +214,14 @@ func (p *sendPreviewWindow) poll(ctx context.Context, gen uint64) {
 					p.close()
 					return
 				} else if p.guardReadable && (!readable || value != p.guardValue) {
-					p.resolve(false)
+					p.close()
+					return
 				} else if !time.Now().Before(p.end) {
 					p.resolve(true)
 					return
 				}
 			}
-			if !p.pending && !p.target.StillSelected() {
+			if !p.pending && p.target != nil && !p.target.StillSelected() {
 				p.close()
 				return
 			}
@@ -166,7 +234,10 @@ func (p *sendPreviewWindow) place(panel int) {
 		return
 	}
 	p.panelHeight = panel
-	h := panel + 48 + 16 + 40 + 32
+	h := panel + 48 + 40 + 32
+	if panel > 0 {
+		h += 16
+	}
 	offset := max(0, p.a.settings.Get().OverlayBottomOffset)
 	p.win.SetBounds(mygo.Rectangle{X: p.area.X + (p.area.Width-456)/2, Y: p.area.Y + p.area.Height - h - offset, Width: 456, Height: h})
 }
@@ -193,32 +264,39 @@ func (p *sendPreviewWindow) view(c *ui.Context) {
 	_, line := c.MeasureText(0, ui.Span{Text: "国Ag", Size: 14, Weight: 400})
 	lines := min(5, max(1, int(math.Round(float64(full/line)))))
 	h := lines*24 + 34
-	p.place(h)
+	if p.editing {
+		p.place(h)
+	} else {
+		p.place(0)
+	}
 	ui.Column(c).Fill().Padding(48, 48, 32, 48).Gap(16).Justify(ui.End).AlignItems(ui.Center).Children(func() {
-		panel := ui.Column(c.Key("text-panel")).Width(360).Height(float32(h)).Padding(16).Radius(16).Background(ui.Hex("#1B1B1B")).Border(1, ui.RGBA(255, 255, 255, .10)).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, .28))
-		panel.Children(func() {
-			area := ui.TextArea(c.Key("final-text"), &p.draft).Label(T("sendFinalText")).Lines(1, 5).FillWidth().Height(float32(h - 34)).Padding(0).FontSize(14).FontWeight(400).FixedLineHeight(24).Background(ui.Transparent).BorderWidth(0)
-			if area.Focused() {
-				panel.Border(1, ui.Hex("#7775D0"))
-			}
-			if (area.Pressed() || area.Changed()) && p.pending {
-				p.resolve(false)
-			}
-			if area.Changed() && !area.Composing() {
-				if p.writable && p.target != nil {
-					next := p.expected[:p.offset] + p.draft + p.expected[p.offset+len(p.applied):]
-					if p.target.ReplaceValue(p.expected, next) {
-						p.expected = next
-						p.applied = p.draft
-						if p.onEdit != nil {
-							p.onEdit(p.draft)
+		if p.editing {
+			panel := ui.Column(c.Key("text-panel")).Width(360).Height(float32(h)).Padding(16).Radius(16).Background(ui.Hex("#1B1B1B")).Border(1, ui.RGBA(255, 255, 255, .10)).Shadow(0, 18, 48, 0, ui.RGBA(0, 0, 0, .28))
+			panel.Children(func() {
+				area := ui.TextArea(c.Key("final-text"), &p.draft).Label(T("sendFinalText")).Lines(1, 5).FillWidth().Height(float32(h - 34)).Padding(0).FontSize(14).FontWeight(400).FixedLineHeight(24).Background(ui.Transparent).BorderWidth(0)
+				if area.Focused() {
+					panel.Border(1, ui.Hex("#7775D0"))
+				}
+				if (area.Pressed() || area.Changed()) && p.pending {
+					p.resolve(false)
+				}
+				if area.Changed() && !area.Composing() {
+					if p.writable && p.target != nil {
+						next := p.expected[:p.offset] + p.draft + p.expected[p.offset+len(p.applied):]
+						if p.target.ReplaceValue(p.expected, next) {
+							p.expected = next
+							p.applied = p.draft
+							p.recentText, p.recentExpected = p.draft, next
+							if p.onEdit != nil {
+								p.onEdit(p.draft)
+							}
+						} else {
+							p.writable = false
 						}
-					} else {
-						p.writable = false
 					}
 				}
-			}
-		})
+			})
+		}
 		// The slot remains after cancellation; editing cannot shift the panel down.
 		ui.Row(c.Key("send-slot")).Height(40).AlignItems(ui.Center).Children(func() {
 			if !p.pending {
