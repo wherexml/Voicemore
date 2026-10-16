@@ -4,6 +4,7 @@
 
 | 模块 | 规格与验收 | 实现入口 |
 | --- | --- | --- |
+| DMG 安装窗口 | [布局、本地化与原生验收](DMG-INSTALLER.md) | `scripts/build-dmg.py`、`scripts/dmg-localization.swift` |
 | 首页与历史 | [布局、功能与原生验收](HOME-HISTORY.md) | `home.go`、`journal.go`、`history.go`、`history_stats.go`、`app_identity.go`、`prefs.go` |
 | 权限授权 | [共享拖拽引导与原生验收](PERMISSIONS.md) | `permission_drag.go`、`internal/macos/settings_window_darwin.go` |
 | 开始使用引导 | [窗口布局与原生验收](ONBOARDING.md) | `onboarding.go` |
