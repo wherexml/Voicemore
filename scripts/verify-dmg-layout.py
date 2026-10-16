@@ -15,7 +15,7 @@ with DSStore.open(str(mount / '.DS_Store'), 'r') as store:
     assert options['gridSpacing'] <= 100, 'Finder rejects settings above 100'
     assert options['backgroundImageAlias'], 'Missing mounted-volume artwork alias'
     positions = {name: store[name]['Iloc'] for name in ('Voicemore.app', 'Applications')}
-    assert positions == {'Voicemore.app': (228, 196), 'Applications': (539, 196)}
+    assert positions == {'Voicemore.app': (228, 202), 'Applications': (539, 202)}
     window = store['.']['bwsp']
     assert all(not window[k] for k in ('ShowStatusBar','ShowToolbar','ShowSidebar','ShowPathbar'))
 report = {'status':'passed', 'language':'fixed English',
