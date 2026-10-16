@@ -43,8 +43,9 @@ def main():
             'background': str(stage / 'background.png'),
             'window_rect': ((200, 200), (768, 512)),
             'icon_size': 160, 'text_size': 10, 'grid_spacing': 100,
+            # The artwork centerline is y=404 at 2x, matching icon centers at 202 pt.
             'icon_locations': {
-                'Voicemore.app': (228, 196), 'Applications': (539, 196),
+                'Voicemore.app': (228, 202), 'Applications': (539, 202),
             },
             # Never set FinderInfo on a signed app (invalidates its seal).
             'hide_extensions': [],

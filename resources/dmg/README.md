@@ -5,3 +5,5 @@
 - 图标由 Finder 从签名应用及 `/Applications` 链接读取，不把假图标画进背景。
 - 图片坐标与 `scripts/build-dmg.py` 的图标位置配套；修改后必须打开实际 DMG 验证。
 - 包装、语言和验收边界见 [安装窗口规格](../../docs/public/DMG-INSTALLER.md)。
+
+- 对齐基线：2x 背景声波中线为 y=404 px，对应 Finder 两侧图标中心 y=202 pt。声波和箭头整体上移，名称与底部文案位置不变。
