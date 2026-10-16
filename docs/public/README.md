@@ -21,6 +21,10 @@
 | 客户端更新 | [界面状态与原生验收](UPDATE-UI.md)、[更新协议与发布](UPDATES.md) | `updates.go`、`window.go` |
 | 构建与分发 | [打包](PACKAGING.md)、[分发](DISTRIBUTION.md) | `scripts/` |
 
+## Mock 预览
+
+[统一导航](http://127.0.0.1:38127/) · [模块入口与启动约定](MOCK-NAVIGATION.md) · [旧稿归档](http://127.0.0.1:38127/archive/index.html)
+
 ## 维护约定
 
 修改行为时更新对应模块规格，根 README 只保留用户可见摘要与链接；AGENTS.md 使用短引用，不复制模块细节。规格描述当前源码，不能据此认定已发布版本包含这些功能。
