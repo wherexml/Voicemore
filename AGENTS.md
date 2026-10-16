@@ -25,3 +25,5 @@
 - 窗口背景拖动、底部拖动留白与细滚动条：[窗口交互规格](docs/public/HOME-HISTORY.md#窗口拖动与滚动条)。
 
 - 历史应用名称与 Bundle ID 在成功写入时同步更新，跨应用验收见[应用身份与图标](docs/public/HOME-HISTORY.md#应用身份与图标)。
+
+- 整理校验允许确定的等值写法，禁止泛化豁免“1个”；数字/英文丢失与服务故障须分开提示，复验见 [整理模块规格](internal/cleanup/README.md#校验复验)。
