@@ -76,6 +76,9 @@ func (m *mainWindow) historySummary(records []store.Record, now time.Time) histo
 			}
 		}
 	}
+	if m.page == "home" {
+		start = dayStart(now).AddDate(0, 0, -([]int{7, 14, 30}[m.homeRange] - 1))
+	}
 	s := historySummary{start: start, outcomes: map[string]int{}, hours: map[string]int{}}
 	apps := map[string]*historyApp{}
 	for _, r := range records {
@@ -153,8 +156,11 @@ func (m *mainWindow) historyStatsView(c *ui.Context, s historySummary, now time.
 			m.clearHistoryFilters()
 			c.After(0)
 		}
-		ui.Spacer(c)
 		ui.Text(c, s.start.Format("1/2")+" – "+now.Format("1/2")).FontSize(12).TextColor(t.TextMuted)
+		ui.Spacer(c)
+		if ui.Button(c.Key("export"), T("v3Export")).Clicked() {
+			m.openHistoryExport()
+		}
 	})
 	ui.Grid(c).Columns(func() int {
 		w, _ := c.Size()
@@ -162,9 +168,9 @@ func (m *mainWindow) historyStatsView(c *ui.Context, s historySummary, now time.
 			return 2
 		}
 		return 4
-	}()).Role(ui.RoleGroup).Label(T("v2Summary")).FillWidth().Gap(24).Padding(4, 0, 18).BorderWidth(0, 0, 1, 0).BorderColor(settingsGroupLine(c)).Children(func() {
+	}()).Role(ui.RoleGroup).Label(T("v2Summary")).FillWidth().Gap(0).Radius(16).Background(cardColor(t)).Border(.5, settingsGroupLine(c)).Children(func() {
 		for i, v := range [][2]string{{T("v2Chars"), statNumber(s.chars)}, {T("v2Sessions"), statNumber(s.sessions)}, {T("v2Duration"), minuteDuration(s.duration)}, {T("v2Rate"), ""}} {
-			ui.Column(c.Key(i)).Grow(1).MinWidth(0).Gap(8).Children(func() {
+			ui.Column(c.Key(i)).Grow(1).MinWidth(0).Padding(18, 16).BorderWidth(0, 0, 0, .5).BorderColor(settingsGroupLine(c)).Gap(6).Children(func() {
 				ui.Text(c, v[0]).FontSize(12).TextColor(t.TextMuted).SingleLine()
 				value := v[1]
 				if i == 3 {
@@ -173,7 +179,7 @@ func (m *mainWindow) historyStatsView(c *ui.Context, s historySummary, now time.
 						value = fmt.Sprintf("%.0f%%", 100*float64(s.outcomes[store.StatusInserted])/float64(s.sessions))
 					}
 				}
-				size := float32(25)
+				size := float32(21)
 				if i == 0 {
 					size = 30
 				}
@@ -184,22 +190,29 @@ func (m *mainWindow) historyStatsView(c *ui.Context, s historySummary, now time.
 			})
 		}
 	})
+}
+
+func (m *mainWindow) homeCharts(c *ui.Context, s historySummary, now time.Time) {
+	t := c.Theme()
 	func() ui.Element {
 		w, _ := c.Size()
-		if w < 840 {
+		if w < 650 {
 			return ui.Column(c)
 		}
 		return ui.Row(c)
 	}().Role(ui.RoleGroup).Label(T("v2Trend")).FillWidth().Gap(28).Children(func() {
 		m.heatmap(c, s, now)
-		ui.Column(c.Key("app-distribution")).Role(ui.RoleGroup).Label(T("v2Apps")).FillWidth().Grow(1).MinWidth(0).Height(300).Gap(16).Children(func() {
-			ui.Text(c, T("v2Apps")).FontSize(15).FontWeight(600)
-			ui.Scroll(c.Key("apps-scroll")).Grow(1).FillWidth().Gap(8).Children(func() {
+		ui.Column(c.Key("app-distribution")).Role(ui.RoleGroup).Label(T("v2Apps")).FillWidth().Grow(1).MinWidth(0).Height(195).Gap(10).Children(func() {
+			ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+				ui.Text(c, T("v2Apps")).FontSize(14).FontWeight(600).Grow(1)
+				ui.Text(c, T("v3AppUnits")).FontSize(11).TextColor(t.TextMuted)
+			})
+			ui.Scroll(c.Key("apps-scroll")).Grow(1).FillWidth().Gap(3).Children(func() {
 				if len(s.apps) == 0 {
 					ui.Text(c, T("noRecords")).FontSize(13).TextColor(t.TextMuted)
 				}
 				for _, a := range s.apps {
-					row := ui.ButtonBase(c.Key(a.key)).FillWidth().Padding(8, 6).Radius(6).Label(T("v2FilterApp", a.name)).Children(func() {
+					row := ui.ButtonBase(c.Key(a.key)).FillWidth().Padding(5, 6).Radius(6).Label(T("v2FilterApp", a.name)).Children(func() {
 						ui.Column(c).FillWidth().Gap(6).Children(func() {
 							ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(8).Children(func() {
 								appIdentity(c, a.bundle, a.name, true)
@@ -236,14 +249,14 @@ var outcomeLabels = []string{"v2Inserted", "notInsertedTag", "failedTag", "cance
 func (m *mainWindow) outcomeBar(c *ui.Context, s historySummary) {
 	t := c.Theme()
 	colors := []ui.Color{t.Accent, t.TextMuted, t.Danger, settingsGroupLine(c)}
-	ui.Row(c).FillWidth().Height(7).Gap(2).Children(func() {
+	ui.Row(c).FillWidth().Height(28).Gap(2).Children(func() {
 		for i, k := range outcomeKeys {
 			n := s.outcomes[k]
 			if n == 0 {
 				continue
 			}
 			tip := fmt.Sprintf("%s · %d · %.0f%%", T(outcomeLabels[i]), n, 100*float64(n)/float64(max(1, s.sessions)))
-			b := ui.ButtonBase(c.Key(k)).Grow(float32(n)).MinWidth(0).Height(7).Padding(0).Radius(2).Background(colors[i]).Label(tip).Tooltip(tip)
+			b := ui.ButtonBase(c.Key(k)).Grow(float32(n)).MinWidth(18).Height(28).Padding(0).Radius(2).Label(tip).Tooltip(tip).Draw(func(p *ui.Painter, r ui.Rect) { r.Y += 11; r.H = 6; p.Fill(r, colors[i], 2) })
 			if m.hStatus == k {
 				b.Border(1, t.Text)
 			}
@@ -263,9 +276,18 @@ func (m *mainWindow) heatmap(c *ui.Context, s historySummary, now time.Time) {
 	if m.heatFocus == nil {
 		m.heatFocus = map[string]*ui.Handle{}
 	}
-	panel := ui.Column(c.Key("trend")).Role(ui.RoleGroup).Label(T("v2Trend")).FillWidth().Grow(1.35).MinWidth(0).Height(300).Gap(16)
+	panel := ui.Column(c.Key("trend")).Role(ui.RoleGroup).Label(T("v2Trend")).FillWidth().Grow(1.65).MinWidth(0).Height(195).Gap(10)
 	panel.Children(func() {
-		ui.Text(c, T("v2Trend")).FontSize(15).FontWeight(600)
+		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
+			ui.Text(c, T("v2Trend")).FontSize(14).FontWeight(600).Grow(1)
+			options := []string{T("v2Seven"), T("v3Fourteen"), T("v2Thirty")}
+			chosen := options[m.homeRange]
+			if ui.Select(c.Key("home-range"), &chosen, options).Width(76).Height(22).FontSize(11).Label(T("v2Period")).Changed() {
+				m.homeRange = slices.Index(options, chosen)
+				m.clearHistoryFilters()
+				c.After(0)
+			}
+		})
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
 			ui.Row(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 				for h := 0; h < 24; h++ {
@@ -273,12 +295,12 @@ func (m *mainWindow) heatmap(c *ui.Context, s historySummary, now time.Time) {
 					if h == 0 || h == 6 || h == 12 || h == 18 || h == 23 {
 						label = fmt.Sprint(h)
 					}
-					ui.Text(c, label).Grow(1).MinWidth(0).FontSize(11).TextColor(t.TextMuted).TextAlign(ui.Center)
+					ui.Text(c, label).Grow(1).MinWidth(0).FontSize(10).Font("Menlo").TextColor(t.TextMuted).TextAlign(ui.Center)
 				}
 			})
 			ui.Box(c).Width(34)
 		})
-		ui.Scroll(c.Key(fmt.Sprint("heat-", m.hRange))).Grow(1).FillWidth().Gap(3).Children(func() {
+		ui.Scroll(c.Key(fmt.Sprint("heat-", m.homeRange))).Grow(1).FillWidth().Gap(4).Children(func() {
 			for day := dayStart(now); !day.Before(s.start); day = day.AddDate(0, 0, -1) {
 				ui.Row(c.Key(day.Format("2006-01-02"))).Role(ui.RoleGroup).Label(day.Format("2006/1/2")).FillWidth().Gap(8).AlignItems(ui.Center).Children(func() {
 					ui.Row(c).Grow(1).MinWidth(0).Gap(2).Children(func() {

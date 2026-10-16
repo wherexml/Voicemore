@@ -23,7 +23,7 @@ var keyNames = map[string]string{
 // keyName is a trigger key as the interface names it.
 func keyName(key string) string {
 	if key == macos.KeyFn {
-		return "fn"
+		return "Fn"
 	}
 	if k, ok := keyNames[key]; ok {
 		symbol := map[string]string{macos.KeyRightOption: "⌥", macos.KeyRightCommand: "⌘", macos.KeyRightControl: "⌃"}[key]
@@ -64,142 +64,151 @@ func providerName(id string, s config.Settings, kind ...string) string {
 }
 
 func (m *mainWindow) homeView(c *ui.Context) {
-	t := c.Theme()
-	s := m.a.settings.Get()
-	p := m.a.prefs
-	width, _ := m.win.ContentSize()
-	columns := 4
-	if width < 900 {
-		columns = 2
-	}
-	tileWidth := float32(min(width-160, 1080)) / float32(columns)
-	key := keyName(s.TriggerKey)
 	now := time.Now()
 	c.After(untilNextMinute(now))
-	c.After(time.Second)
-	ui.Scroll(c).Fill().Padding(18, 32, 24).AlignItems(ui.Center).Children(func() {
-		ui.Column(c).FillWidth().MaxWidth(1100).Gap(18).Children(func() {
-			ui.Row(c.Key("hero")).FillWidth().Padding(18).Gap(22).AlignItems(ui.Center).Radius(16).LinearGradient(ui.LinearGradient{From: pick(t, "#ededf4", "#252630"), To: cardColor(t), Angle: 110, End: 0.65}).Shadow(0, 4, 12, 0, ui.RGBA(0, 0, 0, 0.16)).Children(func() {
-				keycap(c, key, 54, 17)
-				ui.Column(c).Grow(1).MinWidth(0).Gap(6).Children(func() {
-					ui.Text(c, T("homeReady", key)).FontSize(22).FontWeight(600)
-					hint := "homeToggle"
-					if s.TriggerMode == config.TriggerHold {
-						hint = "homeHold"
-					}
-					if m.starting {
-						hint = "homeCountdown"
-					}
-					ui.Text(c, T(hint)).FontSize(13).TextColor(softText(t))
-				})
-				phase := m.a.ctrl.View().Phase
-				recording := phase == session.Recording || phase == session.Preparing
-				label := T("homeTry")
-				if recording {
-					label = T("homeFinish")
+	stats := m.historySummary(m.a.history.List(""), now)
+	records := m.filteredHistory(m.a.history.List(m.query), stats.start, now)
+	ui.Column(c).Fill().Padding(26, 28, 0).Gap(0).Children(func() {
+		m.homeToolbar(c)
+		ui.Column(c).FillWidth().Margin(0, 0, 18).Padding(18, 0).BorderWidth(.5, 0, .5, 0).BorderColor(settingsGroupLine(c)).Children(func() { m.homeCharts(c, stats, now) })
+		ui.Row(c).FillWidth().Wrap().Padding(6, 2, 10).BorderWidth(0, 0, .5, 0).BorderColor(settingsGroupLine(c)).AlignItems(ui.Center).Gap(8).Children(func() {
+			ui.Text(c, T("v3Recent")).FontSize(15).FontWeight(600)
+			if ui.Button(c, T("v2All")).Height(26).Clicked() {
+				m.clearHistoryFilters()
+			}
+			for _, app := range stats.apps[:min(4, len(stats.apps))] {
+				b := ui.ButtonBase(c.Key(app.key)).Height(26).Padding(0, 6).Radius(13).Gap(5).AlignItems(ui.Center).Label(app.name).Children(func() { appIdentity(c, app.bundle, app.name, false, true) })
+				if m.hApp == app.key {
+					b.Background(settingsGroupColor(c.Theme()))
 				}
-				if ui.PrimaryButton(c.Key("dictate"), "").Label(label).Height(36).Radius(10).Padding(6, 16).Children(func() { ui.Icon(c, icMic).Size(14, 14); ui.Text(c, label).SingleLine() }).Disabled(m.starting || m.a.updates.installing || (phase != session.Idle && !recording && phase != session.Done && phase != session.Failed)).Clicked() {
-					if recording {
-						go m.a.ctrl.Toggle()
+				if b.Clicked() {
+					if m.hApp == app.key {
+						m.hApp = ""
 					} else {
-						m.starting = true
-						if phase == session.Done || phase == session.Failed {
-							m.a.ctrl.Dismiss()
-						}
-						time.AfterFunc(3*time.Second, func() {
-							m.win.Update(func() {
-								m.starting = false
-								phase := m.a.ctrl.View().Phase
-								if !m.a.quitting && !m.a.updates.installing && phase == session.Idle {
-									go m.a.ctrl.Toggle()
-								}
-							})
-						})
+						m.hApp = app.key
 					}
 				}
-			})
-			ui.Row(c.Key("tiles")).FillWidth().Wrap().Radius(12).Background(fillColor(t)).Children(func() {
-				tile := func(id string, svg *ui.SVG, title, value, cat string, control func()) {
-					col := ui.Column(c.Key(id)).Grow(1).Basis(tileWidth).MinWidth(0).Padding(14, 16, 16).Gap(8)
-					if id != "perms" {
-						col.BorderWidth(0, 0.5, 0, 0).BorderColor(pick(t, "#dddddd", "#333333"))
-					}
-					if m.tileHover == nil {
-						m.tileHover = map[string]time.Time{}
-					}
-					if col.Hovered() {
-						if m.tileHover[id].IsZero() {
-							m.tileHover[id] = now
-						}
-					} else {
-						delete(m.tileHover, id)
-					}
-					elapsed := now.Sub(m.tileHover[id])
-					showSettings := col.FocusWithin() || (col.Hovered() && elapsed >= 500*time.Millisecond)
-					if col.Hovered() && !showSettings {
-						c.After(500*time.Millisecond - elapsed)
-					}
-					col.Children(func() {
-						ui.Row(c).Height(22).AlignItems(ui.Center).Gap(7).Children(func() {
-							ui.Icon(c, svg).Size(14, 14).TextColor(t.TextMuted)
-							ui.Text(c, title).FontSize(12).TextColor(t.TextMuted).Grow(1).MinWidth(0).SingleLine()
-							settings := journalAction(c.Key("open"), icChevron, T("openIn", title)).Size(22, 22)
-							if !showSettings {
-								settings.Opacity(0)
-							}
-							if settings.Clicked() {
-								p.open(cat)
-							}
-						})
-						ui.Text(c, value).Height(24).FontSize(15).FontWeight(600).SingleLine().Tooltip(value)
-						ui.Row(c).FillWidth().MinWidth(0).Height(28).Gap(6).AlignItems(ui.Center).Children(control)
-					})
-				}
-				mode := 0
-				if s.TriggerMode == config.TriggerHold {
-					mode = 1
-				}
-				tile("shortcut", icKeyboard, T("hShortcut"), key+" · "+T([]string{"mToggle", "mHold"}[mode]), "dictation", func() {
-					p.triggerKey(c, s, true)
-					if segmentedSize(c.Key("mode"), &mode, true, T("modeToggleShort"), T("modeHoldShort")).Disabled(!macos.IsModifierKey(s.TriggerKey)).Changed() {
-						p.change(func(s *config.Settings) { s.TriggerMode = []string{config.TriggerToggle, config.TriggerHold}[mode] })
-					}
-				})
-				value := T("off")
-				if s.CleanupDefault {
-					value = m.a.modelLabel(providers.KindCleanup, s)
-				}
-				tile("cleanup", icSparkle, T("cleanup"), value, "dictation", func() {
-					ui.Row(c).FillWidth().Height(28).Padding(0, 5, 0, 10).AlignItems(ui.Center).Radius(7).Background(cardColor(t)).Children(func() {
-						ui.Text(c, T("sCleanDefault")).FontSize(12).TextColor(t.TextMuted).Grow(1).MinWidth(0).SingleLine()
-						m.a.cleanupSwitch(c)
-					})
-				})
-				tile("asr", icMic, T("mAsr"), m.a.modelLabel(providers.KindASR, s), "models", func() { names, uids, _, _ := p.microphoneOptions(c, s); p.microphoneSelect(c, s, names, uids, 0) })
-				perm := T("notGranted")
-				if permissionsGranted() {
-					perm = T("granted")
-				}
-				tile("perms", icShield, T("gPerms"), perm, "perms", func() {
-					if ui.Button(c, T("gPerms")).FillWidth().Height(28).Padding(0, 8).Clicked() {
-						p.open("perms")
-					}
-				})
-			})
-			ui.Column(c.Key("recent")).FillWidth().Children(func() {
-				ui.Row(c).FillWidth().AlignItems(ui.Center).Gap(16).Padding(0, 0, 12).Children(func() {
-					ui.Text(c, T("homeRecent")).FontSize(15).FontWeight(600).Grow(1)
-					if ui.ButtonBase(c.Key("all")).Label(T("showAll")).Padding(6).Children(func() { ui.Text(c, T("showAll")).FontSize(12) }).Clicked() {
-						m.clearHistoryFilters()
-						m.hRange = 3
-						m.goTo("history")
-					}
-				})
-				ui.Divider(c)
-				records := m.a.history.List("")
-				m.journal(c, records[:min(4, len(records))], now)
-			})
+			}
+			ui.Spacer(c)
+			searchInput(c, "home-search", &m.query, 180)
 		})
+		m.historyFilterChips(c)
+		ui.Scroll(c.Key("recent")).Grow(1).FillWidth().MinHeight(0).Children(func() {
+			m.journal(c, records[:min(12, len(records))], now)
+			if ui.Button(c, T("showAll")).Clicked() {
+				m.goTo("history")
+				m.hRange = 3
+			}
+		})
+	})
+}
+
+func (m *mainWindow) homeToolbar(c *ui.Context) {
+	s := m.a.settings.Get()
+	p := m.a.prefs
+	t := c.Theme()
+	ui.Row(c.Key("toolbar")).FillWidth().Margin(0, 0, 20).Wrap().Gap(6).AlignItems(ui.Center).Children(func() {
+		phase := m.a.ctrl.View().Phase
+		recording := phase == session.Recording || phase == session.Preparing
+		label := T("fnDictation")
+		if recording {
+			label = T("homeFinish")
+		}
+		if m.starting {
+			label = T("homeCountdown")
+		}
+		if homeControl(c.Key("dictate"), icMic, label, false, keyName(s.TriggerKey)).Height(32).Background(railText(t)).TextColor(cardColor(t)).Disabled(m.starting || m.a.updates.installing || (phase != session.Idle && !recording && phase != session.Done && phase != session.Failed)).Clicked() {
+			if recording {
+				go m.a.ctrl.Toggle()
+			} else {
+				m.starting = true
+				if phase == session.Done || phase == session.Failed {
+					m.a.ctrl.Dismiss()
+				}
+				time.AfterFunc(3*time.Second, func() {
+					m.win.Update(func() {
+						m.starting = false
+						if !m.a.quitting && !m.a.updates.installing && m.a.ctrl.View().Phase == session.Idle {
+							go m.a.ctrl.Toggle()
+						}
+					})
+				})
+			}
+		}
+		homeControl(c.Key("trigger"), icKeyboard, keyName(s.TriggerKey)+" · "+T(map[bool]string{true: "modeHoldShort", false: "modeToggleShort"}[s.TriggerMode == config.TriggerHold]), true).Menu(func(menu *ui.Menu) {
+			for _, key := range []string{macos.KeyFn, macos.KeyRightOption, macos.KeyRightCommand, macos.KeyRightControl} {
+				if menu.Item(keyName(key)).Chosen() {
+					p.change(func(s *config.Settings) { s.TriggerKey = key })
+				}
+			}
+			menu.Separator()
+			for _, mode := range []string{config.TriggerToggle, config.TriggerHold} {
+				label := T("modeToggleShort")
+				if mode == config.TriggerHold {
+					label = T("modeHoldShort")
+				}
+				if menu.Item(label).Disabled(mode == config.TriggerHold && !macos.IsModifierKey(s.TriggerKey)).Chosen() {
+					p.change(func(s *config.Settings) { s.TriggerMode = mode })
+				}
+			}
+			if menu.Item(T("catDictation")).Chosen() {
+				p.open("dictation")
+			}
+		})
+		for _, kind := range []string{providers.KindASR, providers.KindCleanup} {
+			label := m.a.modelLabel(kind, s)
+			if kind == providers.KindCleanup {
+				label = T("cleanup") + ": " + label
+			}
+			if kind == providers.KindCleanup && !s.CleanupDefault {
+				label = T("cleanup") + ": " + T("off")
+			}
+			homeControl(c.Key(kind), map[string]*ui.SVG{providers.KindASR: icWave, providers.KindCleanup: icSparkle}[kind], label, true).MaxWidth(175).Menu(func(menu *ui.Menu) {
+				if kind == providers.KindCleanup {
+					if menu.Item(T("off")).Chosen() {
+						p.change(func(s *config.Settings) { s.CleanupDefault = false })
+					}
+					menu.Separator()
+				}
+				for _, o := range providers.Eligible(kind, s, m.a.secret) {
+					if menu.Item(providerName(o.Provider, s, kind) + " · " + modelText(o.Provider, o.Model)).Chosen() {
+						p.assign(kind, o.Provider, o.Model)
+						if kind == providers.KindCleanup {
+							p.change(func(s *config.Settings) { s.CleanupDefault = true })
+						}
+					}
+				}
+				menu.Separator()
+				if menu.Item(T("manage")).Chosen() {
+					p.open("models")
+				}
+			})
+		}
+		names, uids, _, _ := p.microphoneOptions(c, s)
+		mic := T("micAuto")
+		for i, uid := range uids {
+			if uid == s.InputDevice && uid != "" {
+				mic = names[i]
+			}
+		}
+		homeControl(c.Key("mic"), icMic, mic, true).MaxWidth(130).Menu(func(menu *ui.Menu) {
+			for i, name := range names {
+				if menu.Item(name).Chosen() {
+					uid, device := uids[i], ""
+					for _, d := range p.mics {
+						if d.UID == uid {
+							device = d.Name
+						}
+					}
+					p.change(func(s *config.Settings) { s.InputDevice, s.InputDeviceName = uid, device })
+				}
+			}
+		})
+		if !permissionsGranted() {
+			if ui.Button(c, T("gPerms")).TextColor(t.Danger).Height(30).Clicked() {
+				p.open("perms")
+			}
+		}
 	})
 }
 
@@ -231,6 +240,20 @@ func (a *app) cleanupSwitch(c *ui.Context) {
 	ui.Box(c.Key("cleanupHint")).Tooltip(hint).Children(func() {
 		if ui.Switch(c.Key("sw"), &on).Label(T("cleanup")).Disabled(!a.cleanupReady && !on).Changed() {
 			a.setCleanup(on)
+		}
+	})
+}
+
+// Match the approved compact HTML toolbar rather than the borderless settings buttons.
+func homeControl(c *ui.Context, glyph *ui.SVG, label string, chevron bool, shortcut ...string) ui.Element {
+	return ui.ButtonBase(c).Height(30).Padding(0, 10).Radius(8).Gap(6).AlignItems(ui.Center).Background(cardColor(c.Theme())).Border(.5, settingsGroupLine(c)).Label(label).Tooltip(label).Children(func() {
+		ui.Icon(c, glyph).Size(14, 14)
+		ui.Text(c, label).FontSize(12.5).FontWeight(400).SingleLine().MinWidth(0)
+		if len(shortcut) > 0 {
+			ui.Text(c, shortcut[0]).FontSize(11).Font("Menlo").Padding(1, 5).Radius(4).Background(pick(c.Theme(), "#525252", "#dedede"))
+		}
+		if chevron {
+			ui.Icon(c, icDown).Size(10, 10)
 		}
 	})
 }

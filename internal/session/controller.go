@@ -19,6 +19,7 @@ import (
 	"voiceinput/internal/config"
 	"voiceinput/internal/dict"
 	"voiceinput/internal/macos"
+	"voiceinput/internal/providers"
 	"voiceinput/internal/store"
 	"voiceinput/internal/textstyle"
 )
@@ -533,7 +534,7 @@ func (c *Controller) endCue(r *run) {
 // record is the goroutine of a dictation, up to the final transcript.
 func (c *Controller) record(r *run, s config.Settings) {
 	r.target = macos.CaptureTarget()
-	r.rec = store.Record{ID: r.id, StartedAt: r.started, TargetApp: r.target.AppName, TargetBundleID: r.target.BundleID, CleanupRequested: r.cleanup, Status: store.StatusFailed}
+	r.rec = store.Record{ID: r.id, StartedAt: r.started, TargetApp: r.target.AppName, TargetBundleID: r.target.BundleID, ASRModel: providers.ModelName(providers.KindASR, s), CleanupRequested: r.cleanup, Status: store.StatusFailed}
 
 	switch macos.MicrophoneStatus() {
 	case "denied", "restricted":
