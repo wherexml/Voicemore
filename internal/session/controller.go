@@ -79,7 +79,6 @@ type Controller struct {
 	OnChange    func()
 	OnHistory   func()
 	CopyText    func(string)
-	RecentInput func(string, *macos.Target, func(string))
 	SendPreview func(context.Context, string, *macos.Target, time.Duration, func(string)) bool
 
 	// Tr gives the messages in the user's language and Explain the errors
@@ -1039,11 +1038,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		rec.Status, rec.StatusDetail, rec.InsertedText = store.StatusInserted, detail, editedText
 		rec.Timing.FinalToInsertMs = time.Since(r.finalAt).Milliseconds()
 	})
-	recentText := editedText
 	editMu.Unlock()
-	if c.RecentInput != nil && !res.Remote {
-		c.RecentInput(recentText, res.Target, func(edited string) { c.update(r, func(rec *store.Record) { rec.InsertedText = edited }) })
-	}
 	if !observing {
 		res.Target.Release()
 	}

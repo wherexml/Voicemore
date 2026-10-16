@@ -297,7 +297,6 @@ func (a *app) ready() {
 	a.overlay = newOverlay(a)
 	a.sendPreview = newSendPreview(a)
 	a.ctrl.SendPreview = a.sendPreview.wait
-	a.ctrl.RecentInput = a.sendPreview.remember
 	a.startSendPreviewAcceptance()
 	a.main = newMainWindow(a)
 	a.prefs = newPrefsWindow(a)
@@ -567,7 +566,6 @@ func (a *app) setMenu() {
 			a.main.show()
 			a.checkUpdates()
 		}},
-		{Label: recentTextLabel(), Click: func(*mygo.MenuItem, *mygo.Window) { a.sendPreview.win.Update(a.sendPreview.showRecent) }},
 		{Label: T("trayOpen"), Click: func(*mygo.MenuItem, *mygo.Window) { a.main.show() }},
 		mygo.Separator(),
 		{Role: mygo.RoleQuit},
