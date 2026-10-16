@@ -394,7 +394,24 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 		releaseClipboard(saved)
 	})
 	if sendKey != "" && res.SendSkipped == "" {
-		res.SendSkipped = sendAfterPaste(text, sendKey, o, current, sendWindow)
+		allowed := true
+		if o.BeforeSend != nil {
+			allowed = o.BeforeSend(current)
+		} else {
+			end := time.Now().Add(time.Duration(o.AutoSend.Delay()) * time.Millisecond)
+			for time.Now().Before(end) {
+				if (o.Context != nil && o.Context.Err() != nil) || !current.StillFocused() {
+					allowed = false
+					break
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+		}
+		if !allowed {
+			res.SendSkipped = "cancelled"
+		} else {
+			res.SendSkipped = sendAfterPaste(text, sendKey, o, current, sendWindow)
+		}
 		if res.SendSkipped == "" {
 			res.SendShortcut = sendKey
 		}

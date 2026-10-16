@@ -40,6 +40,7 @@ type app struct {
 
 	tray            *mygo.Tray
 	overlay         *overlay
+	sendPreview     *sendPreviewWindow
 	main            *mainWindow
 	quitting        bool
 	cleanupCheck    uint64
@@ -201,7 +202,7 @@ func main() {
 	// The menu bar item and the trigger key work whether or not its window
 	// is open.
 	mygo.App.SetActivationPolicy(mygo.ActivationPolicyRegular)
-	if !mygo.App.RequestSingleInstanceLock() {
+	if os.Getenv("VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE") == "" && !mygo.App.RequestSingleInstanceLock() {
 		return // the instance already running keeps the trigger key
 	}
 	mygo.App.OnWindowAllClosed(func() {}) // closing the window leaves dictation running
@@ -294,6 +295,9 @@ func (a *app) ready() {
 	archive := filepath.Join(filepath.Dir(executable), "../Resources/local-asr/runtime.tar.gz")
 	a.localASR = localasr.New(filepath.Join(dir, "local-asr"), archive)
 	a.overlay = newOverlay(a)
+	a.sendPreview = newSendPreview(a)
+	a.ctrl.SendPreview = a.sendPreview.wait
+	a.startSendPreviewAcceptance()
 	a.main = newMainWindow(a)
 	a.prefs = newPrefsWindow(a)
 	a.onboard = newOnboardWindow(a)
@@ -492,6 +496,9 @@ func (a *app) purge() {
 // toggles. A failure is kept for the window to show; no other key is
 // taken in its place, and no system setting is changed.
 func (a *app) bindTrigger() {
+	if os.Getenv("VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE") != "" {
+		return
+	}
 	if a.stopHotkey != nil {
 		a.stopHotkey()
 		a.stopHotkey = nil
@@ -517,7 +524,7 @@ func (a *app) bindTrigger() {
 	key := a.settings.Get().TriggerKey
 	if macos.IsModifierKey(key) {
 		macos.InputMonitoringGranted(true)
-		stop, err := macos.StartHotkey(key, a.ctrl.KeyDown, a.ctrl.KeyUp, a.ctrl.Cancel)
+		stop, err := macos.StartHotkey(key, a.ctrl.KeyDown, a.ctrl.KeyUp, a.cancelInput)
 		if err != nil {
 			a.triggerErr = err.Error()
 			return
@@ -529,7 +536,7 @@ func (a *app) bindTrigger() {
 		a.triggerErr = T("errShortcut", key, err.Error())
 		return
 	}
-	stopEscape, err := macos.StartHotkey("", nil, nil, a.ctrl.Cancel)
+	stopEscape, err := macos.StartHotkey("", nil, nil, a.cancelInput)
 	if err != nil {
 		a.triggerErr = err.Error()
 	}

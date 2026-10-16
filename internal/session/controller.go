@@ -76,9 +76,10 @@ type Controller struct {
 
 	// OnChange is called, from any goroutine, when the view changed, and
 	// OnHistory when a record did. CopyText puts text on the clipboard.
-	OnChange  func()
-	OnHistory func()
-	CopyText  func(string)
+	OnChange    func()
+	OnHistory   func()
+	CopyText    func(string)
+	SendPreview func(context.Context, string, *macos.Target, time.Duration, func(string)) bool
 
 	// Tr gives the messages in the user's language and Explain the errors
 	// of lower layers; without them both are English. CleanupKey returns
@@ -976,7 +977,19 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		c.mu.Unlock()
 		go c.observe(r, s, text, target)
 	}
-	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs, RemoteInputs: s.RemoteInputs, AutoSend: s.AutoSend, OnPasted: onPasted})
+	var editMu sync.Mutex
+	editedText := text
+	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs, RemoteInputs: s.RemoteInputs, AutoSend: s.AutoSend, OnPasted: onPasted, BeforeSend: func(target *macos.Target) bool {
+		if c.SendPreview == nil || s.AutoSend.Delay() == 0 {
+			return true
+		}
+		return c.SendPreview(r.ctx, text, target, time.Duration(s.AutoSend.Delay())*time.Millisecond, func(edited string) {
+			editMu.Lock()
+			editedText = edited
+			c.update(r, func(rec *store.Record) { rec.InsertedText = edited })
+			editMu.Unlock()
+		})
+	}})
 	if errors.Is(err, context.Canceled) {
 		r.release()
 		return
@@ -1017,13 +1030,15 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 	if !res.ClipboardRestored && !res.Remote {
 		detail += "; " + c.tr("detailClipboard")
 	}
+	editMu.Lock()
 	c.update(r, func(rec *store.Record) {
 		rec.SendShortcut, rec.SendSkipped = res.SendShortcut, res.SendSkipped
 		rec.TargetApp = res.Target.AppName
 		rec.TargetBundleID = res.Target.BundleID
-		rec.Status, rec.StatusDetail, rec.InsertedText = store.StatusInserted, detail, text
+		rec.Status, rec.StatusDetail, rec.InsertedText = store.StatusInserted, detail, editedText
 		rec.Timing.FinalToInsertMs = time.Since(r.finalAt).Milliseconds()
 	})
+	editMu.Unlock()
 	if !observing {
 		res.Target.Release()
 	}
