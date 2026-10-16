@@ -96,4 +96,4 @@ The exact DMG SHA-256 is `c90fd16ae149f3a6d012c9dffc299e17bbdc4f8745de408971c330
 
 ## Finder installer presentation
 
-Both local and notarized packaging use `scripts/build-dmg.sh`; see [DMG installer specification](DMG-INSTALLER.md) for artwork, native language resolution and acceptance. The shared builder preserves the signed/stapled app and refuses existing output paths. Formal signing/notarization gates remain after layout packaging.
+Both local and notarized packaging use `scripts/build-dmg.sh`; see [DMG installer specification](DMG-INSTALLER.md) for artwork, fixed-English instructions and acceptance. The shared builder preserves the signed/stapled app and refuses existing output paths. Formal signing/notarization gates remain after layout packaging.

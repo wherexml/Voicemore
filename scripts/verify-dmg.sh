@@ -34,4 +34,4 @@ expected=$(tr -d '\r\n' < internal/localasr/assets/runtime.sha256)
 actual=$(shasum -a 256 "$app/Contents/Resources/local-asr/runtime.tar.gz" | awk '{print $1}')
 [ "$expected" = "$actual" ]
 shasum -a 256 "$image" > "$evidence/SHA256SUMS.txt"
-printf '%s\n' 'PASS: DMG integrity, Applications shortcut, Finder layout and localized hint, copied app signature, arm64, product metadata, bundled runtime checksum.' | tee "$evidence/result.txt"
+printf '%s\n' 'PASS: DMG integrity, Applications shortcut, Finder layout and fixed-English background, copied app signature, arm64, product metadata, bundled runtime checksum.' | tee "$evidence/result.txt"
