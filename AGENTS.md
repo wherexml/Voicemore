@@ -33,3 +33,5 @@
 - 整理须主动去口吃、修碎句、合冗余，逐条复核忠实性与流畅度；“一次/一遍/一回”自然写法见[基础格式规格](docs/public/TEXT-FORMATTING.md)。不增加输出拦截。
 
 - 更新按钮的圆弧箭头、侧栏线宽与原生验收见[更新界面规格](docs/public/UPDATE-UI.md#refresh-icon)。
+
+- 自动发送、全局继承、应用身份、标准下拉与原生验收见 [自动发送规格](docs/public/AUTO-SEND.md)；发送键触发不等于消息送达。

@@ -11,6 +11,7 @@ import (
 
 func RunningApplications() []Application {
 	var result []Application
+	seen := map[string]bool{}
 	if load() != nil {
 		return nil
 	}
@@ -19,7 +20,8 @@ func RunningApplications() []Application {
 		for i := 0; i < objc.Send[int](apps, sel("count")); i++ {
 			app := apps.Send(sel("objectAtIndex:"), i)
 			id := goString(app.Send(sel("bundleIdentifier")))
-			if id != "" && id != "dev.steve.voice-input" && objc.Send[int](app, sel("activationPolicy")) == 0 {
+			if id != "" && !seen[id] && id != "dev.steve.voice-input" && objc.Send[int](app, sel("activationPolicy")) == 0 {
+				seen[id] = true
 				result = append(result, Application{goString(app.Send(sel("localizedName"))), id})
 			}
 		}

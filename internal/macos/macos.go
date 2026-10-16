@@ -40,6 +40,7 @@ type InsertOptions struct {
 	// the earlier content is put back.
 	RestoreDelayMs int
 	RemoteInputs   []config.RemoteInput
+	AutoSend       config.AutoSend
 	// OnPasted starts observation before clipboard restoration. Local successful pastes only.
 	// The callback may retain Target until observation finishes; the caller owns its release.
 	OnPasted func(*Target)
@@ -47,6 +48,8 @@ type InsertOptions struct {
 
 // InsertResult says what could be checked about an insertion.
 type InsertResult struct {
+	SendShortcut  string // Nonempty only when the key pair was dispatched; not a delivery receipt.
+	SendSkipped   string // Stable diagnostic reason, if configured but skipped.
 	ClipboardOnly bool
 	// Remote reports a shortcut dispatched without remote readback.
 	Remote bool

@@ -4,6 +4,7 @@ package macos
 
 import (
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/ebitengine/purego/objc"
@@ -289,6 +290,24 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 		}
 		return remote, err
 	}
+	var sendWindow uintptr
+	sendKey := o.AutoSend.Shortcut(current.BundleID)
+	// A configured remote client never inherits the local send rule, including
+	// windows outside a profile or a profile whose paste shortcut is disabled.
+	for _, r := range o.RemoteInputs {
+		if r.BundleID == current.BundleID {
+			sendKey = ""
+			break
+		}
+	}
+	if sendKey != "" {
+		OnMain(func() { sendWindow = focusedWindow(current.pid) })
+		defer func() {
+			if sendWindow != 0 {
+				OnMain(func() { cfRelease(sendWindow) })
+			}
+		}()
+	}
 	var saved []clipboardItem
 	var change int
 	var cancelled error
@@ -335,10 +354,38 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 	if res.ClipboardOnly {
 		return res, nil
 	}
-	if o.OnPasted != nil {
+	if o.OnPasted != nil && sendKey == "" {
 		o.OnPasted(current)
 	}
-	time.Sleep(time.Duration(max(o.RestoreDelayMs, 200)) * time.Millisecond)
+	settleUntil := time.Now().Add(time.Duration(max(o.RestoreDelayMs, 200)) * time.Millisecond)
+	for time.Now().Before(settleUntil) {
+		if sendKey != "" && res.SendSkipped == "" {
+			if o.Context != nil && o.Context.Err() != nil {
+				res.SendSkipped = "cancelled"
+			} else {
+				OnMain(func() {
+					if frontmostPID() != current.pid || sendWindow == 0 || objc.Send[int](pasteboard(), sel("changeCount")) != change {
+						res.SendSkipped = "target-or-clipboard-changed"
+						return
+					}
+					w := focusedWindow(current.pid)
+					if w == 0 {
+						res.SendSkipped = "target-changed"
+						return
+					}
+					defer cfRelease(w)
+					f := focusedElement(current.pid)
+					if f != 0 {
+						defer cfRelease(f)
+					}
+					if !cfEqual(w, sendWindow) || f == 0 || current.element == 0 || !cfEqual(f, current.element) {
+						res.SendSkipped = "target-changed"
+					}
+				})
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	OnMain(func() {
 		if objc.Send[int](pasteboard(), sel("changeCount")) == change {
 			restoreClipboard(saved)
@@ -346,7 +393,116 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 		}
 		releaseClipboard(saved)
 	})
+	if sendKey != "" && res.SendSkipped == "" {
+		res.SendSkipped = sendAfterPaste(text, sendKey, o, current, sendWindow)
+		if res.SendSkipped == "" {
+			res.SendShortcut = sendKey
+		}
+	}
 	return res, nil
+}
+
+// sendAfterPaste never retries a dispatched key. Clipboard ownership is checked
+// during the paste settling interval by the caller; focus/window are rechecked
+// immediately before posting. A readable value must contain the final text.
+func sendAfterPaste(text, key string, o InsertOptions, t *Target, window uintptr) string {
+	if strings.TrimSpace(text) == "" {
+		return "empty"
+	}
+	if o.Context != nil && o.Context.Err() != nil {
+		return "cancelled"
+	}
+	// Clipboard restoration has already completed. Wait for the target's event
+	// loop, and require readback where the editor exposes it.
+	deadline := time.Now().Add(900 * time.Millisecond)
+	for {
+		valid := false
+		OnMain(func() {
+			if !axIsProcessTrusted() || frontmostPID() != t.pid || window == 0 {
+				return
+			}
+			w := focusedWindow(t.pid)
+			if w == 0 {
+				return
+			}
+			defer cfRelease(w)
+			if !cfEqual(w, window) {
+				return
+			}
+			f := focusedElement(t.pid)
+			if f != 0 {
+				defer cfRelease(f)
+			}
+			if t.element == 0 || f == 0 || !cfEqual(t.element, f) {
+				return
+			}
+			valid = true
+		})
+		if !valid {
+			return "target-changed"
+		}
+		if o.Context != nil && o.Context.Err() != nil {
+			return "cancelled"
+		}
+		value, readable := t.ReadValue()
+		if !readable || strings.Contains(value, text) {
+			break
+		}
+		if time.Now().After(deadline) {
+			return "paste-unconfirmed"
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	reason := "target-changed"
+	OnMain(func() {
+		if o.Context != nil && o.Context.Err() != nil {
+			reason = "cancelled"
+			return
+		}
+		if frontmostPID() != t.pid || !axIsProcessTrusted() {
+			return
+		}
+		w := focusedWindow(t.pid)
+		if w == 0 {
+			return
+		}
+		defer cfRelease(w)
+		f := focusedElement(t.pid)
+		if f == 0 {
+			return
+		}
+		defer cfRelease(f)
+		if !cfEqual(w, window) || !cfEqual(f, t.element) {
+			return
+		}
+		flags := uint64(0)
+		if key == "cmd-enter" {
+			flags = 0x100000
+		}
+		if key == "ctrl-enter" {
+			flags = 0x40000
+		}
+		down := cgEventCreateKeyboardEvent(0, 36, true)
+		up := cgEventCreateKeyboardEvent(0, 36, false)
+		if down == 0 || up == 0 {
+			if down != 0 {
+				cfRelease(down)
+			}
+			if up != 0 {
+				cfRelease(up)
+			}
+			reason = "event-unavailable"
+			return
+		}
+		defer cfRelease(down)
+		defer cfRelease(up)
+		cgEventSetFlags(down, flags)
+		cgEventSetFlags(up, flags)
+		cgEventPost(0, down)
+		cgEventPost(0, up)
+		reason = ""
+	})
+	return reason
 }
 
 // AccessibilityTrusted reports the Accessibility permission, which pasting

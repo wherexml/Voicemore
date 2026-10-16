@@ -976,7 +976,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		c.mu.Unlock()
 		go c.observe(r, s, text, target)
 	}
-	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs, RemoteInputs: s.RemoteInputs, OnPasted: onPasted})
+	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs, RemoteInputs: s.RemoteInputs, AutoSend: s.AutoSend, OnPasted: onPasted})
 	if errors.Is(err, context.Canceled) {
 		r.release()
 		return
@@ -1002,6 +1002,12 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		return
 	}
 	detail := c.tr("detailPasted", res.Target.AppName)
+	if res.SendShortcut != "" {
+		detail += "; " + c.tr("detailSendTriggered", res.SendShortcut)
+	}
+	if res.SendSkipped != "" {
+		detail += "; " + c.tr("detailSendSkipped")
+	}
 	if res.Remote {
 		detail = c.tr("detailRemote", res.Target.AppName)
 	}
@@ -1012,6 +1018,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		detail += "; " + c.tr("detailClipboard")
 	}
 	c.update(r, func(rec *store.Record) {
+		rec.SendShortcut, rec.SendSkipped = res.SendShortcut, res.SendSkipped
 		rec.TargetApp = res.Target.AppName
 		rec.TargetBundleID = res.Target.BundleID
 		rec.Status, rec.StatusDetail, rec.InsertedText = store.StatusInserted, detail, text
