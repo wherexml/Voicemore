@@ -65,3 +65,7 @@ func RunningApplications() []Application { return nil }
 func WatchOutsideClicks(uintptr, func()) func() { return func() {} }
 
 func (t *Target) StillSelected() bool { return false }
+
+func StartCaptureFromWithOutputMute(string, func([]byte), bool) (*Capture, error) {
+	return nil, errUnsupported
+}

@@ -43,6 +43,6 @@
 
 - 听写至发送倒计时复用同一原生胶囊，底部锚点及取消复验见[自动发送规格](docs/public/AUTO-SEND.md#v14-原生连续胶囊2026-10-16覆盖旧浮层流程)。
 
-- AirPods 不强制修改采样率，验收必须检查非零 PCM；播放格式、静音和音量恢复见 [蓝牙音频规格](docs/public/BLUETOOTH-AUDIO.md)。
+- AirPods 不强制修改采样率；提前静音与独立切换保护须检查连续快照和非零 PCM；播放格式、静音和音量恢复见 [蓝牙音频规格](docs/public/BLUETOOTH-AUDIO.md)。
 
 - Mock 统一入口为 `http://127.0.0.1:38127/`，当前模块、旧稿归档与启动约定见 [Mock 导航](docs/public/MOCK-NAVIGATION.md)。新增版本须同步导航，旧稿归档，不将 mock 入库；全部预览页复用共享“返回导航”入口。

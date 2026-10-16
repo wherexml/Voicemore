@@ -6,7 +6,10 @@ func read<T>(_ id: AudioObjectID, _ selector: AudioObjectPropertySelector, _ res
  var size = UInt32(MemoryLayout<T>.size)
  return AudioObjectGetPropertyData(id, &address, 0, nil, &size, &result) == 0
 }
+let samples = CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--samples" ? max(1, min(6000, Int(CommandLine.arguments[2]) ?? 1)) : 1
+for sample in 0..<samples {
 var result: [String: Any] = [:]
+if samples > 1 { result["time"] = Date().timeIntervalSince1970 }
 for (name, selector) in [("input", kAudioHardwarePropertyDefaultInputDevice), ("output", kAudioHardwarePropertyDefaultOutputDevice)] {
  var device: UInt32 = 0
  guard read(1, selector, &device) else { continue }
@@ -25,3 +28,6 @@ for (name, selector) in [("input", kAudioHardwarePropertyDefaultInputDevice), ("
 }
 let data = try JSONSerialization.data(withJSONObject: result, options: [.sortedKeys])
 print(String(decoding: data, as: UTF8.self))
+
+if sample + 1 < samples { Thread.sleep(forTimeInterval: 0.02) }
+}
