@@ -8,6 +8,7 @@
 | 首页与历史 | [布局、功能与原生验收](HOME-HISTORY.md) | `home.go`、`journal.go`、`history.go`、`history_stats.go`、`app_identity.go`、`prefs.go` |
 | 权限授权 | [共享拖拽引导与原生验收](PERMISSIONS.md) | `permission_drag.go`、`internal/macos/settings_window_darwin.go` |
 | 开始使用引导 | [窗口布局与原生验收](ONBOARDING.md) | `onboarding.go` |
+| 蓝牙音频恢复 | [AirPods 播放恢复与实机验收](BLUETOOTH-AUDIO.md) | `internal/macos/bluetooth_output_darwin.go`、`internal/macos/mic_darwin.go` |
 | DJI 麦克风按钮 | [设备匹配与原生验收](DJI-BUTTON.md) | `internal/macos/dji_darwin.go` |
 | 听写胶囊 | [显示规则与原生验收](CAPSULE.md) | `overlay.go`、`overlay_v2.go` |
 | 远程桌面输入 | [匹配规则、剪贴板与原生验收](REMOTE-INPUT.md) | `prefs_remote.go`、`internal/macos/remote_darwin.go`、`internal/session/controller.go` |

@@ -5,6 +5,7 @@ package macos
 import (
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -149,11 +150,12 @@ func captureError(format string, st int32) error {
 
 // Capture is a running recording of the chosen or the default input device.
 type Capture struct {
-	q       uintptr
-	device  uint32 // the device recorded from when the recording started, 0 if unknown
-	onPCM   func(pcm []byte)
-	stopped atomic.Bool
-	output  *outputSilencer
+	q         uintptr
+	device    uint32 // the device recorded from when the recording started, 0 if unknown
+	onPCM     func(pcm []byte)
+	stopped   atomic.Bool
+	output    *outputSilencer
+	bluetooth *bluetoothOutput
 }
 
 // StartCapture records the default microphone and gives onPCM the samples,
@@ -192,6 +194,11 @@ func StartCaptureFrom(uid string, onPCM func(pcm []byte)) (*Capture, error) {
 	}
 	c := &Capture{onPCM: onPCM}
 	c.device, _ = defaultInputDevice()
+	snapshotInput := c.device
+	if chosen {
+		snapshotInput = inputDeviceByUID(uid)
+	}
+	c.bluetooth = snapshotBluetoothOutput(snapshotInput)
 	if st := audioQueueNewInput(&desc, captureCallback, 0, 0, 0, 0, &c.q); st != 0 {
 		return nil, captureError("the microphone could not be opened (AudioQueueNewInput, OSStatus %d)", st)
 	}
@@ -231,6 +238,9 @@ func (c *Capture) SilenceOutput() error {
 	if err != nil {
 		return err
 	}
+	if b := c.bluetooth; b != nil && b.device == output.device && b.hasMute {
+		output.previous = b.muted
+	}
 	c.output = output
 	return nil
 }
@@ -246,9 +256,28 @@ func (c *Capture) stopLocked() {
 	if c == nil || c.stopped.Swap(true) {
 		return
 	}
-	audioQueueStop(c.q, true)
-	audioQueueDispose(c.q, true)
+	if st := audioQueueStop(c.q, true); st != 0 {
+		log.Printf("microphone stop failed: OSStatus %d", st)
+	}
+	if st := audioQueueDispose(c.q, true); st != 0 {
+		log.Printf("microphone dispose failed: OSStatus %d", st)
+	}
+	if c.bluetooth != nil {
+		// A Bluetooth profile transition can reset mute as well as gain.
+		if c.output != nil && c.output.device == c.bluetooth.device {
+			if err := setOutputMute(c.output.device, 1); err != nil {
+				log.Printf("Bluetooth recovery mute: %v", err)
+			}
+		}
+		c.bluetooth.settle(c.device, c.output != nil && c.output.device == c.bluetooth.device)
+		c.bluetooth.limitVolume()
+	}
 	c.output.restore()
+	if b := c.bluetooth; b != nil && c.output != nil && c.output.device == b.device && b.hasMute && b.muted != 0 {
+		if err := setOutputMute(b.device, b.muted); err != nil {
+			log.Printf("Bluetooth original mute restore: %v", err)
+		}
+	}
 	captureCurrent.CompareAndSwap(c, nil)
 }
 

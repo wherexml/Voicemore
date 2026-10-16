@@ -1,0 +1,36 @@
+# 蓝牙耳机录音后的播放恢复
+
+AirPods 等蓝牙耳机同时承担收音和播放时，系统可能切换采样率、音量与静音状态。听写期间的双向音频音质受系统和设备限制；本模块处理结束录音后的恢复，不承诺录音中保持音乐模式。
+
+## 行为
+
+- 打开蓝牙麦克风之前，保存当前蓝牙输出设备的播放采样率、静音状态及可读的主/左右声道音量。
+- 停止并同步销毁 Audio Queue，再恢复播放。启用听写自动静音时，切换期间重新检查静音，防止设备重置静音导致声音提前出现。
+- 等待麦克风不再运行且输出回到原采样率，至少等待 600 ms，稳定窗口为 300 ms，最多约 3 秒（硬件属性调用本身可能另有延迟）。麦克风释放后仍未恢复原采样率时，通过 CoreAudio 请求恢复一次。
+- 恢复声音前，将同一输出设备的可读声道音量限制在录音前水平；不提高用户调低的音量。录音中调高的音量也受此上限约束。
+- 原本静音则仍保持静音。关闭自动静音时不擅自添加静音。切换输出时不修改新输出设备的音量。
+- 其他应用仍使用麦克风、设备断开或恢复超时，只记录错误并有界结束；不能据此宣称高音质已恢复。不重启蓝牙、不切换系统默认麦克风、不关闭其他应用。
+- 非蓝牙麦克风沿用原恢复路径。重复停止、停止后迟到的静音调用不得再次改变状态。
+
+## 实机验收
+
+先列故障：播放格式未恢复、音量增大、原静音丢失、设备断开、输出切换、其他应用占麦、快速结束及重复停止。使用真实 AirPods，确认默认输入输出均为耳机，播放音乐。
+
+```sh
+mkdir -p artifacts/airpods-recovery
+swiftc scripts/audio-device-state.swift -o artifacts/airpods-recovery/audio-device-state
+go build -o artifacts/airpods-recovery/mute-acceptance ./cmd/mute-acceptance
+```
+
+按本机开发约定签名验收程序后，运行：
+
+```sh
+VOICEMORE_AUDIO_PROBE="$PWD/artifacts/airpods-recovery/audio-device-state" \
+  artifacts/airpods-recovery/mute-acceptance \
+  > artifacts/airpods-recovery/result.json \
+  2> artifacts/airpods-recovery/result.log
+```
+
+JSON 记录每轮录音前后设备、采样率、麦克风运行状态、静音、音量、PCM 帧、停止耗时和通过状态。三轮覆盖未静音、原静音、再次录音；断言有真实 PCM、重叠捕获被拒绝、重复停止安全、音量不增大且恢复后输入不再运行及输出采样率一致。原静音在退出时恢复。不保存录音内容。
+
+随后在已签名原生客户端做真实开始/结束、迅速结束、取消、禁用自动静音、拔出设备及更换输出验收，检查音乐听感。CoreAudio 属性通过不能替代听感验收。结果只保存在 artifacts，不入库。
