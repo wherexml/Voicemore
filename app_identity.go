@@ -16,7 +16,7 @@ type cachedAppIcon struct {
 var appIcons = map[string]cachedAppIcon{}
 
 // Cached on the UI thread. Retry missing applications after a minute.
-func appIdentity(c *ui.Context, bundle, name string, grow bool) {
+func appIdentity(c *ui.Context, bundle, name string, grow bool, compact ...bool) {
 	key := bundle + "\x00" + name
 	cached, ok := appIcons[key]
 	if !ok || (cached.image == nil && time.Since(cached.checked) > time.Minute) {
@@ -33,7 +33,14 @@ func appIdentity(c *ui.Context, bundle, name string, grow bool) {
 	} else {
 		ui.Box(c).Size(20, 20).Radius(5).Background(settingsGroupColor(c.Theme())).Justify(ui.Center).AlignItems(ui.Center).Children(func() { ui.Text(c, "▧").FontSize(15).TextColor(c.Theme().TextMuted) })
 	}
-	text := ui.Text(c, name).FontSize(13).SingleLine().MinWidth(0)
+	size := float32(13)
+	if len(compact) > 0 && compact[0] {
+		size = 11
+	}
+	text := ui.Text(c, name).FontSize(size).SingleLine().MinWidth(0)
+	if len(compact) > 0 && compact[0] {
+		text.TextColor(faintText(c.Theme()))
+	}
 	if grow {
 		text.Grow(1)
 	}

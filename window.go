@@ -26,6 +26,16 @@ type mainWindow struct {
 	// Shared copy feedback for the Home and History timelines.
 	recentCopied map[string]time.Time // record ID → last successful copy
 
+	// V3 home and export state.
+	homeRange                         int
+	exportOpen                        bool
+	exportCalendar                    string
+	exportMonth                       time.Time
+	exportFrom, exportTo, exportError string
+	waveID                            string
+	wavePeaks                         []float32
+	waveLoading                       bool
+
 	// History.
 	hRange        int
 	hApp, hStatus string
@@ -139,6 +149,8 @@ func (m *mainWindow) goTo(page string) {
 		m.stopPlayer()
 		m.status = nil
 		m.page = page
+		m.clearHistoryFilters()
+		m.selected = ""
 	}
 }
 
@@ -150,7 +162,7 @@ func railButton(c *ui.Context, key string, svg *ui.SVG, label string, selected b
 	t := c.Theme()
 	b := ui.ButtonBase(c.Key(key)).Size(44, 44).Radius(22).Justify(ui.Center).AlignItems(ui.Center).
 		Label(label).Tooltip(label)
-	b.Children(func() { ui.Icon(c, svg).FontSize(24).TextColor(railText(t)) })
+	b.Children(func() { ui.Icon(c, svg).Size(19, 19).TextColor(railText(t)) })
 	switch {
 	case selected:
 		b.Background(railSelected(t))
@@ -169,7 +181,7 @@ func (m *mainWindow) view(c *ui.Context) {
 		// anchored at the bottom.
 		ui.Column(c.Key("rail")).Width(78).Background(railColor(t)).BorderWidth(0, 1, 0, 0).BorderColor(railLine(t)).
 			AlignItems(ui.Center).Children(func() {
-			ui.Box(c).Height(max(bar.Height, 44)).FillWidth().DragWindow()
+			ui.Box(c).Height(max(bar.Height, 116)).FillWidth().DragWindow()
 			ui.Spacer(c)
 			ui.Column(c).Gap(10).AlignItems(ui.Center).Children(func() {
 				if railButton(c, "home", railHome, T("navHome"), m.page == "home") {
@@ -194,9 +206,6 @@ func (m *mainWindow) view(c *ui.Context) {
 		})
 
 		ui.Column(c).Grow(1).MinWidth(0).Children(func() {
-			if m.page == "home" {
-				ui.Box(c).Height(52).FillWidth().DragWindow()
-			}
 			m.problems(c)
 			ui.Column(c.Key("page-" + m.page)).Grow(1).MinHeight(0).Children(func() {
 				switch m.page {

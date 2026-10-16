@@ -59,10 +59,10 @@ func statusTag(c *ui.Context, r store.Record) {
 }
 
 // primaryText is the one text that matters of a record: the latest
-// revision, else what was inserted, else what was heard.
+// revision or cleanup result, else what was inserted, else what was heard.
 func primaryText(r store.Record) (text string, revised bool) {
 	for i := len(r.Versions) - 1; i >= 0; i-- {
-		if r.Versions[i].Kind == store.KindRevision {
+		if r.Versions[i].Kind == store.KindRevision || r.Versions[i].Kind == store.KindRecleanup {
 			return r.Versions[i].Text, true
 		}
 	}
@@ -173,6 +173,7 @@ func (m *mainWindow) historyView(c *ui.Context) {
 		ui.Column(c.Key("records")).Role(ui.RoleGroup).Label(T("allRecords")).FillWidth().Children(func() { m.journal(c, visible, now) })
 		pager(c, "pager", &m.hPage, pages)
 	})
+	m.exportDialog(c)
 }
 
 // textBlock is one of a record's texts under "Details", with a small

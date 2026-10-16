@@ -71,6 +71,7 @@ type Record struct {
 	CleanedText      string `json:"cleanedText,omitempty"`
 	CleanupError     string `json:"cleanupError,omitempty"`
 	CleanupModel     string `json:"cleanupModel,omitempty"`
+	ASRModel         string `json:"asrModel,omitempty"`
 
 	// InsertedText is what was written to the target; empty unless Status
 	// is StatusInserted.
