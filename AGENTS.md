@@ -31,3 +31,5 @@
 - DMG 图标中心对齐、名称间距、固定英文单行提示及打包验收：[安装窗口规格](docs/public/DMG-INSTALLER.md)。
 
 - 整理须主动去口吃、修碎句、合冗余，逐条复核忠实性与流畅度；“一次/一遍/一回”自然写法见[基础格式规格](docs/public/TEXT-FORMATTING.md)。不增加输出拦截。
+
+- 更新按钮的圆弧箭头、侧栏线宽与原生验收见[更新界面规格](docs/public/UPDATE-UI.md#refresh-icon)。
