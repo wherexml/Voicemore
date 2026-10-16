@@ -111,7 +111,6 @@ func T(key string, args ...any) string {
 // innermost cause is kept as the system reports it.
 func explain(err error) string {
 	var status *cleanup.StatusError
-	var changed *cleanup.ChangedError
 	var service *cloudasr.ServiceError
 	switch {
 	case err == nil:
@@ -150,8 +149,6 @@ func explain(err error) string {
 			return T("eNotFound")
 		}
 		return T("eStatus", status.Status)
-	case errors.As(err, &changed):
-		return T("eChanged", strings.Join(changed.Missing, ", "))
 	case errors.Is(err, cleanup.ErrNoText):
 		return T("eNoText")
 	case errors.Is(err, asr.ErrNotASR):
@@ -637,7 +634,6 @@ var texts = map[string][3]string{
 	"eAuth":             {"The service refused the request (%s). Check the API key.", "服務拒絕了請求（%s）。請檢查 API 金鑰。", "服务拒绝了请求（%s）。请检查 API 密钥。"},
 	"eNotFound":         {"The service has no such path (404). The URL should end where its API begins, usually “/v1”.", "服務沒有這個路徑（404）。網址應止於 API 的起點，通常是「/v1」。", "服务没有这个路径（404）。地址应止于 API 的起点，通常是“/v1”。"},
 	"eStatus":           {"The service answered %s.", "服務回應 %s。", "服务返回 %s。"},
-	"eChanged":          {"Protection could not confirm preservation of: %s. Original transcript kept; retry or use the original.", "保護檢查未確認以下數字或英文已保留：%s。原始轉寫已保留，可重試或使用原文。", "保护检查未确认以下数字或英文已保留：%s。原始转写已保留，可重试或使用原文。"},
 	"eNoText":           {"The service answered, but not with anything usable. Is this an OpenAI-compatible API?", "服務有回應，但內容無法使用。這是 OpenAI 相容的 API 嗎？", "整理服务已响应，但未返回有效文字。请重试或检查模型配置。"},
 	"eNotASR":           {"The address answered, but not as the speech recognition service does. The cleanup server is a different service.", "此位址有回應，但不是語音辨識服務的回應方式。整理用的伺服器是另一個服務。", "此地址有响应，但不是语音识别服务的响应方式。整理用的服务器是另一个服务。"},
 
@@ -649,7 +645,6 @@ var texts = map[string][3]string{
 	"asrBusy":              {"The speech recognition service is busy with another recording. Try again in a moment.", "語音辨識服務正在處理另一段錄音，請稍後再試。", "语音识别服务正在处理另一段录音，请稍后再试。"},
 	"asrUnreachable":       {"The speech recognition service at %s cannot be reached: %s", "無法連上位於 %s 的語音辨識服務：%s", "无法连接位于 %s 的语音识别服务：%s"},
 	"noSpeech":             {"No speech detected — nothing inserted.", "未偵測到語音，未寫入。", "未检测到语音，未写入。"},
-	"cleanupRejected":      {"Cleanup result not used: %s", "整理結果未採用：%s", "整理结果未采用：%s"},
 	"cleanupRequestFailed": {"Cleanup service request failed: %s", "整理服務請求失敗：%s", "整理服务请求失败：%s"},
 	"cleanupTimedOut":      {"Cleanup request timed out: %s", "整理請求逾時：%s", "整理请求超时：%s"},
 	"cleanupCancelled":     {"Cleanup cancelled: %s", "整理已取消：%s", "整理已取消：%s"},

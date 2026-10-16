@@ -15,7 +15,7 @@
 | 配置持久化 | [远程规则结构及兼容约定](../../internal/config/README.md) | `internal/config/config.go`、`remote.go` |
 | 词典与纠正学习 | [V2 页面、热词与纠正验收](DICTIONARY.md) | `dictionary.go`、`internal/dict/`、`internal/cloudasr/volc.go`、`internal/session/controller.go` |
 | 基础格式与数字 | [数字默认与保留边界](TEXT-FORMATTING.md) | `internal/textstyle/`、`prefs.go` |
-| 文字整理 | [提示词、保护规则与验收边界](../../internal/cleanup/README.md) | `internal/cleanup/cleanup.go` |
+| 文字整理 | [提示词、非拦截返回与验收边界](../../internal/cleanup/README.md) | `internal/cleanup/cleanup.go` |
 | 客户端更新 | [界面状态与原生验收](UPDATE-UI.md)、[更新协议与发布](UPDATES.md) | `updates.go`、`window.go` |
 | 构建与分发 | [打包](PACKAGING.md)、[分发](DISTRIBUTION.md) | `scripts/` |
 

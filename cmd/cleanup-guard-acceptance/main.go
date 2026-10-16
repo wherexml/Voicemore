@@ -1,19 +1,17 @@
-// Command cleanup-guard-acceptance verifies production cleanup over HTTP.
+// Command cleanup-guard-acceptance verifies non-blocking cleanup over HTTP.
+// The historical command name is kept for existing local workflows.
 package main
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"flag"
 	"io"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
 	"voiceinput/internal/cleanup"
 	"voiceinput/internal/config"
@@ -43,25 +41,21 @@ func (c *capture) RoundTrip(r *http.Request) (*http.Response, error) {
 	return res, err
 }
 func main() {
-	live := flag.Bool("live", false, "replay today's failed local history against configured local model")
+	live := flag.Bool("live", false, "run the fidelity corpus against the configured model")
+	recordID := flag.String("record-id", "", "with -live, replay exactly this local history record")
+	repeat := flag.Int("repeat", 1, "number of serial repetitions")
 	flag.Parse()
+	if *repeat < 1 || (*recordID != "" && !*live) {
+		panic("repeat must be positive; record-id requires -live")
+	}
 	cases := []sample{
 		{"equivalent", "这2个页面，1个月27元，第2项用skills和icon", "这两个页面，一个月二十七元，第二项用skill和icons", true},
-		{"count-lost", "购买1个服务器", "购买服务器", false},
-		{"amount-changed", "每月27元", "每月28元", false},
-		{"substring-number", "购买1个服务器", "购买10个服务器", false},
-		{"decimal", "预算1元", "预算1.5元", false},
-		{"identifier", "购买1个服务器", "购买A1服务器", false},
-		{"english-lost", "使用skills和icon", "使用技能和图标", false},
-		{"english-substring", "使用skill", "使用skillsExtra", false},
-		{"filler", "这1个功能需要进行1个视觉上的左对齐", "这个功能需要视觉上的左对齐", true},
-		{"mixed-count", "这1个功能需要2个按钮", "这个功能需要按钮", false},
-		{"list-mask", "需要1个按钮和2个页面", "1. 需要按钮\n2. 需要页面", false},
-		{"actual-ordinal", "第2个页面", "第二个页面", true},
-		{"negative", "温度-5度", "温度5度", false},
-		{"leading-decimal", "1.5元", "5元", false},
-		{"zero", "预算0元", "预算10元", false},
+		{"filler", "我想做1个交互上的调整，让提示更清楚", "我想调整交互，让提示更清楚", true},
+		{"self-correction", "买3个，不对，买5个", "买5个", true},
+		{"no-lexical-rejection", "使用skills", "使用技能", true},
+		{"empty-response", "保留内容", "", false},
 	}
+
 	opts := cleanup.Options{BaseURL: "http://127.0.0.1:58188/v1", Model: "fixture"}
 	var current string
 	if *live {
@@ -86,19 +80,35 @@ func main() {
 		if err != nil {
 			panic(err)
 		}
-		var b []byte
-
-		var records []struct{ ID, StartedAt, RawText, CorrectedText, CleanupError string }
-		b, _ = os.ReadFile(filepath.Join(dir, "history.json"))
-		json.Unmarshal(b, &records)
-		cases = nil
-		for _, r := range records {
-			if len(r.StartedAt) >= 10 && r.StartedAt[:10] == "2026-10-16" && r.CleanupError != "" {
-				s := r.CorrectedText
-				if s == "" {
-					s = r.RawText
+		cases = []sample{
+			{Name: "filler-and-count", Input: "我想做1个交互上的调整，只保留1个确认按钮，另外2个按钮先不要删"},
+			{Name: "quantity", Input: "先买1个服务器，预算每月27元，不要买2个，等测试通过再加"},
+			{Name: "comparison", Input: "他们的导航比较清楚，我希望我们的导航也这么清楚，但不要照搬他们的颜色"},
+			{Name: "self-correction", Input: "先买3个，不对，是5个，只改数量，不要改型号"},
+			{Name: "english", Input: "使用skills和icon，保留README.md路径，不要翻译英文名称"},
+		}
+		if *recordID != "" {
+			b, err := os.ReadFile(filepath.Join(dir, "history.json"))
+			if err != nil {
+				panic(err)
+			}
+			var records []struct{ ID, RawText, CorrectedText string }
+			if err := json.Unmarshal(b, &records); err != nil {
+				panic(err)
+			}
+			cases = nil
+			for _, r := range records {
+				if r.ID == *recordID {
+					input := r.CorrectedText
+					if input == "" {
+						input = r.RawText
+					}
+					cases = append(cases, sample{Name: r.ID, Input: input})
+					break
 				}
-				cases = append(cases, sample{Name: r.ID, Input: s})
+			}
+			if len(cases) == 0 {
+				panic("history record not found")
 			}
 		}
 	} else {
@@ -116,38 +126,27 @@ func main() {
 	http.DefaultClient.Transport = cap
 	rows := []map[string]any{}
 	passed := true
-	for _, s := range cases {
-		current = s.Output
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		start := time.Now()
-		out, err := cleanup.Run(ctx, opts, s.Input)
-		cancel()
-		message := ""
-		if err != nil {
-			message = err.Error()
-		}
-		var rejected *cleanup.ChangedError
-		ok := (err == nil) == s.Accept
-		if *live {
-			ok = err == nil || errors.As(err, &rejected)
-		}
-		var raw struct {
-			Choices []struct{ Message struct{ Content string } }
-		}
-		json.Unmarshal([]byte(cap.body), &raw)
-		oldMissing := []string{}
-		if len(raw.Choices) > 0 {
-			for _, t := range regexp.MustCompile(`[0-9]+(?:\.[0-9]+)?|[A-Za-z][A-Za-z0-9]*`).FindAllString(s.Input, -1) {
-				if !strings.Contains(strings.ToLower(raw.Choices[0].Message.Content), strings.ToLower(t)) {
-					oldMissing = append(oldMissing, t)
-				}
+	for round := 1; round <= *repeat; round++ {
+		for _, s := range cases {
+			current = s.Output
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			start := time.Now()
+			out, err := cleanup.Run(ctx, opts, s.Input)
+			cancel()
+			message := ""
+			if err != nil {
+				message = err.Error()
 			}
-		}
+			ok := (err == nil) == s.Accept
+			if *live {
+				ok = err == nil && out != ""
+			}
 
-		passed = passed && ok
-		rows = append(rows, map[string]any{"id": s.Name, "input": s.Input, "output": out, "response": cap.body, "error": message, "ms": time.Since(start).Milliseconds(), "passed": ok, "expectedAccept": s.Accept, "oldMissing": oldMissing})
+			passed = passed && ok
+			rows = append(rows, map[string]any{"id": s.Name, "input": s.Input, "output": out, "response": cap.body, "error": message, "ms": time.Since(start).Milliseconds(), "passed": ok, "expectedAccept": s.Accept, "round": round})
+		}
 	}
-	json.NewEncoder(os.Stdout).Encode(map[string]any{"passed": passed, "live": *live, "model": opts.Model, "results": rows})
+	json.NewEncoder(os.Stdout).Encode(map[string]any{"passed": passed, "live": *live, "model": opts.Model, "results": rows, "semanticReviewRequired": *live})
 	if !passed {
 		os.Exit(1)
 	}
