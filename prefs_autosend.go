@@ -97,6 +97,13 @@ func (p *prefsWindow) autoSend(c *ui.Context) {
 			})
 		})
 	})
+	if ui.Button(c.Key("recent-text"), recentTextLabel()).Clicked() {
+		p.a.sendPreview.win.Update(p.a.sendPreview.showRecent)
+	}
+}
+
+func recentTextLabel() string {
+	return []string{"View recent text", "查看最近文字", "查看最近文字"}[langIndex.Load()]
 }
 
 // Bind initial presets to actual application identities on this Mac. The

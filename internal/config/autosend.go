@@ -53,7 +53,7 @@ func (a AutoSend) Shortcut(bundle string) string {
 	return ""
 }
 func DefaultAutoSend() AutoSend {
-	return AutoSend{Enabled: true, Default: "enter", Apps: []AutoSendApp{
+	return AutoSend{Enabled: false, Default: "enter", Apps: []AutoSendApp{
 		{BundleID: "com.openai.chat", AppName: "ChatGPT", Shortcut: "inherit"},
 		{BundleID: "com.tencent.xinWeChat", AppName: "WeChat", Shortcut: "inherit"},
 		{BundleID: "com.electron.lark", AppName: "Feishu", Shortcut: "inherit"},

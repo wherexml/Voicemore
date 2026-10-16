@@ -43,3 +43,5 @@
 - 浮层视觉验收须对照 HTML：透明窗口背景不能被 SetTheme 覆盖；24 DIP 行高、阴影与矢量叉号见 [自动发送规格](docs/public/AUTO-SEND.md#浮层视觉还原约束)。
 
 - Send-preview dismissal: outside click, Escape and the cross close the panel without deleting history; see docs/public/AUTO-SEND.md.
+
+- 默认只输入、倒计时胶囊与主动查看最近文字见 [自动发送规格](docs/public/AUTO-SEND.md#v12-默认输入与主动编辑2026-10-16)。
