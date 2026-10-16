@@ -269,7 +269,7 @@ func (p *prefsWindow) view(c *ui.Context) {
 		}
 	}
 	title := ""
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
+	ui.Row(c).Fill().AlignItems(ui.Stretch).DragWindow().Children(func() {
 		// The categories: 176 px on the subtle fill, 38 px rows.
 		ui.Column(c.Key("nav")).Width(176).Background(fillColor(t)).BorderWidth(0, 1, 0, 0).BorderColor(t.Border).Children(func() {
 			ui.Box(c).Height(max(bar.Height, 52)).FillWidth().DragWindow()
