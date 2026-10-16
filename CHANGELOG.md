@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.6
+
+- Refresh the drag-to-install DMG with aligned waveform artwork, compact icon labels and a single-line English installation hint.
+- Update native Home, history statistics, record cards and Dictionary layouts; restore window dragging and refine scrollbars.
+- Keep history application names and icons consistent after insertion into another app.
+- Improve numeric formatting and local ASR short-tail handling; enable Doubao DDC by default.
+- Preserve terminology, qualifiers, tone and ambiguity during text cleanup, and report response-reading timeouts accurately.
+- Support the DJI receiver connection button for dictation without conflicting with Bluetooth switching.
+
+更新拖拽安装界面：声波与图标中心对齐，名称紧贴图标，采用单行英文安装提示。更新原生首页、历史统计与记录卡片、词典布局和窗口交互；修复跨应用写入后的历史名称与图标；优化数字格式、本地识别短尾处理及豆包 DDC 默认设置；改善文字整理的术语、限定、语气与歧义保留及超时诊断；支持 DJI 接收器连接键触发听写。
+
 ## 0.3.5
 
 - Restore visible Settings and Dictionary groups, clearer provider fields, and aligned model pickers.
