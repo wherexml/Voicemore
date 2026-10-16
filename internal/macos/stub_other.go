@@ -61,3 +61,7 @@ func OpenLoginItemsSettings()     {}
 func SetDockIcon(bool)            {}
 
 func RunningApplications() []Application { return nil }
+
+func WatchOutsideClicks(uintptr, func()) func() { return func() {} }
+
+func (t *Target) StillSelected() bool { return false }

@@ -30,6 +30,7 @@ type sendPreviewWindow struct {
 	guardReadable            bool
 	onEdit                   func(string)
 	lastEscape               time.Time
+	stopOutside              func()
 }
 
 func newSendPreview(a *app) *sendPreviewWindow {
@@ -38,7 +39,7 @@ func newSendPreview(a *app) *sendPreviewWindow {
 	p.win.OnClose(func(e *mygo.CloseEvent) {
 		if !a.quitting {
 			e.PreventDefault()
-			p.resolve(false)
+			p.close()
 		}
 	})
 	return p
@@ -50,11 +51,7 @@ func (a *app) cancelInput() {
 				return
 			}
 			a.sendPreview.lastEscape = time.Now()
-			if a.sendPreview.pending {
-				a.sendPreview.resolve(false)
-			} else {
-				a.sendPreview.close()
-			}
+			a.sendPreview.close()
 			return
 		}
 		a.ctrl.Cancel()
@@ -71,6 +68,10 @@ func (p *sendPreviewWindow) resolve(send bool) {
 	}
 }
 func (p *sendPreviewWindow) close() {
+	if p.stopOutside != nil {
+		p.stopOutside()
+		p.stopOutside = nil
+	}
 	p.resolve(false)
 	p.visible = false
 	p.generation++
@@ -105,6 +106,13 @@ func (p *sendPreviewWindow) wait(ctx context.Context, text string, target *macos
 		p.place(58)
 		p.win.ShowInactive()
 		gen := p.generation
+		p.stopOutside = macos.WatchOutsideClicks(p.win.NativeHandle(), func() {
+			p.win.Update(func() {
+				if p.visible && p.generation == gen {
+					p.close()
+				}
+			})
+		})
 		p.poll(ctx, gen)
 	})
 	select {
@@ -120,7 +128,11 @@ func (p *sendPreviewWindow) wait(ctx context.Context, text string, target *macos
 	}
 }
 func (p *sendPreviewWindow) poll(ctx context.Context, gen uint64) {
-	time.AfterFunc(20*time.Millisecond, func() {
+	interval := 20 * time.Millisecond
+	if !p.pending {
+		interval = 100 * time.Millisecond
+	}
+	time.AfterFunc(interval, func() {
 		p.win.Update(func() {
 			if gen != p.generation || !p.visible {
 				return
@@ -131,16 +143,21 @@ func (p *sendPreviewWindow) poll(ctx context.Context, gen uint64) {
 			}
 			if p.pending {
 				value, readable := p.target.ReadValue()
-				if !p.target.StillFocused() || (p.guardReadable && (!readable || value != p.guardValue)) {
+				if !p.target.StillFocused() {
+					p.close()
+					return
+				} else if p.guardReadable && (!readable || value != p.guardValue) {
 					p.resolve(false)
 				} else if !time.Now().Before(p.end) {
 					p.resolve(true)
 					return
 				}
 			}
-			if p.pending {
-				p.poll(ctx, gen)
+			if !p.pending && !p.target.StillSelected() {
+				p.close()
+				return
 			}
+			p.poll(ctx, gen)
 		})
 	})
 }
@@ -244,7 +261,7 @@ func (p *sendPreviewWindow) view(c *ui.Context) {
 					painter.StrokePath(cross, 1.6, ui.Hex("#FAFAFA"))
 				})
 				if b.Clicked() {
-					p.resolve(false)
+					p.close()
 				}
 			})
 		})

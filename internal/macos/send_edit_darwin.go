@@ -35,6 +35,20 @@ func (t *Target) StillFocused() bool {
 	return ok
 }
 
+// StillSelected checks the captured field without requiring its app to be
+// frontmost: a nonactivating editor may take keyboard focus while editing it.
+func (t *Target) StillSelected() bool {
+	ok := false
+	OnMain(func() {
+		f := focusedElement(t.pid)
+		if f != 0 {
+			defer cfRelease(f)
+		}
+		ok = f != 0 && t.element != 0 && cfEqual(f, t.element)
+	})
+	return ok
+}
+
 // ReplaceValue is compare-and-set against the captured field, without activating
 // another app or synthesizing keys. Unsupported editors keep the local draft.
 func (t *Target) ReplaceValue(expected, value string) bool {
