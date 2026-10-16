@@ -11,6 +11,7 @@
 | 听写胶囊 | [显示规则与原生验收](CAPSULE.md) | `overlay.go`、`overlay_v2.go` |
 | 远程桌面输入 | [匹配规则、剪贴板与原生验收](REMOTE-INPUT.md) | `prefs_remote.go`、`internal/macos/remote_darwin.go`、`internal/session/controller.go` |
 | 本地语音模型 | [按需加载、句尾预览与验收](LOCAL-ASR.md) | `internal/localasr/`、`internal/session/controller.go` |
+| 云端语音识别 | [豆包 DDC 默认与验收](../../internal/cloudasr/README.md) | `internal/cloudasr/volc.go` |
 | 配置持久化 | [远程规则结构及兼容约定](../../internal/config/README.md) | `internal/config/config.go`、`remote.go` |
 | 词典与纠正学习 | [V2 页面、热词与纠正验收](DICTIONARY.md) | `dictionary.go`、`internal/dict/`、`internal/cloudasr/volc.go`、`internal/session/controller.go` |
 | 基础格式与数字 | [数字默认与保留边界](TEXT-FORMATTING.md) | `internal/textstyle/`、`prefs.go` |

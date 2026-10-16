@@ -103,6 +103,8 @@ func (v Volc) Dial(ctx context.Context, hotwords *string) (asr.Stream, error) {
 	options := map[string]any{
 		"model_name": "bigmodel", "enable_itn": true, "enable_punc": true,
 		"show_utterances": true, "result_type": "full",
+		// DDC removes speech disfluencies; application cleanup remains independent.
+		"enable_ddc": true,
 	}
 	// corpus.context must be a serialized JSON string, not a nested object.
 	// https://docs.volcengine.com/docs/DoubaoVoice/hot-words-and-context
