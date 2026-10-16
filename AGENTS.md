@@ -47,3 +47,5 @@
 - 默认只输入与自动发送见 [自动发送规格](docs/public/AUTO-SEND.md)；V13 移除最近文字入口，连续胶囊先在 HTML 验收。
 
 - 听写至发送倒计时复用同一原生胶囊，底部锚点及取消复验见[自动发送规格](docs/public/AUTO-SEND.md#v14-原生连续胶囊2026-10-16覆盖旧浮层流程)。
+
+- AirPods 录音结束后的播放格式、静音和音量恢复见 [蓝牙音频规格](docs/public/BLUETOOTH-AUDIO.md)。
