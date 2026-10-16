@@ -43,6 +43,8 @@ type prefsWindow struct {
 	audioDays  float64
 	fnConflict string // what the system does on Fn
 	remoteApps []macos.Application
+	autoApps   []macos.Application
+	autoAppsAt time.Time
 	mics       []macos.InputDevice
 	micsAt     time.Time // when mics was read: microphones come and go
 
@@ -320,6 +322,7 @@ func (p *prefsWindow) view(c *ui.Context) {
 						p.dictation(c)
 					case "output":
 						p.formatting(c)
+						p.autoSend(c)
 						p.remoteInput(c)
 					case "privacy":
 						p.privacy(c)

@@ -76,6 +76,8 @@ type Record struct {
 	// InsertedText is what was written to the target; empty unless Status
 	// is StatusInserted.
 	InsertedText string `json:"insertedText,omitempty"`
+	SendShortcut string `json:"sendShortcut,omitempty"`
+	SendSkipped  string `json:"sendSkipped,omitempty"`
 
 	// AudioFile is empty when audio saving was off for this recording, and
 	// AudioRemoved says a saved file was deleted or expired since.

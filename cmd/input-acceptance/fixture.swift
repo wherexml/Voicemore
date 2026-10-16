@@ -30,8 +30,18 @@ window.makeKeyAndOrderFront(nil)
 app.activate(ignoringOtherApps: true)
 // The fixture has a stable identity so production profile matching is used.
 var keyEventCount = 0
+var sendEvents = 0
+var sentText = ""
+var sendFlags = ""
 let monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
  keyEventCount += 1
+ if event.keyCode == 36 {
+  sendEvents += 1
+  sentText = second.stringValue
+  sendFlags = event.modifierFlags.contains(.command) ? "cmd-enter" : event.modifierFlags.contains(.control) ? "ctrl-enter" : "enter"
+  second.stringValue = ""
+  return nil
+ }
  if window.firstResponder === opaque && event.keyCode == 9 && event.modifierFlags.contains(.control) {
   opaque.paste(nil)
   return nil
@@ -42,6 +52,7 @@ var last = ""
 let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
  guard let cmd = try? String(contentsOfFile: dir + "/command", encoding: .utf8), cmd != last else { return }
  last = cmd
+ if cmd.hasPrefix("send-reset-") { second.isEditable=true;second.stringValue="";sendEvents=0;sentText="";sendFlags="";window.makeFirstResponder(second) }
  switch cmd {
  case "first": window.makeFirstResponder(first)
  case "second": second.isEditable = true; window.makeFirstResponder(second)
@@ -54,7 +65,7 @@ let timer = Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { _ in
   break
  }
  submenu.update()
- let state = ["command": cmd, "first": first.stringValue, "second": second.stringValue, "opaque": opaque.text, "keyWindow": String(window.isKeyWindow), "active": String(app.isActive), "firstResponder": String(describing: window.firstResponder), "keyEventCount": String(keyEventCount)]
+ let state = ["sendEvents": String(sendEvents), "sentText": sentText, "sendFlags": sendFlags, "command": cmd, "first": first.stringValue, "second": second.stringValue, "opaque": opaque.text, "keyWindow": String(window.isKeyWindow), "active": String(app.isActive), "firstResponder": String(describing: window.firstResponder), "keyEventCount": String(keyEventCount)]
  let data = try! JSONSerialization.data(withJSONObject: state)
  try! data.write(to: URL(fileURLWithPath: dir + "/state"), options: .atomic)
 }

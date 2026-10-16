@@ -245,6 +245,9 @@ func (a *app) ready() {
 	}
 	a.settings, err = config.Open(dir)
 	note("fileSettings", err)
+	if err == nil {
+		note("fileSettings", a.initializeAutoSendApplications())
+	}
 	// A saved preference is not proof that a service is available on this Mac.
 	wantedCleanup := a.settings.Get().CleanupDefault
 	if wantedCleanup {

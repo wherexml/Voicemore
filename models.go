@@ -102,41 +102,30 @@ func (p *prefsWindow) defaultBlock(c *ui.Context, kind string, s config.Settings
 	a := providers.Assigned(kind, s)
 	err := providers.Check(kind, s, p.a.secret)
 	label := p.a.modelLabel(kind, s)
-	open := p.pickOpen[kind]
-	if open == nil {
-		open = new(bool)
-		p.pickOpen[kind] = open
-	}
 	ui.Column(c.Key("def-" + kind)).Grow(1).Basis(0).MinWidth(0).Gap(7).Children(func() {
 		ui.Text(c, T(kindLabels[kind])).FontSize(12.5).FontWeight(600)
 
-		// The trigger: 44 px, the provider's mark, the model, a chevron.
-		border := settingsGroupLine(c)
-		if *open {
-			border = t.Accent
+		options := []selectOption{}
+		selected := ""
+		for _, o := range providers.Eligible(kind, s, p.a.secret) {
+			o := o
+			id := o.Provider + "|" + o.Model
+			if err == nil && o.Provider == a.Provider && (o.Provider == providers.Local || o.Model == a.Model) {
+				selected = id
+			}
+			options = append(options, selectOption{Value: id, Label: modelText(o.Provider, o.Model), Group: providerName(o.Provider, s, kind), Content: func(c *ui.Context) {
+				logo(c, providerLogo(o.Provider, kind, s), 22)
+				ui.Text(c, modelText(o.Provider, o.Model)).FontSize(13).Grow(1).SingleLine()
+			}})
 		}
-		trigger := ui.ButtonBase(c.Key("pick")).FillWidth().Height(44).Padding(0, 12).Gap(10).Radius(10).AlignItems(ui.Center).
-			Background(t.Background).Border(1, border).Label(T(kindLabels[kind]) + ": " + label)
-		trigger.Children(func() {
-			if a.Provider != "" {
-				logo(c, providerLogo(a.Provider, kind, s), 22)
+		p.standardSelect(c, "model-"+kind, T(kindLabels[kind]), selected, label, 0, false, options, func(value string) {
+			for _, o := range providers.Eligible(kind, s, p.a.secret) {
+				if o.Provider+"|"+o.Model == value {
+					p.assign(kind, o.Provider, o.Model)
+					break
+				}
 			}
-			name := ui.Text(c, label).FontSize(13.5).Grow(1).SingleLine()
-			if err != nil {
-				name.TextColor(t.TextMuted)
-			}
-			arrow := icDown
-			if *open {
-				arrow = icUp
-			}
-			ui.Icon(c, arrow).FontSize(14).TextColor(faintText(t))
 		})
-		if trigger.Clicked() {
-			*open = !*open
-			p.pickFocus[kind] = *open // the keyboard goes into the menu with it
-		}
-		trigger.OnShortcut(0, ui.KeyDown, func() { *open, p.pickFocus[kind] = true, true })
-		p.picker(c, trigger, open, kind, s)
 
 		ui.Row(c).Gap(7).AlignItems(ui.Center).MinHeight(18).Children(func() {
 			if a.Provider == "" {
@@ -152,98 +141,6 @@ func (p *prefsWindow) defaultBlock(c *ui.Context, kind string, s config.Settings
 				p.openProvider(a.Provider, kind, s) // to the settings of the provider in use
 			}
 		})
-	})
-}
-
-// picker is the menu of a default: the eligible models, grouped by
-// provider, each with its mark, and a check on the one chosen. Its rows
-// are buttons, so Tab, Enter and Space work as on any; the arrows, Home
-// and End move the focus among them. Escape and a press outside close it,
-// which MyGo's popover does, giving the focus back to the trigger.
-func (p *prefsWindow) picker(c *ui.Context, trigger ui.Element, open *bool, kind string, s config.Settings) {
-	t := c.Theme()
-	ui.PopoverBase(c, trigger, open, func(panel ui.Element) {
-		panel.Margin(6, 0, 0, 0).Padding(5).Radius(12).Width(max(240, trigger.Bounds().W)).Background(t.Background).Border(1, settingsGroupLine(c)).
-			Shadow(0, 12, 34, 0, ui.RGBA(30, 38, 48, 0.12))
-		opts := providers.Eligible(kind, s, p.a.secret)
-		if len(opts) == 0 {
-			ui.Text(c, T("noEligible")).FontSize(12).TextColor(t.TextMuted).Padding(12, 10)
-			return
-		}
-		a := providers.Assigned(kind, s)
-		usable := providers.Check(kind, s, p.a.secret) == nil
-		handles := p.pickHandles[kind]
-		for len(handles) < len(opts) {
-			handles = append(handles, ui.Handle{})
-		}
-		p.pickHandles[kind] = handles
-
-		// The arrows move among the rows; with none focused they start
-		// from the chosen one.
-		focused, chosen := -1, 0
-		for i, o := range opts {
-			if handles[i].Focused(c) {
-				focused = i
-			}
-			if usable && o.Provider == a.Provider && (o.Provider == providers.Local || o.Model == a.Model) {
-				chosen = i
-			}
-		}
-		move := func(to int) { handles[(to+len(opts))%len(opts)].Focus() }
-		switch {
-		case c.Shortcut(0, ui.KeyDown):
-			if focused < 0 {
-				move(chosen)
-			} else {
-				move(focused + 1)
-			}
-		case c.Shortcut(0, ui.KeyUp):
-			if focused < 0 {
-				move(chosen)
-			} else {
-				move(focused - 1)
-			}
-		case c.Shortcut(0, ui.KeyHome):
-			move(0)
-		case c.Shortcut(0, ui.KeyEnd):
-			move(len(opts) - 1)
-		}
-
-		ui.Scroll(c).MaxHeight(330).Gap(1).Children(func() {
-			for i, o := range opts {
-				if i == 0 || opts[i-1].Provider != o.Provider {
-					ui.Text(c, providerName(o.Provider, s, kind)).FontSize(11).FontWeight(600).TextColor(faintText(t)).Padding(7, 9, 3)
-				}
-				name := modelText(o.Provider, o.Model)
-				row := ui.ButtonBase(c.Key(o.Provider+"|"+o.Model)).FillWidth().MinHeight(38).Padding(9, 10).Gap(10).Radius(8).AlignItems(ui.Center).
-					Label(name).Bind(&handles[i])
-				row.Children(func() {
-					logo(c, providerLogo(o.Provider, kind, s), 18)
-					ui.Text(c, name).FontSize(13).Grow(1).SingleLine()
-					check := ui.Icon(c, icCheck).FontSize(13).TextColor(t.Text)
-					if !(usable && i == chosen) {
-						check.Invisible()
-					}
-				})
-				if usable && i == chosen {
-					row.Background(settingsGroupColor(t))
-				}
-				if row.Hovered() || focused == i {
-					row.Background(hoverColor(t))
-				}
-				if row.Clicked() {
-					*open = false
-					p.assign(kind, o.Provider, o.Model)
-				}
-			}
-		})
-		// As the menu opens, the chosen row takes the focus: the arrows,
-		// Home, End, Enter and Space then work without a click, and
-		// Escape gives the focus back to the trigger.
-		if p.pickFocus[kind] {
-			p.pickFocus[kind] = false
-			handles[chosen].Focus()
-		}
 	})
 }
 

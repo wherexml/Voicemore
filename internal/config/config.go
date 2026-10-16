@@ -155,6 +155,7 @@ type Settings struct {
 
 	ClipboardRestoreDelayMs int           `json:"clipboardRestoreDelayMs"`
 	RemoteInputs            []RemoteInput `json:"remoteInputs,omitempty"`
+	AutoSend                AutoSend      `json:"autoSend"`
 
 	// ObserveEdits reads the target field back after an insertion to
 	// propose dictionary candidates. Off by default: it reads text of
@@ -204,6 +205,7 @@ func Defaults() Settings {
 		AudioRetentionDays:      30,
 		OverlayBottomOffset:     12,
 		ClipboardRestoreDelayMs: 600,
+		AutoSend:                DefaultAutoSend(),
 		ObserveEdits:            false,
 		ObserveSeconds:          30,
 		SeedPath:                "",
@@ -281,6 +283,7 @@ func (st *Store) Get() Settings {
 	s := st.s
 	s.Providers = s.Providers.Clone()
 	s.RemoteInputs = append([]RemoteInput(nil), s.RemoteInputs...)
+	s.AutoSend = s.AutoSend.Clone()
 	return s
 }
 
@@ -288,6 +291,7 @@ func (st *Store) Set(s Settings) error {
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	s.RemoteInputs = append([]RemoteInput(nil), s.RemoteInputs...)
+	s.AutoSend = s.AutoSend.Clone()
 	st.s = s
 	return WriteJSON(st.path, s)
 }
