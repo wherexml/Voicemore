@@ -168,10 +168,10 @@ func arabicNumbers(t string) string {
 		longDigits := len([]rune(s)) >= 3 && !strings.ContainsAny(s, "十百千万萬亿億两兩")
 		decimal := strings.ContainsAny(s, "点點")
 		allow := suffix || prefix || rangeStart || longDigits || decimal || left && right
-		// Keep natural singular action expressions (including 第一次) in Chinese.
+		// Keep singular classifier expressions in Chinese (including 第一次).
 		// This changes notation only: only/each/count qualifiers remain intact,
 		// and explicit Arabic input, larger counts, prices and dates are untouched.
-		if s == "一" && startsAny(after, "次", "遍", "回") {
+		if s == "一" && startsAny(after, "个", "個", "项", "項", "条", "條", "份", "张", "張", "件", "套", "台", "次", "遍", "回") {
 			allow = false
 		}
 		// Lexical phrases and ambiguous short money expressions are not quantities.
