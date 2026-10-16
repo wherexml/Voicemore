@@ -110,22 +110,23 @@ type Controller struct {
 // run is one dictation. Its fields are guarded by Controller.mu, except
 // those a single goroutine owns.
 type run struct {
-	id        string
-	started   time.Time
-	target    *macos.Target
-	capture   *macos.Capture
-	ctx       context.Context
-	stop      context.CancelFunc // cancels everything in flight
-	confirm   chan struct{}      // closed when the user ends the recording
-	confirmed bool
-	ready     chan struct{} // closed only after the first PCM buffer is retained
-	lost      chan struct{} // closed when the microphone disappeared while recording
-	readyOnce sync.Once
-	cueEnded  bool // the recording-end cue has already been scheduled
-	cancelled bool
-	inserted  bool // an insertion was attempted: never a second one
-	viaHold   bool
-	cleanup   bool
+	id              string
+	started         time.Time
+	target          *macos.Target
+	capture         *macos.Capture
+	ctx             context.Context
+	stop            context.CancelFunc // cancels everything in flight
+	confirm         chan struct{}      // closed when the user ends the recording
+	confirmed       bool
+	ready           chan struct{} // closed only after the first PCM buffer is retained
+	lost            chan struct{} // closed when the microphone disappeared while recording
+	readyOnce       sync.Once
+	captureStopOnce sync.Once // schedules hardware shutdown once, independently of text
+	cueEnded        bool      // the recording-end cue has already been scheduled
+	cancelled       bool
+	inserted        bool // an insertion was attempted: never a second one
+	viaHold         bool
+	cleanup         bool
 	// holdCopied keeps "copied to the clipboard" up until it is dismissed,
 	// as the V2 capsule has it; the classic one hides it after a while.
 	// Read from the settings when the dictation starts.
@@ -343,8 +344,7 @@ func (c *Controller) Confirm() {
 	c.view.Phase = Finalizing
 	capture := r.capture
 	c.mu.Unlock()
-	capture.Stop()
-	c.endCue(r)
+	c.stopCapture(r, capture)
 	close(r.confirm)
 	c.changed()
 }
@@ -374,8 +374,7 @@ func (c *Controller) cancel(practiceOnly bool) {
 	capture, pcm, saved := r.capture, r.pcm, r.recSaved
 	c.mu.Unlock()
 	r.stop()
-	capture.Stop()
-	c.endCue(r)
+	c.stopCapture(r, capture)
 	s := c.Settings.Get()
 	if saved {
 		c.History.Update(r.id, func(rec *store.Record) {
@@ -509,27 +508,45 @@ func (c *Controller) fail(r *run, err error, text string) {
 		c.mu.Unlock()
 		return
 	}
+	r.confirmed = true // freeze PCM before asynchronous hardware shutdown
 	capture := r.capture
 	c.view = View{Phase: Failed, Message: err.Error(), Text: text, Cleanup: r.cleanup}
 	if text != "" {
 		c.view.Retained, c.view.Notice = true, err.Error()
 	}
 	c.mu.Unlock()
-	capture.Stop()
-	c.endCue(r)
+	c.stopCapture(r, capture)
 	c.changed()
+}
+
+// stopCapture keeps hardware shutdown and Bluetooth playback recovery off the
+// text path. The caller freezes samples under c.mu before scheduling this.
+// Capture.Stop retains its lifecycle lock throughout recovery, so a subsequent
+// recording cannot race the old output guard or mute restoration.
+func (c *Controller) stopCapture(r *run, capture *macos.Capture) {
+	if capture == nil {
+		return // record owns shutdown if capture has not been published yet
+	}
+	r.captureStopOnce.Do(func() {
+		go func() {
+			capture.Stop()
+			c.endCue(r)
+		}()
+	})
 }
 
 // endCue is independent of coalesced UI updates and sounds only once per run.
 // Call only after microphone capture has stopped.
 func (c *Controller) endCue(r *run) {
-	c.mu.Lock()
-	play := r.capture != nil && !r.cueEnded && c.Settings.Get().InteractionSounds
-	r.cueEnded = true
-	c.mu.Unlock()
-	if play {
-		macos.PlayRecordingCue(false)
-	}
+	macos.OnMain(func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		play := c.cur == r && r.capture != nil && !r.cueEnded && c.Settings.Get().InteractionSounds
+		r.cueEnded = true
+		if play {
+			macos.PlayRecordingCue(false)
+		}
+	})
 }
 
 // record is the goroutine of a dictation, up to the final transcript.
@@ -611,7 +628,7 @@ func (c *Controller) record(r *run, s config.Settings) {
 		}
 	})
 	// Let the complete start cue sound before muting. Stop restores output
-	// synchronously before endCue, including an early stop during this wait.
+	// before endCue in the background, including an early stop during this wait.
 	if err := macos.WaitRecordingStartCue(); err != nil {
 		c.fail(r, err, "")
 		return
@@ -785,8 +802,7 @@ func (c *Controller) micLost(r *run) bool {
 	c.view.Phase = Finalizing
 	capture := r.capture
 	c.mu.Unlock()
-	capture.Stop()
-	c.endCue(r)
+	c.stopCapture(r, capture)
 	c.changed()
 	return true
 }
@@ -800,11 +816,11 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 		r.release()
 		return
 	}
+	r.confirmed = true // also freeze PCM on a service error before confirmation
 	capture, pcm := r.capture, r.pcm
 	r.finalAt = time.Now()
 	c.mu.Unlock()
-	capture.Stop()
-	c.endCue(r)
+	c.stopCapture(r, capture)
 
 	raw = strings.TrimSpace(raw)
 	text, applied := c.formatTranscript(raw, s)
