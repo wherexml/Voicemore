@@ -97,3 +97,11 @@ The exact DMG SHA-256 is `c90fd16ae149f3a6d012c9dffc299e17bbdc4f8745de408971c330
 ## Finder installer presentation
 
 Both local and notarized packaging use `scripts/build-dmg.sh`; see [DMG installer specification](DMG-INSTALLER.md) for artwork, fixed-English instructions and acceptance. The shared builder preserves the signed/stapled app and refuses existing output paths. Formal signing/notarization gates remain after layout packaging.
+
+## v0.3.6 distribution acceptance (2026-10-16)
+
+Published stable/latest from committed source `4ad89af`, excluding concurrent uncommitted changes. The approved compact-label waveform DMG artwork is included. The existing signed runtime cache was reused after verifying 169 Mach-O signatures; Apple accepted the new app (`8d08f142-a318-42ca-9804-d46781a42c01`) and DMG (`8639d42d-0783-43c4-93b9-59fd192df948`).
+
+App/DMG Developer ID signatures, stapled tickets, Gatekeeper, mounted app byte consistency, copied-install signatures, Finder layout, Applications link and runtime checksum passed. The update archive was extracted and its signature/ticket verified; its manifest uses the existing Ed25519 key. All four GitHub assets were downloaded and matched before stable/latest publication. Final DMG SHA-256: `84a6154ed48e8ee991aecd339546b65ef2775072f8c05095d9a6c39b8425bbe2`.
+
+The candidate runtime and committed worker also passed real-audio WebSocket checks for the 30-second boundary, a short reply, silence, cancellation and recovery. This is automatic artifact acceptance plus protocol regression, not repeated cross-Mac microphone/permission/native dictation E2E. Repeatable scripts and reports are local under `artifacts/release-0.3.6/`. Release: https://github.com/wherexml/Voicemore/releases/tag/v0.3.6
