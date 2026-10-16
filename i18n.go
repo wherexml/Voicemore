@@ -388,6 +388,7 @@ var texts = map[string][3]string{
 	"failed":          {"Failed: %s", "失敗：%s", "失败：%s"},
 
 	// Dictionary.
+	"dictTitle":      {"Dictionary Management", "詞典管理", "词典管理"},
 	"hotOver":        {"The local dictionary exceeds the recognizer's limits and is not sent: %s", "本機詞典超出辨識服務的限制，不會傳送：%s", "本机词典超出识别服务的限制，不会发送：%s"},
 	"pending":        {"Waiting for confirmation (%d)", "等待確認（%d）", "等待确认（%d）"},
 	"noPending":      {"Revise a transcript in History and corrections of names appear here. Nothing applies before you accept it.", "在歷史中修訂轉寫後，專有名詞的更正會出現在這裡。確認前不會生效。", "在历史中修订转写后，专有名词的纠正会出现在这里。确认前不会生效。"},
