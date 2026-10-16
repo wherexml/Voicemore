@@ -63,20 +63,22 @@ type overlay struct {
 	levelAt          time.Time
 	// classic is the renderer of this dictation, read from the settings
 	// when it starts, so a change of style never lands mid-dictation.
-	classic bool
-	width   int
-	v2      v2State
+	classic      bool
+	width        int
+	sendFinished bool // Suppress the terminal notice after a completed countdown.
+	v2           v2State
 }
 
 func newOverlay(a *app) *overlay {
 	o := &overlay{a: a}
 	o.classic = a.settings.Get().CapsuleStyle == config.CapsuleClassic
 	o.win = mygo.NewFlyout(mygo.FlyoutOptions{
-		Tray:    a.tray,
-		Width:   overlayW,
-		Height:  compactH,
-		Hidden:  true,
-		Content: ui.View(o.view),
+		Tray:      a.tray,
+		Width:     overlayW,
+		Height:    compactH,
+		Hidden:    true,
+		Focusable: true,
+		Content:   ui.View(o.view),
 	})
 	o.win.OnClose(func(e *mygo.CloseEvent) {
 		if !a.quitting {
@@ -94,9 +96,15 @@ func (o *overlay) sync() {
 			if v.Phase == session.Preparing {
 				o.a.sendPreview.close()
 			} else {
-				o.win.Hide()
 				return
 			}
+		}
+		if v.Phase == session.Preparing || v.Phase == session.Failed {
+			o.sendFinished = false
+		}
+		if o.sendFinished {
+			o.v = v
+			return
 		}
 		was := o.v.Phase
 		if v.Phase == session.Idle {
@@ -154,6 +162,10 @@ func (o *overlay) follow(id uint64) {
 	time.AfterFunc(200*time.Millisecond, func() {
 		o.win.Update(func() {
 			if id != o.followID || o.a.quitting {
+				return
+			}
+			if o.a.sendPreview != nil && o.a.sendPreview.visible {
+				o.follow(id)
 				return
 			}
 			pointer := mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
@@ -264,6 +276,10 @@ func panelHeight(kind int) int {
 }
 
 func (o *overlay) view(c *ui.Context) {
+	if p := o.a.sendPreview; p != nil && p.visible {
+		p.view(c)
+		return
+	}
 	if !o.classic {
 		o.viewV2(c)
 		return
