@@ -63,14 +63,11 @@ func (b *bluetoothOutput) settle(input uint32, keepMuted bool) {
 	}
 	start := time.Now()
 	stable := time.Time{}
-	for time.Since(start) < 3*time.Second {
+	for time.Since(start) < 8*time.Second {
 		if keepMuted {
-			if muted, err := readOutputProperty(b.device, outputMuteAddress); err == nil && muted == 0 {
-				if err := setOutputMute(b.device, 1); err != nil {
-					log.Printf("Bluetooth recovery mute: %v", err)
-				}
-			}
+			b.keepMuted()
 		}
+		b.limitVolume()
 		var rate float64
 		var running uint32
 		rateOK := readAudioValue(b.device, 0x6e737274, scopeGlob, &rate)
@@ -104,7 +101,20 @@ func (b *bluetoothOutput) limitVolume() {
 	if err != nil || current != b.device {
 		return
 	}
-	for channel, ceiling := range b.volumes {
+	fallback := float32(1)
+	for _, value := range b.volumes {
+		if value < fallback {
+			fallback = value
+		}
+	}
+	if len(b.volumes) == 0 {
+		return
+	}
+	for _, channel := range []uint32{0, 1, 2} {
+		ceiling, exists := b.volumes[channel]
+		if !exists {
+			ceiling = fallback
+		}
 		var volume float32
 		addr := audioPropertyAddress{0x766f6c6d, 0x6f757470, channel}
 		size := uint32(4)
@@ -113,6 +123,17 @@ func (b *bluetoothOutput) limitVolume() {
 		}
 		if st := outputSet(b.device, &addr, 0, 0, 4, unsafe.Pointer(&ceiling)); st != 0 {
 			log.Printf("Bluetooth output volume restore failed: OSStatus %d", st)
+		}
+	}
+}
+
+func (b *bluetoothOutput) keepMuted() {
+	if b == nil {
+		return
+	}
+	if muted, err := readOutputProperty(b.device, outputMuteAddress); err == nil && muted == 0 {
+		if err := setOutputMute(b.device, 1); err != nil {
+			log.Printf("Bluetooth transition mute: %v", err)
 		}
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"log"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/ebitengine/purego"
@@ -156,6 +157,8 @@ type Capture struct {
 	stopped   atomic.Bool
 	output    *outputSilencer
 	bluetooth *bluetoothOutput
+	guardStop chan struct{}
+	guardDone chan struct{}
 }
 
 // StartCapture records the default microphone and gives onPCM the samples,
@@ -170,6 +173,12 @@ func StartCapture(onPCM func(pcm []byte)) (*Capture, error) {
 // an unplugged microphone does not stop dictation, and is used again once
 // it is back.
 func StartCaptureFrom(uid string, onPCM func(pcm []byte)) (*Capture, error) {
+	return StartCaptureFromWithOutputMute(uid, onPCM, false)
+}
+
+// StartCaptureFromWithOutputMute protects Bluetooth playback before opening
+// its microphone. Other devices retain the cue-then-mute behavior.
+func StartCaptureFromWithOutputMute(uid string, onPCM func(pcm []byte), mute bool) (*Capture, error) {
 	captureLifecycle.Lock()
 	defer captureLifecycle.Unlock()
 	if err := loadAudioToolbox(); err != nil {
@@ -199,7 +208,19 @@ func StartCaptureFrom(uid string, onPCM func(pcm []byte)) (*Capture, error) {
 		snapshotInput = inputDeviceByUID(uid)
 	}
 	c.bluetooth = snapshotBluetoothOutput(snapshotInput)
+	if mute && c.bluetooth != nil {
+		var err error
+		c.output, err = silenceOutput()
+		if err != nil {
+			return nil, err
+		}
+		c.guardStop = make(chan struct{})
+		c.guardDone = make(chan struct{})
+		go c.guardBluetoothOutput()
+	}
 	if st := audioQueueNewInput(&desc, captureCallback, 0, 0, 0, 0, &c.q); st != 0 {
+		c.stopBluetoothGuard()
+		c.output.restore()
 		return nil, captureError("the microphone could not be opened (AudioQueueNewInput, OSStatus %d)", st)
 	}
 	if chosen {
@@ -224,6 +245,31 @@ func StartCaptureFrom(uid string, onPCM func(pcm []byte)) (*Capture, error) {
 		return nil, captureError("the microphone did not start (AudioQueueStart, OSStatus %d); check the Microphone permission and the input device", st)
 	}
 	return c, nil
+}
+
+// This guard must not take captureLifecycle: AudioQueueNewInput/Start can
+// block through the very profile transition that needs protection.
+func (c *Capture) guardBluetoothOutput() {
+	defer close(c.guardDone)
+	ticker := time.NewTicker(20 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-c.guardStop:
+			return
+		case <-ticker.C:
+			c.bluetooth.keepMuted()
+			c.bluetooth.limitVolume()
+		}
+	}
+}
+
+func (c *Capture) stopBluetoothGuard() {
+	if c.guardStop != nil {
+		close(c.guardStop)
+		<-c.guardDone
+		c.guardStop = nil
+	}
 }
 
 // SilenceOutput runs after the start cue, serialized with Stop so an early
@@ -256,6 +302,9 @@ func (c *Capture) stopLocked() {
 	if c == nil || c.stopped.Swap(true) {
 		return
 	}
+	if c.bluetooth != nil && c.output != nil && c.output.device == c.bluetooth.device {
+		c.bluetooth.keepMuted()
+	}
 	if st := audioQueueStop(c.q, true); st != 0 {
 		log.Printf("microphone stop failed: OSStatus %d", st)
 	}
@@ -272,6 +321,7 @@ func (c *Capture) stopLocked() {
 		c.bluetooth.settle(c.device, c.output != nil && c.output.device == c.bluetooth.device)
 		c.bluetooth.limitVolume()
 	}
+	c.stopBluetoothGuard()
 	c.output.restore()
 	if b := c.bluetooth; b != nil && c.output != nil && c.output.device == b.device && b.hasMute && b.muted != 0 {
 		if err := setOutputMute(b.device, b.muted); err != nil {

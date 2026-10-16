@@ -51,14 +51,14 @@ func main() {
 		beforeAudio := snapshot()
 		var frames atomic.Int64
 		var nonzero atomic.Int64
-		capture, err := macos.StartCapture(func(pcm []byte) {
+		capture, err := macos.StartCaptureFromWithOutputMute("", func(pcm []byte) {
 			frames.Add(1)
 			for i := 0; i+1 < len(pcm); i += 2 {
 				if pcm[i] != 0 || pcm[i+1] != 0 {
 					nonzero.Add(1)
 				}
 			}
-		})
+		}, true)
 		if err != nil {
 			panic(err)
 		}

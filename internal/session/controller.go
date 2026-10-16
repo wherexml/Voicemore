@@ -561,7 +561,7 @@ func (c *Controller) record(r *run, s config.Settings) {
 
 	// The microphone starts before the ASR is connected, and the samples
 	// wait: what is said while it connects is not lost.
-	capture, err := macos.StartCaptureFrom(s.InputDevice, func(pcm []byte) { c.samples(r, pcm) })
+	capture, err := macos.StartCaptureFromWithOutputMute(s.InputDevice, func(pcm []byte) { c.samples(r, pcm) }, s.MuteOutput)
 	if err != nil {
 		if errors.Is(err, macos.ErrNoMicrophone) {
 			err = errors.New(c.tr("micMissing"))
