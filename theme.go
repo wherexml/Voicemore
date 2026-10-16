@@ -53,6 +53,14 @@ func useTheme(c *ui.Context) *ui.Theme {
 			t.TextMuted = ui.Hex("#666666")
 		}
 	}
+	// Keep scroll indicators quiet without changing their proportional length.
+	t.ScrollbarWidth = 3
+	if !strong {
+		t.Scrollbar = ui.RGBA(0, 0, 0, 0.16)
+		if t.Dark {
+			t.Scrollbar = ui.RGBA(255, 255, 255, 0.20)
+		}
+	}
 	c.SetTheme(&t)
 	return &t
 }

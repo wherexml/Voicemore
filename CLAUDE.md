@@ -16,3 +16,5 @@
 - V3 首页、历史统一记录卡片、真实声纹与 CSV 导出：[首页与历史规格](docs/public/HOME-HISTORY.md#v3-首页与历史)。
 
 - 豆包默认 DDC 与整理保留边界：[云端 ASR 规格](internal/cloudasr/README.md)。
+
+- 窗口背景拖动、底部拖动留白与细滚动条：[窗口交互规格](docs/public/HOME-HISTORY.md#窗口拖动与滚动条)。

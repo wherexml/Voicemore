@@ -175,7 +175,7 @@ func railButton(c *ui.Context, key string, svg *ui.SVG, label string, selected b
 func (m *mainWindow) view(c *ui.Context) {
 	t := useTheme(c) // the mock's palette; every c.Theme() below returns it
 	bar := c.TitleBar()
-	ui.Row(c).Fill().AlignItems(ui.Stretch).Children(func() {
+	ui.Row(c).Fill().AlignItems(ui.Stretch).DragWindow().Children(func() {
 		// The rail: 78 px, icons only. The window controls take its top;
 		// the three pages are centered in its height, and Settings is
 		// anchored at the bottom.
@@ -217,6 +217,8 @@ func (m *mainWindow) view(c *ui.Context) {
 					m.homeView(c)
 				}
 			})
+			// A persistent bottom grip remains available even with a full list.
+			ui.Box(c.Key("bottom-grip")).Height(16).FillWidth().DragWindow()
 			if m.busy != nil || m.status != nil {
 				ui.Row(c).Gap(8).Padding(8, 28).BorderWidth(1, 0, 0, 0).BorderColor(t.Border).Children(func() {
 					if m.busy != nil {
