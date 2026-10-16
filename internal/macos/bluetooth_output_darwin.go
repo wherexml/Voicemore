@@ -63,7 +63,6 @@ func (b *bluetoothOutput) settle(input uint32, keepMuted bool) {
 	}
 	start := time.Now()
 	stable := time.Time{}
-	requestedRate := false
 	for time.Since(start) < 3*time.Second {
 		if keepMuted {
 			if muted, err := readOutputProperty(b.device, outputMuteAddress); err == nil && muted == 0 {
@@ -79,13 +78,6 @@ func (b *bluetoothOutput) settle(input uint32, keepMuted bool) {
 		if !rateOK {
 			log.Printf("Bluetooth output disappeared before restore")
 			return
-		}
-		if inputOK && running == 0 && b.rate > 0 && rate != b.rate && !requestedRate && time.Since(start) >= 300*time.Millisecond {
-			requestedRate = true
-			addr := audioPropertyAddress{0x6e737274, scopeGlob, 0}
-			if st := outputSet(b.device, &addr, 0, 0, 8, unsafe.Pointer(&b.rate)); st != 0 {
-				log.Printf("Bluetooth playback format restore failed: OSStatus %d", st)
-			}
 		}
 		if inputOK && running == 0 && (b.rate == 0 || rate == b.rate) {
 			if stable.IsZero() {
