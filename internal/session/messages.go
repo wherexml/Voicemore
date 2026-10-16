@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"voiceinput/internal/cleanup"
 )
 
 // Messages the controller shows or stores. The app gives Controller.Tr to
@@ -18,7 +17,6 @@ var messages = map[string]string{
 	"asrBusy":              "The speech recognition service is busy with another recording. Try again in a moment.",
 	"asrUnreachable":       "The speech recognition service at %s cannot be reached: %s",
 	"noSpeech":             "No speech detected — nothing inserted.",
-	"cleanupRejected":      "Cleanup result not used: %s",
 	"cleanupRequestFailed": "Cleanup service request failed: %s",
 	"cleanupTimedOut":      "Cleanup request timed out: %s",
 	"cleanupCancelled":     "Cleanup cancelled: %s",
@@ -84,13 +82,10 @@ func cause(err error) string {
 	}
 }
 
-// cleanupFailure separates rejected model output from service failures.
+// cleanupFailure distinguishes timeout and cancellation from other service errors.
 func (c *Controller) cleanupFailure(err error) string {
 	key := "cleanupRequestFailed"
-	var changed *cleanup.ChangedError
 	switch {
-	case errors.As(err, &changed):
-		key = "cleanupRejected"
 	case errors.Is(err, context.DeadlineExceeded):
 		key = "cleanupTimedOut"
 	case errors.Is(err, context.Canceled):
