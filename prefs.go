@@ -98,17 +98,22 @@ func newPrefsWindow(a *app) *prefsWindow {
 	p.bundlePath = runningAppBundle()
 	p.remoteApps = macos.RunningApplications()
 	p.win = mygo.NewWindow(mygo.WindowOptions{
-		Title:           T("navSettings"),
-		Width:           980,
-		Height:          760,
-		MinWidth:        680,
-		MinHeight:       460,
-		Hidden:          true,
-		StateKey:        "prefs",
-		TitleBarStyle:   mygo.TitleBarHidden,
-		DisableMinimize: true,
-		Content:         ui.View(p.view),
+		Title:             T("navSettings"),
+		Width:             820,
+		Height:            680,
+		MinWidth:          680,
+		MinHeight:         460,
+		Hidden:            true,
+		TitleBarStyle:     mygo.TitleBarHidden,
+		DisableMinimize:   true,
+		DisableMaximize:   true,
+		DisableFullScreen: true,
+		Content:           ui.View(p.view),
 	})
+	// Settings starts compact on every launch instead of restoring an old
+	// maximized/full-screen state. Resizing still works within this session.
+	// MyGo's macOS constructor does not apply DisableMaximize to the button.
+	p.win.SetMaximizable(false)
 	// Closing hides it, with everything in it kept.
 	p.win.OnClose(func(e *mygo.CloseEvent) {
 		if !a.quitting {

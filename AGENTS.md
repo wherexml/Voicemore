@@ -12,6 +12,8 @@
 
 ## 模块规格
 
+- 设置窗口默认居中 820×680 DIP，全屏按钮灰色禁用，不恢复旧最大化状态；边缘缩放和原生复验见[设置窗口规格](docs/public/HOME-HISTORY.md#设置窗口尺寸与窗口按钮)。
+
 - 本地 ASR 自定义与调参先查 [Qwen3-ASR 能力、参数及接入边界](docs/public/QWEN3-ASR-CUSTOMIZATION.md)。
 
 - 修改相关行为时同步维护[文档索引](docs/public/README.md)引用的模块规格与验收步骤。
