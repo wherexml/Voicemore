@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.8
+
+- Animate the native dictation capsule continuously into the send countdown: the shell, status text, icons and send controls now transition in one window with a fixed bottom edge and stable countdown width.
+- Add a 24-hour bar chart for today on Home, selected by default, with hour filtering, keyboard navigation and empty-state handling; multi-day ranges keep the heatmap.
+- Use the shared standard selector for Home trigger key, mode, recognition and cleanup models, microphone and date range, with a single visible check mark per choice.
+- Open Settings at a centered 820×680 default size and disable full screen.
+- Use macOS SF Symbols for copy, delete and update buttons, and keep the Home scrollbar from crowding the copy and delete actions.
+
+原生听写胶囊连续过渡到发送倒计时：外框、状态文字、图标与发送控件在同一窗口内渐变，底边固定，倒计时宽度稳定。首页新增默认显示的今日 24 小时柱状图，支持按小时筛选、键盘导航与空态，多日范围保留热力图。首页触发键与方式、识别和整理模型、麦克风及日期范围统一使用标准选择器，选中项勾选清晰。设置窗口默认居中 820×680 并禁用全屏。复制、删除与更新按钮改用 macOS SF Symbols，首页滚动条不再挤占复制与删除按钮。
+
 ## 0.3.7
 
 - Add local speech-language selection: Chinese by default, automatic detection, or English; use the same selection when retranscribing history.
