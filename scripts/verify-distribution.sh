@@ -1,6 +1,9 @@
 #!/bin/sh
 # Read-only acceptance of already signed/notarized artifacts. Never grants exceptions.
 set -eu
+policy="$(dirname "$0")/../internal/distribution/policy.json"
+bundle_id=$(plutil -extract bundleID raw "$policy")
+team_id=$(plutil -extract teamID raw "$policy")
 app=${1:?Usage: verify-distribution.sh /path/Voicemore.app /path/Voicemore.dmg /path/evidence}
 image=${2:?Provide the final DMG}
 evidence_root=${3:?Provide an evidence directory}
@@ -22,12 +25,12 @@ sw_vers > "$evidence/system.txt"
 shasum -a 256 "$image" > "$evidence/SHA256SUMS.txt"
 codesign --verify --deep --strict --verbose=2 "$app" > "$evidence/signature-verification.txt" 2>&1
 codesign -d -r- --verbose=4 "$app" > "$evidence/signature-details.txt" 2>&1
-[ "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" = dev.steve.voice-input ]
+[ "$(plutil -extract CFBundleIdentifier raw "$app/Contents/Info.plist")" = "$bundle_id" ]
 if ! grep -q '^Authority=Developer ID Application:' "$evidence/signature-details.txt"; then
  echo 'Developer ID Application signing is required; development signatures are not accepted.' > "$evidence/rejection.txt"
  exit 1
 fi
-grep -q '^TeamIdentifier=T695TT4HT9$' "$evidence/signature-details.txt" || {
+grep -q "^TeamIdentifier=$team_id\$" "$evidence/signature-details.txt" || {
  echo 'The approved Skylance distribution team is required.' > "$evidence/rejection.txt"
  exit 1
 }
@@ -36,7 +39,7 @@ xcrun stapler validate "$app" > "$evidence/app-ticket.txt" 2>&1
 hdiutil verify "$image" > "$evidence/dmg-integrity.txt" 2>&1
 codesign --verify --strict --verbose=2 "$image" > "$evidence/dmg-signature.txt" 2>&1
 codesign -d --verbose=4 "$image" > "$evidence/dmg-signature-details.txt" 2>&1
-grep -q '^TeamIdentifier=T695TT4HT9$' "$evidence/dmg-signature-details.txt"
+grep -q "^TeamIdentifier=$team_id\$" "$evidence/dmg-signature-details.txt"
 xcrun stapler validate "$image" > "$evidence/dmg-ticket.txt" 2>&1
 spctl --assess --type open --context context:primary-signature --verbose=4 "$image" > "$evidence/dmg-gatekeeper.txt" 2>&1
 # Compare every sealed file and symlink with the app actually inside the DMG.

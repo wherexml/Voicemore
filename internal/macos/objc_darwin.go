@@ -34,6 +34,7 @@ var (
 
 	cgEventTapCreate            func(tap, place, options uint32, mask uint64, callback, user uintptr) uintptr
 	cgEventTapEnable            func(tap uintptr, enable bool)
+	cgEventTapIsEnabled         func(tap uintptr) bool
 	cgEventGetFlags             func(event uintptr) uint64
 	cgEventGetIntegerValueField func(event uintptr, field uint32) int64
 	cgEventCreateKeyboardEvent  func(source uintptr, key uint16, down bool) uintptr
@@ -86,6 +87,7 @@ func load() error {
 
 		purego.RegisterLibFunc(&cgEventTapCreate, cg, "CGEventTapCreate")
 		purego.RegisterLibFunc(&cgEventTapEnable, cg, "CGEventTapEnable")
+		purego.RegisterLibFunc(&cgEventTapIsEnabled, cg, "CGEventTapIsEnabled")
 		purego.RegisterLibFunc(&cgEventGetFlags, cg, "CGEventGetFlags")
 		purego.RegisterLibFunc(&cgEventGetIntegerValueField, cg, "CGEventGetIntegerValueField")
 		purego.RegisterLibFunc(&cgEventCreateKeyboardEvent, cg, "CGEventCreateKeyboardEvent")

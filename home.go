@@ -1,6 +1,7 @@
 package main
 
 import (
+	"slices"
 	"strings"
 	"time"
 
@@ -141,12 +142,12 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 			}
 		}
 		keys := []string{macos.KeyFn, macos.KeyRightOption, macos.KeyRightCommand, macos.KeyRightControl}
-		if !macos.IsModifierKey(s.TriggerKey) {
+		if !slices.Contains(keys, s.TriggerKey) {
 			keys = append(keys, s.TriggerKey)
 		}
 		triggerOptions := []selectOption{}
 		for _, key := range keys {
-			triggerOptions = append(triggerOptions, selectOption{Value: "key:" + key, Label: keyName(key), Group: T("sKey"), Selected: key == s.TriggerKey})
+			triggerOptions = append(triggerOptions, selectOption{Value: "key:" + key, Label: keyName(key), Group: T("sKey"), Selected: key == s.TriggerKey, Disabled: s.TranslationKey != "" && sameShortcut(key, s.TranslationKey)})
 		}
 		for _, mode := range []string{config.TriggerToggle, config.TriggerHold} {
 			name := T("modeToggleShort")
@@ -161,9 +162,7 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 			case strings.HasPrefix(value, "key:"):
 				key := strings.TrimPrefix(value, "key:")
 				if key != s.TriggerKey {
-					p.change(func(s *config.Settings) { s.TriggerKey = key })
-					p.a.bindTrigger()
-					p.fnConflict = macos.FnKeyConflict()
+					p.saveShortcut("dictation", key)
 				}
 			case strings.HasPrefix(value, "mode:"):
 				p.change(func(s *config.Settings) { s.TriggerMode = strings.TrimPrefix(value, "mode:") })

@@ -52,13 +52,14 @@ type Timing struct {
 }
 
 type Record struct {
-	ID             string    `json:"id"`
-	StartedAt      time.Time `json:"startedAt"`
-	DurationMs     int64     `json:"durationMs"`
-	Status         string    `json:"status"`
-	StatusDetail   string    `json:"statusDetail,omitempty"`
-	TargetApp      string    `json:"targetApp,omitempty"`
-	TargetBundleID string    `json:"targetBundleID,omitempty"`
+	TranslationLanguage string    `json:"translationLanguage,omitempty"`
+	ID                  string    `json:"id"`
+	StartedAt           time.Time `json:"startedAt"`
+	DurationMs          int64     `json:"durationMs"`
+	Status              string    `json:"status"`
+	StatusDetail        string    `json:"statusDetail,omitempty"`
+	TargetApp           string    `json:"targetApp,omitempty"`
+	TargetBundleID      string    `json:"targetBundleID,omitempty"`
 
 	// RawText is the ASR's final transcript as received. CorrectedText is
 	// it after the confirmed dictionary rules, empty when none applied.

@@ -46,9 +46,10 @@ const voicedLevel = 0.12
 
 // View is what the overlay shows of the current dictation.
 type View struct {
-	Phase   Phase
-	Levels  [Levels]float32 // 0 to 1, the newest last
-	Cleanup bool
+	TranslationLanguage string
+	Phase               Phase
+	Levels              [Levels]float32 // 0 to 1, the newest last
+	Cleanup             bool
 	// Final is transcript that no longer changes, Pending what may.
 	Final, Pending string
 	// Message says what failed, or what a finished dictation did.
@@ -125,6 +126,7 @@ type run struct {
 	cueEnded        bool      // the recording-end cue has already been scheduled
 	cancelled       bool
 	inserted        bool // an insertion was attempted: never a second one
+	translation     string
 	viaHold         bool
 	cleanup         bool
 	// holdCopied keeps "copied to the clipboard" up until it is dismissed,
@@ -286,7 +288,30 @@ func (c *Controller) start(viaHold bool) {
 	c.startWithSink(viaHold, nil)
 }
 
+// ToggleTranslation ends a current recording or starts a translated dictation.
+// The target is frozen at start, including across model retries.
+func (c *Controller) ToggleTranslation() {
+	c.mu.Lock()
+	phase, active := c.view.Phase, c.cur != nil
+	c.mu.Unlock()
+	if active && (phase == Preparing || phase == Recording) {
+		c.Confirm()
+		return
+	}
+	if active && phase != Done && phase != Failed {
+		return
+	}
+	c.Dismiss()
+	language := c.Settings.Get().TranslationLanguage
+	if language == "" {
+		language = "en"
+	}
+	c.startConfigured(false, nil, language)
+}
 func (c *Controller) startWithSink(viaHold bool, sink func(string)) {
+	c.startConfigured(viaHold, sink, "")
+}
+func (c *Controller) startConfigured(viaHold bool, sink func(string), language string) {
 	s := c.Settings.Get()
 	c.mu.Lock()
 	if c.cur != nil || c.retranscribing {
@@ -304,9 +329,13 @@ func (c *Controller) startWithSink(viaHold bool, sink func(string)) {
 	} else {
 		r.cleanup = s.CleanupDefault
 	}
+	r.translation = language
+	if language != "" {
+		r.cleanup = true
+	}
 	r.sink = sink // assigned atomically with creating this run
 	c.cur = r
-	c.view = View{Phase: Preparing, Cleanup: r.cleanup}
+	c.view = View{Phase: Preparing, Cleanup: r.cleanup, TranslationLanguage: language}
 	c.mu.Unlock()
 	c.changed()
 	go c.record(r, s)
@@ -569,7 +598,7 @@ func (c *Controller) endCue(r *run) {
 func (c *Controller) record(r *run, s config.Settings) {
 	r.target = macos.CaptureTarget()
 	c.markPrivate(r, s, r.target.BundleID)
-	r.rec = store.Record{ID: r.id, StartedAt: r.started, TargetApp: r.target.AppName, TargetBundleID: r.target.BundleID, ASRModel: providers.ModelName(providers.KindASR, s), CleanupRequested: r.cleanup, Status: store.StatusFailed}
+	r.rec = store.Record{ID: r.id, StartedAt: r.started, TargetApp: r.target.AppName, TargetBundleID: r.target.BundleID, ASRModel: providers.ModelName(providers.KindASR, s), TranslationLanguage: r.translation, CleanupRequested: r.cleanup, Status: store.StatusFailed}
 
 	switch macos.MicrophoneStatus() {
 	case "denied", "restricted":
@@ -908,7 +937,11 @@ func (c *Controller) clean(r *run, s config.Settings) {
 	opts, err := c.cleanupOptions(s)
 	cleaned := ""
 	if err == nil {
-		cleaned, err = cleanup.Run(ctx, opts, r.text)
+		if r.translation != "" {
+			cleaned, err = cleanup.Translate(ctx, opts, r.text, config.TranslationTarget(r.translation))
+		} else {
+			cleaned, err = cleanup.Run(ctx, opts, r.text)
+		}
 	}
 	cancel()
 	took := time.Since(began).Milliseconds()
@@ -926,13 +959,15 @@ func (c *Controller) clean(r *run, s config.Settings) {
 		})
 		c.mu.Lock()
 		if c.active(r) {
-			c.view = View{Phase: Failed, Cleanup: true, CleanupFailed: true, Text: r.text, Message: c.cleanupFailure(err)}
+			c.view = View{Phase: Failed, Cleanup: true, CleanupFailed: true, TranslationLanguage: r.translation, Text: r.text, Message: c.cleanupFailure(err)}
 		}
 		c.mu.Unlock()
 		c.changed()
 		return
 	}
-	cleaned, _ = textstyle.Apply(cleaned, s.TextStyle, c.Dict.Hotwords())
+	if r.translation == "" {
+		cleaned, _ = textstyle.Apply(cleaned, s.TextStyle, c.Dict.Hotwords())
+	}
 	c.note(r, func(rec *store.Record) {
 		rec.CleanedText, rec.CleanupError, rec.Timing.CleanupMs = cleaned, "", took
 		rec.CleanupModel = opts.Model
@@ -1007,7 +1042,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 	onPasted := func(target *macos.Target) {
 		// The app pasted into decides as much as the one at the start: a
 		// private run is never observed, so nothing of it is learned.
-		if c.markPrivate(r, s, target.BundleID) || !s.ObserveEdits {
+		if c.markPrivate(r, s, target.BundleID) || !s.ObserveEdits || r.translation != "" {
 			return
 		}
 		observing = true

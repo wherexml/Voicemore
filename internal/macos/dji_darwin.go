@@ -30,6 +30,9 @@ var dji struct {
 	integer         func(uintptr) int64
 	device          func(uintptr) uintptr
 	callback        uintptr
+	copyDevices     func(uintptr) uintptr
+	count           func(uintptr) int64
+	exclusive       bool
 	manager         uintptr
 	down            map[uintptr]bool
 	toggle          func()
@@ -38,7 +41,11 @@ var dji struct {
 // StartDJIButton maps the receiver's volume-up button to a recording toggle.
 // Exclusive HID access suppresses its original volume action. No global
 // volume events are intercepted. Closing the manager restores normal use.
-func StartDJIButton(toggle func()) (func(), error) {
+func StartDJIButton(toggle func()) (func(), error) { return StartDJIButtonMonitor(true, toggle) }
+
+// StartDJIButtonMonitor can observe connection state without claiming the
+// interface. Only an enabled binding or button-capture wizard seizes it.
+func StartDJIButtonMonitor(exclusive bool, toggle func()) (func(), error) {
 	if err := load(); err != nil {
 		return nil, err
 	}
@@ -52,7 +59,7 @@ func StartDJIButton(toggle func()) (func(), error) {
 			fn   any
 			name string
 		}{
-			{&dji.create, "IOHIDManagerCreate"}, {&dji.match, "IOHIDManagerSetDeviceMatching"},
+			{&dji.copyDevices, "IOHIDManagerCopyDevices"}, {&dji.create, "IOHIDManagerCreate"}, {&dji.match, "IOHIDManagerSetDeviceMatching"},
 			{&dji.removal, "IOHIDManagerRegisterDeviceRemovalCallback"}, {&dji.register, "IOHIDManagerRegisterInputValueCallback"}, {&dji.schedule, "IOHIDManagerScheduleWithRunLoop"},
 			{&dji.unschedule, "IOHIDManagerUnscheduleFromRunLoop"}, {&dji.open, "IOHIDManagerOpen"}, {&dji.close, "IOHIDManagerClose"},
 			{&dji.element, "IOHIDValueGetElement"}, {&dji.page, "IOHIDElementGetUsagePage"}, {&dji.usage, "IOHIDElementGetUsage"},
@@ -60,6 +67,12 @@ func StartDJIButton(toggle func()) (func(), error) {
 		} {
 			purego.RegisterLibFunc(entry.fn, lib, entry.name)
 		}
+		cf, err := purego.Dlopen(frameworks+"CoreFoundation.framework/CoreFoundation", purego.RTLD_LAZY|purego.RTLD_GLOBAL)
+		if err != nil {
+			dji.err = err
+			return
+		}
+		purego.RegisterLibFunc(&dji.count, cf, "CFSetGetCount")
 		dji.removedCallback = purego.NewCallback(func(context uintptr, result int32, sender, device uintptr) { delete(dji.down, device) })
 		dji.callback = purego.NewCallback(func(context uintptr, result int32, sender, value uintptr) {
 			if result != 0 || dji.manager == 0 {
@@ -103,7 +116,11 @@ func StartDJIButton(toggle func()) (func(), error) {
 		dji.register(manager, dji.callback, 0)
 		dji.removal(manager, dji.removedCallback, 0)
 		dji.schedule(manager, cfRunLoopGetMain(), cfRunLoopCommonModes)
-		if result := dji.open(manager, 1); result != 0 {
+		options := uint32(0)
+		if exclusive {
+			options = 1
+		}
+		if result := dji.open(manager, options); result != 0 {
 			dji.unschedule(manager, cfRunLoopGetMain(), cfRunLoopCommonModes)
 			dji.close(manager, 0)
 			cfRelease(manager)
@@ -111,7 +128,8 @@ func StartDJIButton(toggle func()) (func(), error) {
 			startErr = fmt.Errorf("DJI receiver exclusive HID access failed: %#x", uint32(result))
 			return
 		}
-		log.Print("trigger: DJI receiver button listener enabled")
+		dji.exclusive = exclusive
+		log.Printf("trigger: DJI receiver listener exclusive=%t", exclusive)
 	})
 	if startErr != nil {
 		return nil, startErr
@@ -127,4 +145,20 @@ func StartDJIButton(toggle func()) (func(), error) {
 			dji.manager, dji.toggle, dji.down = 0, nil, nil
 		})
 	}, nil
+}
+
+// DJIConnected enumerates only the verified receiver's consumer interface.
+func DJIConnected() bool {
+	connected := false
+	OnMain(func() {
+		if dji.manager == 0 || dji.copyDevices == nil {
+			return
+		}
+		devices := dji.copyDevices(dji.manager)
+		if devices != 0 {
+			connected = dji.count(devices) > 0
+			cfRelease(devices)
+		}
+	})
+	return connected
 }

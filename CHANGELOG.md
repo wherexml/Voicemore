@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.9
+
+- Add device button bindings for standard HID mouse auxiliary buttons, external keyboard keys and supported media keys; assign multiple buttons on the same device to dictation or translation.
+- Suppress the original action only for the bound button on the matching device, while preserving unbound buttons and the same key on other devices. Group composite interfaces and show unsupported devices with a disabled reason.
+- Add translation shortcuts and target-language selection, with separate translation prompts and history metadata.
+- Keep the Developer ID identity consistent across local installs, official releases and authenticated automatic updates; provide an isolated development build.
+
+新增通用设备按键绑定：鼠标辅助键、外接键盘普通键及支持的媒体键可分别绑定听写或翻译，同一设备可添加多个按键。仅拦截匹配设备上的已绑定按键，其他按键及其他设备同键正常使用；合并复合设备接口，并明确显示不支持原因。新增翻译快捷键与目标语言设置，统一正式安装和自动更新的 Developer ID 身份，开发构建使用独立应用与数据目录。
+
 ## 0.3.8
 
 - Animate the native dictation capsule continuously into the send countdown: the shell, status text, icons and send controls now transition in one window with a fixed bottom edge and stable countdown width.

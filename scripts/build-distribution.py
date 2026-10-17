@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Prepare a Developer ID candidate in an isolated source copy; never publish.
 
-The fixed local-development configuration and runtime are not modified.
+The production configuration and source runtime are not modified.
 A candidate is NOT approved for distribution until notarization and final-artifact checks pass.
 """
 import argparse
@@ -16,7 +16,8 @@ import tempfile
 import time
 import distribution_cache as runtime_cache
 
-IDENTITY = 'Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)'
+POLICY = json.loads((Path(__file__).resolve().parent.parent / 'internal/distribution/policy.json').read_text())
+IDENTITY = POLICY['identity']
 MAGIC = {bytes.fromhex(x) for x in ('feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca')}
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -50,6 +51,9 @@ def main():
     parser.add_argument('--resume', type=Path, help='Resume an interrupted signing workspace')
     parser.add_argument('--cache-dir', type=Path, default=runtime_cache.DEFAULT_CACHE)
     args = parser.parse_args()
+    config = json.loads((ROOT / 'mygo.json').read_text())
+    if (config['identifier'] != POLICY['bundleID'] or config['name'] != 'Voicemore' or config['macos']['signingIdentity'] != IDENTITY or config['updates']['publicKey'] != POLICY['publicKey'] or config['updates'].get('github') != 'wherexml/Voicemore'):
+        raise SystemExit('Production configuration differs from signing/update policy; refusing identity drift.')
     identities = subprocess.check_output(['security', 'find-identity', '-v', '-p', 'codesigning'], text=True)
     if f'"{IDENTITY}"' not in identities:
         raise SystemExit('Approved Developer ID identity unavailable; no fallback permitted.')
@@ -168,6 +172,7 @@ def main():
                 raise subprocess.CalledProcessError(result.returncode, result.args)
             time.sleep(3 * (attempt + 1))
     app = work / 'build/darwin-arm64/Voicemore.app'
+    run('go', 'run', './cmd/distribution-check', '--candidate', app, cwd=ROOT)
     with (work / 'app-signature.txt').open('w') as log:
         run('codesign', '--verify', '--deep', '--strict', app, stdout=log, stderr=log)
         run('codesign', '-d', '-r-', '--verbose=4', app, stdout=log, stderr=log)

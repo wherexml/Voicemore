@@ -1,7 +1,7 @@
 {
   "name": "Voicemore",
   "identifier": "dev.steve.voice-input",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "out": "build",
   "macos": {
     "infoPlist": {
@@ -10,7 +10,7 @@
     },
     "entitlements": "resources/VoiceInput.entitlements",
     "minimumSystemVersion": "26.2",
-    "signingIdentity": "Apple Development: geekmooc@gmail.com (5QLDC77G39)"
+    "signingIdentity": "Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)"
   },
   "icon": "resources/icon.png",
   "updates": {

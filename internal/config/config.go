@@ -19,7 +19,7 @@ const (
 )
 
 // SchemaVersion is the version Open migrates settings to.
-const SchemaVersion = 5
+const SchemaVersion = 6
 
 // Defaults of the two independent model services. Speech recognition is
 // the existing ASR service with its own streaming protocol; cleanup is an
@@ -131,8 +131,13 @@ type Settings struct {
 
 	// TriggerKey is "Fn", "RightOption", "RightCommand", "RightControl" or a
 	// MyGo accelerator such as "Ctrl+Alt+Space" (toggle only).
-	TriggerKey  string `json:"triggerKey"`
-	TriggerMode string `json:"triggerMode"`
+	TriggerKey          string                `json:"triggerKey"`
+	TriggerMode         string                `json:"triggerMode"`
+	TranslationKey      string                `json:"translationKey,omitempty"`
+	TranslationLanguage string                `json:"translationLanguage,omitempty"`
+	DJIButtonEnabled    bool                  `json:"djiButtonEnabled"`
+	DJIButtonAction     string                `json:"djiButtonAction,omitempty"`
+	DeviceButtons       []DeviceButtonBinding `json:"deviceButtons,omitempty"`
 
 	// Cleanup is off by default. CleanupURL is the base URL of an
 	// OpenAI-compatible API ("…/v1"); requests go to its /chat/completions
@@ -208,6 +213,9 @@ func Defaults() Settings {
 		ASRModel:                DefaultASRModel,
 		FinalizeTimeoutSec:      60,
 		TriggerKey:              "Fn",
+		TranslationLanguage:     "en",
+		DJIButtonEnabled:        false,
+		DJIButtonAction:         "dictation",
 		TriggerMode:             TriggerToggle,
 		CleanupDefault:          false,
 		CleanupTimeoutSec:       30,
@@ -257,6 +265,12 @@ func migrate(s Settings) Settings {
 	if s.SchemaVersion >= SchemaVersion {
 		return s
 	}
+	// Existing installs already claimed this receiver automatically. Preserve
+	// that binding, while new installs require explicit button setup.
+	if s.SchemaVersion < 6 {
+		s.DJIButtonEnabled = true
+	}
+
 	// Version 5 added the first-run guide. Settings saved by an earlier
 	// version belong to someone who already uses the app: the guide is not
 	// shown to them at launch, and stays available from Settings → General.
@@ -295,6 +309,7 @@ func (st *Store) Get() Settings {
 	s.RemoteInputs = append([]RemoteInput(nil), s.RemoteInputs...)
 	s.AutoSend = s.AutoSend.Clone()
 	s.PrivateApps = append([]PrivateApp(nil), s.PrivateApps...)
+	s.DeviceButtons = append([]DeviceButtonBinding(nil), s.DeviceButtons...)
 	return s
 }
 
@@ -304,6 +319,7 @@ func (st *Store) Set(s Settings) error {
 	s.RemoteInputs = append([]RemoteInput(nil), s.RemoteInputs...)
 	s.AutoSend = s.AutoSend.Clone()
 	s.PrivateApps = append([]PrivateApp(nil), s.PrivateApps...)
+	s.DeviceButtons = append([]DeviceButtonBinding(nil), s.DeviceButtons...)
 	st.s = s
 	return WriteJSON(st.path, s)
 }

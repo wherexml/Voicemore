@@ -151,6 +151,9 @@ func (b *onboardingBridge) Action(ctx context.Context, action, value string) (ma
 				}
 				s.TriggerMode = value
 			}
+			if s.TranslationKey != "" && sameShortcut(s.TriggerKey, s.TranslationKey) {
+				return errors.New(T("shortcutTaken"))
+			}
 			s.Onboarding.KeyDetected = false
 			o.pressed = false
 			if err := o.a.settings.Set(s); err != nil {
@@ -253,6 +256,9 @@ func (o *onboardWindow) toggleGuidePractice() {
 // practice never starts an ordinary cross-application dictation.
 func (a *app) triggerDown() {
 	mygo.RunOnMain(func() {
+		if a.shortcutsSuspended {
+			return
+		}
 		if a.onboard != nil && a.onboard.visible() {
 			o := a.onboard
 			s := a.settings.Get()
@@ -269,6 +275,9 @@ func (a *app) triggerDown() {
 }
 func (a *app) triggerUp(combo bool) {
 	mygo.RunOnMain(func() {
+		if a.shortcutsSuspended {
+			return
+		}
 		s := a.settings.Get()
 		modifier := macos.IsModifierKey(s.TriggerKey)
 		if a.onboard != nil && a.onboard.visible() {

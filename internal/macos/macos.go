@@ -7,6 +7,8 @@ package macos
 
 import (
 	"context"
+	"sort"
+	"strings"
 	"voiceinput/internal/config"
 )
 
@@ -26,11 +28,54 @@ const (
 // event tap; other triggers are accelerators of MyGo's global shortcuts.
 func IsModifierKey(key string) bool {
 	switch key {
-	case KeyFn, KeyRightOption, KeyRightCommand, KeyRightControl:
+	case KeyFn, KeyRightOption, KeyRightCommand, KeyRightControl, "LeftOption", "LeftCommand", "LeftControl", "LeftShift", "RightShift":
 		return true
 	}
 	return false
 }
+
+// NativeShortcutIdentity canonicalizes shortcuts that Carbon cannot register:
+// modifier-only chords and combinations containing Fn or sided modifiers.
+func NativeShortcutIdentity(key string) string {
+	parts := strings.Split(key, "+")
+	mods := []string{}
+	ordinary := ""
+	native := false
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		switch strings.ToLower(part) {
+		case "cmd", "command", "meta", "super", "cmdorctrl", "commandorcontrol":
+			part = "Cmd"
+		case "ctrl", "control":
+			part = "Ctrl"
+		case "alt", "option", "altgr":
+			part = "Alt"
+		case "shift":
+			part = "Shift"
+		}
+		if IsModifierKey(part) {
+			native = true
+		}
+		if IsModifierKey(part) || part == "Cmd" || part == "Ctrl" || part == "Alt" || part == "Shift" {
+			mods = append(mods, part)
+		} else {
+			if ordinary != "" || part == "" {
+				return ""
+			}
+			ordinary = strings.ToUpper(part)
+		}
+	}
+	if len(mods) == 0 || (!native && ordinary != "") {
+		return ""
+	}
+	sort.Strings(mods)
+	if ordinary != "" {
+		mods = append(mods, ordinary)
+	}
+	return strings.Join(mods, "+")
+}
+
+func UsesNativeShortcut(key string) bool { return NativeShortcutIdentity(key) != "" }
 
 // InsertOptions says how text is pasted into a target.
 type InsertOptions struct {

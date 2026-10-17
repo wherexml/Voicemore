@@ -10,7 +10,7 @@ import subprocess
 import tarfile
 import tempfile
 
-IDENTITY = 'Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)'
+IDENTITY = json.loads((Path(__file__).resolve().parent.parent / 'internal/distribution/policy.json').read_text())['identity']
 POLICY = 'runtime-v1:hardened:secure-timestamp:no-extra-entitlements'
 MAGIC = {bytes.fromhex(x) for x in ('feedface', 'cefaedfe', 'feedfacf', 'cffaedfe', 'cafebabe', 'bebafeca', 'cafebabf', 'bfbafeca')}
 DEFAULT_CACHE = Path.home() / 'Library/Caches/voicemore-release/runtime-cache'
