@@ -15,11 +15,15 @@
 
 On a separate Apple Silicon Mac running macOS 26.2, the GitHub DMG checksum matched and the installed app passed strict codesign verification. Its identity was the project's fixed Apple Development certificate. `spctl --assess --type execute` rejected it, and launching with download quarantine produced the visible “Apple cannot verify” warning. The test added quarantine because the asset was fetched by curl; it was not a full browser-download/drag-install acceptance test. Application runtime and dictation were not reached.
 
-## Keep local development separate
+## Unified signing identity (2026-10-17)
 
-`scripts/build-macos.sh` retains the fixed development identity required by AGENTS.md. Do not replace it with Developer ID, ad-hoc signing or another team for local builds.
+The shared policy is `internal/distribution/policy.json`. Daily production installs, repair candidates and stable releases all use the same Developer ID team, bundle ID and compatible designated requirement. `./scripts/build-macos.sh` now delegates to the notarized release preparation pipeline. It never publishes. Missing certificates, signing or notarization failures stop the build; there is no signing downgrade.
 
-`scripts/publish-release.sh` defaults to the Developer ID and Apple notarization pipeline. Only explicit `--development-preview` builds a development **prerelease**, never stable/latest. Stable publication fails closed on missing/rejected notarization, invalid tickets, mismatched app/DMG contents, changed candidate source, an invalid explicitly supplied E2E report, or an incorrect updater key. Existing release assets are never overwritten.
+`python3 scripts/build-development.py` produces **Voicemore Dev.app** with the existing Apple Development certificate, bundle ID `dev.steve.voice-input.debug`, separate `Voice Input Dev` data and `build/development/` output. It has no update feed and cannot replace the production app. The former development-preview publishing path is retired because it packaged the production identity with a different signing team.
+
+`python3 scripts/install-macos.py /absolute/candidate-workspace` verifies the final app/DMG and the installed app's designated requirement before replacing a stopped app. It retains the prior bundle. Cross-team migration is refused, rather than silently invalidating permissions. A development-signed legacy production bundle may need one final explicitly managed transition; normal same-identity updates must not change the permission identity. OS resets, revoked grants or manually replaced bundles remain outside that guarantee.
+
+`scripts/publish-release.sh` defaults to the same Developer ID and Apple notarization pipeline. Stable publication fails closed on missing/rejected notarization, invalid tickets, mismatched app/DMG contents, changed candidate source, an invalid explicitly supplied E2E report, or an incorrect updater key. Existing release assets are never overwritten.
 
 ## Runtime audit (2026-10-14)
 
@@ -27,7 +31,7 @@ The currently pinned runtime archive contains 169 Mach-O files. A read-only code
 
 ## Distribution candidate workflow
 
-Formal distribution with `Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)` was explicitly authorized on 2026-10-14. The local development identity remains unchanged. `scripts/build-distribution.py --output-parent /absolute/private-output` creates an isolated source copy, signs the embedded runtime before recompressing it, updates only the copy's digest, and builds the distribution candidate. It does not publish.
+Formal distribution with `Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)` was explicitly authorized on 2026-10-14. The development certificate remains limited to the separate debug identity. `scripts/build-distribution.py --output-parent /absolute/private-output` creates an isolated source copy, signs the embedded runtime before recompressing it, updates only the copy's digest, and builds the distribution candidate. It does not publish.
 
 Configure notarytool interactively, using an app-specific password at its hidden prompt, never in command arguments or a project file:
 

@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 import time
 
-IDENTITY = 'Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)'
+IDENTITY = json.loads((Path(__file__).resolve().parent.parent / 'internal/distribution/policy.json').read_text())['identity']
 
 def run(*args, **kwargs):
     if args[0] == 'codesign' and '--timestamp' in args:

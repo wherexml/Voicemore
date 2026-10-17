@@ -21,10 +21,24 @@ import (
 // its state is in this struct, so changing category, opening a provider's
 // editor or closing and reopening the window loses nothing that was typed.
 type prefsWindow struct {
-	a      *app
-	win    *mygo.Window
-	cat    string // one of the six settings categories
-	status func() string
+	a                       *app
+	win                     *mygo.Window
+	shortcutKind            string
+	shortcutPreview         string
+	shortcutGuardUntil      time.Time
+	stopShortcutCapture     func()
+	deviceWizard            bool
+	deviceStep              int
+	deviceCaptured          bool
+	deviceAction            string
+	deviceSelected          config.ButtonDevice
+	devicePage, deviceUsage uint32
+	deviceEditing           string
+	deviceTest              bool
+	deviceTestResult        string
+	deviceDeadline          time.Time
+	cat                     string // one of the six settings categories
+	status                  func() string
 
 	dragWin       *mygo.Window
 	dragPane      string
@@ -121,6 +135,7 @@ func newPrefsWindow(a *app) *prefsWindow {
 			p.close()
 		}
 	})
+	p.win.OnBlur(func() { p.cancelShortcut() })
 	return p
 }
 
@@ -141,6 +156,9 @@ func (p *prefsWindow) open(category string) {
 
 // close hides the settings and gives the main window the keyboard back.
 func (p *prefsWindow) close() {
+	p.cancelShortcut()
+	p.closeDeviceWizard()
+	p.stopDeviceTest()
 	p.hidePermissionDrag()
 	p.guideReturn = 0
 	p.win.Hide()
@@ -265,7 +283,7 @@ func (p *prefsWindow) view(c *ui.Context) {
 	bar := c.TitleBar()
 	// Escape and Cmd+W close the window. An open editor or picker takes
 	// Escape first: the window only closes when none is open.
-	overlay := p.dlgOpen || p.addOpen
+	overlay := p.dlgOpen || p.addOpen || p.deviceWizard || p.shortcutKind != "" || time.Now().Before(p.shortcutGuardUntil)
 	for _, open := range p.pickOpen {
 		overlay = overlay || *open
 	}
@@ -308,6 +326,7 @@ func (p *prefsWindow) view(c *ui.Context) {
 						row.Background(hoverColor(t))
 					}
 					if row.Clicked() {
+						p.cancelShortcut()
 						p.cat = cat.id
 						p.status = nil
 					}
@@ -327,8 +346,9 @@ func (p *prefsWindow) view(c *ui.Context) {
 					case "models":
 						p.modelsView(c)
 					case "dictation":
-						p.audio(c)
 						p.dictation(c)
+						p.deviceButtons(c)
+						p.audio(c)
 					case "output":
 						p.formatting(c)
 						p.autoSend(c)
@@ -349,6 +369,7 @@ func (p *prefsWindow) view(c *ui.Context) {
 	})
 	// The editor of a provider, over the window (models.go).
 	p.dialog(c)
+	p.deviceButtonWizard(c)
 }
 
 // Settings groups use their own surfaces and hairlines, independent of the
@@ -681,6 +702,18 @@ func (p *prefsWindow) dictation(c *ui.Context) {
 	}
 	card(c, "dictation", func() {
 		setting(c, "key", nil, T("sKey"), T("sKeyHint"), func() { p.triggerKey(c, s) })
+		setting(c, "translation-key", nil, T("translationKey"), "", func() { p.shortcutControl(c, "translation", s.TranslationKey, false) })
+		setting(c, "translation-language", nil, T("translationLanguage"), "", func() {
+			opts := []selectOption{}
+			for _, l := range config.TranslationLanguages {
+				opts = append(opts, selectOption{Value: l.ID, Label: l.Name})
+			}
+			value := s.TranslationLanguage
+			if value == "" {
+				value = "en"
+			}
+			p.standardSelect(c, "translation-language", T("translationLanguage"), value, "English", 170, s.TranslationKey == "" && !s.HasDeviceTranslation(), opts, func(value string) { p.change(func(s *config.Settings) { s.TranslationLanguage = value }) })
+		})
 		setting(c, "mode", nil, T("sMode"), T("sModeHint"), func() {
 			mode := 0
 			if s.TriggerMode == config.TriggerHold {
@@ -733,34 +766,9 @@ func (p *prefsWindow) formatting(c *ui.Context) {
 	})
 }
 
-// triggerKey chooses among the modifier keys. A custom shortcut saved in
-// settings.json stays selected and is shown as such.
+// triggerKey records the dictation binding in Settings.
 func (p *prefsWindow) triggerKey(c *ui.Context, s config.Settings, compact ...bool) {
-	keys := []string{macos.KeyFn, macos.KeyRightOption, macos.KeyRightCommand, macos.KeyRightControl}
-	names := make([]string, len(keys))
-	for i, key := range keys {
-		names[i] = keyName(key)
-	}
-	if !macos.IsModifierKey(s.TriggerKey) {
-		keys = append(keys, s.TriggerKey)
-		names = append(names, T("customKey", s.TriggerKey))
-	}
-	opts := make([]selectOption, len(keys))
-	for i, key := range keys {
-		opts[i] = selectOption{Value: key, Label: names[i]}
-	}
-	width := float32(170)
-	if len(compact) > 0 && compact[0] {
-		width = 0
-	}
-	p.standardSelect(c, "dictation-trigger", T("sKey"), s.TriggerKey, names[0], width, false, opts, func(key string) {
-		if key == s.TriggerKey {
-			return
-		}
-		p.change(func(s *config.Settings) { s.TriggerKey = key })
-		p.a.bindTrigger()
-		p.fnConflict = macos.FnKeyConflict()
-	})
+	p.shortcutControl(c, "dictation", s.TriggerKey, len(compact) > 0 && compact[0])
 }
 
 func (p *prefsWindow) privacy(c *ui.Context) {

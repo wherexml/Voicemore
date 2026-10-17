@@ -175,5 +175,8 @@ func (o *overlay) v2Caption(kind int) (key, text string, widthText string) {
 		return T("sendCountdown"), fmt.Sprintf(T("sendCountdown"), o.a.sendPreview.remaining()), fmt.Sprintf(T("sendCountdown"), 0.0)
 	}
 	text = T(v2Labels[kind])
+	if kind == v2Cleaning && o.v.TranslationLanguage != "" {
+		text = T("translationWorking")
+	}
 	return text, text, text
 }

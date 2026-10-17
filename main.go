@@ -51,8 +51,11 @@ type app struct {
 
 	// stopHotkey ends the current trigger, and triggerErr says why there
 	// is none.
-	stopHotkey func()
-	triggerErr string
+	stopHotkey         func()
+	shortcutsSuspended bool
+	triggerGeneration  uint64
+	deviceButtonErr    string
+	triggerErr         string
 
 	// The credentials, as read from the app's encrypted local store: the local
 	// cleanup key and those of the providers, by account. They are held
@@ -190,14 +193,23 @@ func (a *app) loadKey() {
 
 func main() {
 	a := &app{}
-	mygo.App.SetName("Voicemore")
+	debug := mygo.App.Name() == "Voicemore Dev" || mygo.IsDev()
+	if debug {
+		mygo.App.SetName("Voicemore Dev")
+	} else {
+		mygo.App.SetName("Voicemore")
+	}
 	// Keep the existing data location across the product rename: models,
 	// encrypted credentials, history and window state must remain available.
 	dataRoot, err := mygo.App.Path(mygo.PathAppData)
 	if err != nil {
 		log.Fatal("app data directory: ", err)
 	}
-	mygo.App.SetPath(mygo.PathUserData, filepath.Join(dataRoot, "Voice Input"))
+	dataName := "Voice Input"
+	if debug {
+		dataName = "Voice Input Dev"
+	}
+	mygo.App.SetPath(mygo.PathUserData, filepath.Join(dataRoot, dataName))
 	// An ordinary app: it has a Dock icon and takes part in app switching.
 	// The menu bar item and the trigger key work whether or not its window
 	// is open.
@@ -499,53 +511,165 @@ func (a *app) bindTrigger() {
 	if os.Getenv("VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE") != "" {
 		return
 	}
+	a.triggerGeneration++
+	generation := a.triggerGeneration
 	if a.stopHotkey != nil {
 		a.stopHotkey()
 		a.stopHotkey = nil
 	}
-	a.triggerErr = ""
-	if a.updates.installing {
+	a.triggerErr, a.deviceButtonErr = "", ""
+	if a.updates.installing || a.shortcutsSuspended {
 		return
 	}
-	defer func() {
-		stopDJI, err := macos.StartDJIButton(a.ctrl.Toggle)
-		if err != nil {
-			log.Printf("trigger: %v", err)
+	stops := []func(){}
+	a.stopHotkey = func() {
+		for i := len(stops) - 1; i >= 0; i-- {
+			stops[i]()
+		}
+	}
+	s := a.settings.Get()
+	register := func(key string, translation bool) {
+		if key == "" || (a.prefs != nil && (a.prefs.deviceWizard || a.prefs.deviceTest)) {
 			return
 		}
-		stopKeyboard := a.stopHotkey
-		a.stopHotkey = func() {
-			stopDJI()
-			if stopKeyboard != nil {
-				stopKeyboard()
+		var stop func()
+		var err error
+		if macos.UsesNativeShortcut(key) {
+			macos.InputMonitoringGranted(true)
+			if translation {
+				stop, err = macos.StartTranslationHotkey(key, func(combo bool) {
+					if !combo {
+						mygo.RunOnMain(func() {
+							if generation == a.triggerGeneration {
+								a.translationTrigger()
+							}
+						})
+					}
+				})
+			} else {
+				stop, err = macos.StartHotkey(key, func() {
+					mygo.RunOnMain(func() {
+						if generation == a.triggerGeneration {
+							a.triggerDown()
+						}
+					})
+				}, func(combo bool) {
+					mygo.RunOnMain(func() {
+						if generation == a.triggerGeneration {
+							a.triggerUp(combo)
+						}
+					})
+				}, a.cancelInput)
+			}
+		} else {
+			fn := func() { a.triggerUp(false) }
+			if translation {
+				fn = a.translationTrigger
+			}
+			callback := fn
+			err = mygo.GlobalShortcut.Register(key, func() {
+				if generation == a.triggerGeneration {
+					callback()
+				}
+			})
+			if err == nil {
+				stop = func() { mygo.GlobalShortcut.Unregister(key) }
 			}
 		}
-	}()
-	key := a.settings.Get().TriggerKey
-	if macos.IsModifierKey(key) {
-		macos.InputMonitoringGranted(true)
-		stop, err := macos.StartHotkey(key, a.triggerDown, a.triggerUp, a.cancelInput)
 		if err != nil {
+			a.triggerErr = T("errShortcut", key, err.Error())
+		} else if stop != nil {
+			stops = append(stops, stop)
+		}
+	}
+	register(s.TriggerKey, false)
+	if !macos.UsesNativeShortcut(s.TriggerKey) && !(a.prefs != nil && (a.prefs.deviceWizard || a.prefs.deviceTest)) {
+		if stop, err := macos.StartHotkey("", nil, nil, a.cancelInput); err == nil {
+			stops = append(stops, stop)
+		} else {
 			a.triggerErr = err.Error()
+		}
+	}
+	if !sameShortcut(s.TranslationKey, s.TriggerKey) {
+		register(s.TranslationKey, true)
+	} else if s.TranslationKey != "" {
+		a.triggerErr = T("shortcutTaken")
+	}
+
+	bindings := s.AllDeviceButtons()
+	capture := ""
+	if a.prefs != nil && (a.prefs.deviceWizard || a.prefs.deviceTest) {
+		bindings = nil
+		if a.prefs.deviceStep == 1 || a.prefs.deviceTest {
+			capture = a.prefs.deviceSelected.ID
+		}
+	}
+	stopDevices, err := macos.StartDeviceButtonMonitor(bindings, capture, func(event macos.DeviceButtonEvent) {
+		mygo.RunOnMain(func() {
+			if generation != a.triggerGeneration {
+				return
+			}
+			if p := a.prefs; p != nil && p.deviceTest {
+				if !event.Unsupported && event.Device.ID == p.deviceSelected.ID && event.Page == p.devicePage && event.Usage == p.deviceUsage && time.Now().Before(p.deviceDeadline) {
+					p.deviceTestResult = "deviceTestReceived"
+					p.stopDeviceTest()
+					p.refresh()
+				}
+				return
+			}
+			if p := a.prefs; p != nil && p.deviceWizard {
+				if p.deviceStep == 1 && (event.Device.ID == p.deviceSelected.ID || p.deviceSelected.SamePhysicalDevice(event.Device)) && time.Now().Before(p.deviceDeadline) {
+					if event.Unsupported {
+						p.deviceCaptured = false
+						p.status = func() string { return T("deviceUnsupportedKey") }
+						p.refresh()
+						return
+					}
+					p.deviceSelected = event.Device
+					if p.deviceTest && (event.Page != p.devicePage || event.Usage != p.deviceUsage) {
+						return
+					}
+					p.status = nil
+					p.devicePage, p.deviceUsage = event.Page, event.Usage
+					p.deviceCaptured = true
+					p.refresh()
+				}
+				return
+			}
+			if a.shortcutsSuspended || a.updates.installing {
+				return
+			}
+			for _, b := range a.settings.Get().AllDeviceButtons() {
+				if !b.Enabled || !b.Device.Matches(event.Device) || b.Page != event.Page || b.Usage != event.Usage {
+					continue
+				}
+				if b.Action == "translation" {
+					a.translationTrigger()
+				} else if a.onboard != nil && a.onboard.visible() {
+					a.triggerUp(false)
+				} else {
+					go a.ctrl.Toggle()
+				}
+				break
+			}
+		})
+	})
+	if err != nil {
+		a.deviceButtonErr = err.Error()
+		log.Printf("trigger: %v", err)
+	} else {
+		stops = append(stops, stopDevices)
+	}
+
+}
+
+func (a *app) translationTrigger() {
+	mygo.RunOnMain(func() {
+		if a.shortcutsSuspended || a.updates.installing || (a.onboard != nil && a.onboard.visible()) {
 			return
 		}
-		a.stopHotkey = stop
-		return
-	}
-	if err := mygo.GlobalShortcut.Register(key, func() { a.triggerUp(false) }); err != nil {
-		a.triggerErr = T("errShortcut", key, err.Error())
-		return
-	}
-	stopEscape, err := macos.StartHotkey("", nil, nil, a.cancelInput)
-	if err != nil {
-		a.triggerErr = err.Error()
-	}
-	a.stopHotkey = func() {
-		mygo.GlobalShortcut.Unregister(key)
-		if stopEscape != nil {
-			stopEscape()
-		}
-	}
+		go a.ctrl.ToggleTranslation()
+	})
 }
 
 // setMenu builds the tray's menu, again whenever what it shows changes.

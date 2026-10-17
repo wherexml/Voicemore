@@ -16,11 +16,12 @@ import (
 	"github.com/egoist/mygo/ui"
 	"voiceinput/internal/config"
 	"voiceinput/internal/session"
+	"voiceinput/internal/updateclient"
 )
 
 // All state below belongs to the UI thread; workers post their results to it.
 type updateState struct {
-	available                        *mygo.Update
+	available                        *updateclient.Update
 	checking, installing, restarting bool
 	status, detail                   string
 	downloaded, total                int64
@@ -81,7 +82,11 @@ func (a *app) checkUpdates() {
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
-		up, err := mygo.Updater.Check(ctx)
+		client, err := updateclient.Stable()
+		var up *updateclient.Update
+		if err == nil {
+			up, err = client.Check(ctx)
+		}
 		mygo.RunOnMain(func() {
 			if a.quitting {
 				return

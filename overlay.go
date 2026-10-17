@@ -436,7 +436,11 @@ func (o *overlay) panelView(c *ui.Context, kind int) {
 			ui.Text(c, tail(v.Text, 60)).FontSize(13).TextColor(white).MaxLines(2)
 			ui.Spacer(c)
 			ui.Row(c).FillWidth().Justify(ui.Center).Gap(6).Children(func() {
-				if v.CleanupFailed && panelButton(c, "retry", T("retryClean")) {
+				retryLabel := T("retryClean")
+				if v.TranslationLanguage != "" {
+					retryLabel = T("retryTranslation")
+				}
+				if v.CleanupFailed && panelButton(c, "retry", retryLabel) {
 					go ctrl.RetryCleanup()
 				}
 				copyButton()
@@ -454,7 +458,11 @@ func (o *overlay) panelView(c *ui.Context, kind int) {
 			}
 			ui.Spacer(c)
 			if v.Cleanup {
-				ui.Text(c, T("willClean")).FontSize(11).TextColor(dim)
+				label := T("willClean")
+				if v.TranslationLanguage != "" {
+					label = T("translationWorking")
+				}
+				ui.Text(c, label).FontSize(11).TextColor(dim)
 			}
 		})
 	}

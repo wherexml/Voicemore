@@ -1,0 +1,11 @@
+{
+  "bundleID": "dev.steve.voice-input",
+  "identity": "Developer ID Application: Skylance LLC (Apps) (T695TT4HT9)",
+  "teamID": "T695TT4HT9",
+  "requirement": "identifier \"dev.steve.voice-input\" and anchor apple generic and certificate 1[field.1.2.840.113635.100.6.2.6] exists and certificate leaf[field.1.2.840.113635.100.6.1.13] exists and certificate leaf[subject.OU] = \"T695TT4HT9\"",
+  "feed": "https://github.com/wherexml/Voicemore/releases/latest/download/update-darwin-arm64.json",
+  "publicKey": "HAhH3K2LVrW3z1RllwzPRnQDKsw7sZnKqnaHQLj5IA0=",
+  "debugBundleID": "dev.steve.voice-input.debug",
+  "debugName": "Voicemore Dev",
+  "debugIdentity": "Apple Development: geekmooc@gmail.com (5QLDC77G39)"
+}

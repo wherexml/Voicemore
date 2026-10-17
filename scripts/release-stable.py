@@ -49,7 +49,7 @@ def submit(work, name, path, profile):
     print('Apple notarization accepted:', name, result['id'], flush=True)
 
 def main():
-    p = argparse.ArgumentParser(description=__doc__)
+    p = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     p.add_argument('--candidate', type=Path)
     p.add_argument('--source-ref', help='Committed source for an existing candidate; publication requires it already on the remote default branch')
     p.add_argument('--output-parent', type=Path, default=Path.home() / 'Library/Caches/voicemore-release')
@@ -60,6 +60,8 @@ def main():
     p.add_argument('--verify-only', action='store_true', help='Verify existing candidate without publishing')
     p.add_argument('--cache-dir', type=Path, default=runtime_cache.DEFAULT_CACHE)
     a = p.parse_args()
+    if os.environ.get("SIGNING_IDENTITY", runtime_cache.IDENTITY) != runtime_cache.IDENTITY:
+        raise SystemExit("Stable preparation requires the approved Developer ID; no signing fallback permitted.")
     if a.source_ref and not a.candidate:
         p.error('--source-ref requires --candidate')
     if a.verify_only and (not a.candidate or a.publish):
@@ -86,6 +88,7 @@ def main():
         work = created.pop().resolve()
     c = read(work / 'candidate.json')
     app = Path(c['app'])
+    run('go', 'run', './cmd/distribution-check', '--candidate', app, cwd=ROOT)
     prepared = False
     if not (work / 'final-candidate.json').exists():
         if a.verify_only:
@@ -153,7 +156,7 @@ def main():
     with tempfile.TemporaryDirectory(prefix='voicemore-update-check-') as temp:
         with tarfile.open(archive) as tar:
             tar.extractall(temp)
-        run('codesign', '--verify', '--deep', '--strict', Path(temp) / app.name)
+        run('go', 'run', './cmd/distribution-check', '--candidate', Path(temp) / app.name, cwd=ROOT)
         run('xcrun', 'stapler', 'validate', Path(temp) / app.name)
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
     from cryptography.hazmat.primitives import serialization
