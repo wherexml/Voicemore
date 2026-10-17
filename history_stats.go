@@ -77,7 +77,7 @@ func (m *mainWindow) historySummary(records []store.Record, now time.Time) histo
 		}
 	}
 	if m.page == "home" {
-		start = dayStart(now).AddDate(0, 0, -([]int{7, 14, 30}[m.homeRange] - 1))
+		start = dayStart(now).AddDate(0, 0, -(homeRangeDays[m.homeRange] - 1))
 	}
 	s := historySummary{start: start, outcomes: map[string]int{}, hours: map[string]int{}}
 	apps := map[string]*historyApp{}
@@ -280,7 +280,13 @@ func (m *mainWindow) heatmap(c *ui.Context, s historySummary, now time.Time) {
 	panel.Children(func() {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			ui.Text(c, T("v2Trend")).FontSize(14).FontWeight(600).Grow(1)
-			options := []string{T("v2Seven"), T("v3Fourteen"), T("v2Thirty")}
+			if !m.hHour.IsZero() {
+				if ui.Button(c.Key("clear-hour"), T("homeClearHour")).Height(22).FontSize(11).Clicked() {
+					m.hHour = time.Time{}
+					m.hPage = 1
+				}
+			}
+			options := []string{T("homeToday"), T("v2Seven"), T("v3Fourteen"), T("v2Thirty")}
 			choices := make([]selectOption, len(options))
 			for i, label := range options {
 				choices[i] = selectOption{Value: fmt.Sprint(i), Label: label}
@@ -305,6 +311,10 @@ func (m *mainWindow) heatmap(c *ui.Context, s historySummary, now time.Time) {
 				})
 			}})
 		})
+		if m.homeRange == 0 {
+			m.todayChart(c, s, now)
+			return
+		}
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
 			ui.Row(c).Grow(1).MinWidth(0).Gap(2).Children(func() {
 				for h := 0; h < 24; h++ {
