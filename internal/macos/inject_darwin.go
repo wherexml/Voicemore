@@ -283,6 +283,9 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 	}
 	current := CaptureTarget()
 	res.Target = current
+	if o.OnTarget != nil {
+		o.OnTarget(current)
+	}
 	if remote, handled, err := insertRemote(text, o, current); handled {
 		if err != nil {
 			current.Release()

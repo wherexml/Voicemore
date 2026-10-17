@@ -61,13 +61,25 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 		*open = !*open
 		p.pickFocus[id] = *open
 	}
-	trigger.OnShortcut(0, ui.KeyDown, func() {
-		if !disabled {
-			*open = true
-			p.pickFocus[id] = true
-		}
-	})
+	for _, key := range []ui.Key{ui.KeyDown, ui.KeyUp} {
+		trigger.OnShortcut(0, key, func() {
+			if !disabled {
+				for k, v := range p.pickOpen {
+					if k != id {
+						*v = false
+					}
+				}
+				*open = true
+				p.pickFocus[id] = true
+			}
+		})
+	}
 	ui.PopoverBase(c.Key(id+"-popover"), trigger, open, func(panel ui.Element) {
+		if panel.OverlayShortcut(0, ui.KeyEscape) {
+			*open = false
+			trigger.Focus()
+			return
+		}
 		panel.Margin(6, 0, 0, 0).Padding(5).Radius(12).Width(max(160, trigger.Bounds().W)).Background(t.Background).Border(1, settingsGroupLine(c)).Shadow(0, 12, 34, 0, ui.RGBA(30, 38, 48, .12))
 		if len(opts) == 0 {
 			ui.Text(c, T("selectEmpty")).FontSize(12).TextColor(t.TextMuted).Padding(12, 10)
@@ -128,6 +140,7 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 				}
 				if row.Clicked() {
 					*open = false
+					trigger.Focus()
 					onChange(o.Value)
 				}
 			}

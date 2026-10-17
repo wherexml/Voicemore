@@ -41,10 +41,12 @@ type dialogRef struct {
 // customDraft is a custom provider being added or edited. It is applied
 // by Save, and survives closing the editor until then.
 type customDraft struct {
-	name, url, key, add string
-	models              []string
-	enabled             bool
-	err                 string // a text key
+	name, url, key, add                                string
+	thinkingMode, thinkingParams, testModel, probeText string
+	advanced                                           bool
+	models                                             []string
+	enabled                                            bool
+	err                                                string // a text key
 }
 
 var kindLabels = map[string]string{providers.KindASR: "mAsr", providers.KindCleanup: "mCleanup"}
@@ -280,9 +282,12 @@ func customSlot(id, kind string) string {
 func (p *prefsWindow) openCustom(id, kind string, s config.Settings) {
 	slot := customSlot(id, kind)
 	if p.custom[slot] == nil {
-		d := &customDraft{enabled: true}
+		d := &customDraft{enabled: true, thinkingMode: "server"}
 		if cp, ok := providers.Custom(id, s); ok {
-			d = &customDraft{name: providerName(cp.ID, s), url: cp.URL, models: slices.Clone(cp.Models), enabled: cp.Enabled}
+			d = &customDraft{name: providerName(cp.ID, s), url: cp.URL, models: slices.Clone(cp.Models), enabled: cp.Enabled, thinkingMode: cp.ThinkingMode, thinkingParams: cp.ThinkingParams}
+			if d.thinkingMode == "" {
+				d.thinkingMode = "server"
+			}
 		}
 		p.custom[slot] = d
 	}
@@ -667,6 +672,7 @@ func (p *prefsWindow) localASR(c *ui.Context, s config.Settings) {
 	p.dialogHead(c, "builtin-asr", T("builtinAsr")+" · "+T("mAsr"), nil, nil)
 	ui.Text(c, T("builtinNote")).FontSize(11.5).TextColor(t.TextMuted)
 	labelled(c, "model", T("mModel"), "", func() { ui.Text(c, localasr.Model).FontSize(12.5).Selectable() })
+	p.asrLanguageSelect(c, s)
 	ui.Text(c, T("builtinSize", float64(localasr.ModelBytes())/1e9)).FontSize(11.5).TextColor(t.TextMuted)
 	ui.Text(c, T("builtinIdle")).FontSize(11.5).TextColor(t.TextMuted)
 	source := p.draft("asr.source", localasr.DefaultSource)
@@ -905,6 +911,7 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 		if groupTextInput(c.Key("in"), &d.url, true).Placeholder("https://").Label(T("mUrl")).Grow(1).Changed() {
 			d.err = ""
 			k.invalidate()
+			d.probeText = ""
 		}
 	})
 	account := providers.CustomAccount(id)
@@ -920,6 +927,7 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 		}
 		if in.Changed() {
 			k.invalidate()
+			d.probeText = ""
 		}
 		svg, tip := icEye, T("showKey")
 		if p.shown[slot] {
@@ -939,6 +947,8 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 					ui.Text(c, m).FontSize(12.5).Grow(1).Selectable()
 					if iconButton(c.Key("rm"), icClear, T("removeModel", m)).Clicked() {
 						d.models = slices.DeleteFunc(d.models, func(x string) bool { return x == m })
+						k.invalidate()
+						d.probeText = ""
 					}
 				})
 			}
@@ -954,11 +964,34 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 						d.err = "errDupModel"
 					default:
 						d.models, d.add, d.err = append(d.models, model), "", ""
+						k.invalidate()
+						d.probeText = ""
 					}
 				}
 			})
 		})
 	})
+
+	if kind == providers.KindCleanup {
+		ui.Collapsible(c.Key("advanced"), T("customAdvanced"), &d.advanced, func() {
+			labelled(c, "thinking-mode", T("thinkingMode"), "", func() {
+				p.standardSelect(c, "custom-thinking-mode", T("thinkingMode"), d.thinkingMode, "", 260, false, []selectOption{
+					{Value: "server", Label: T("thinkingServer")}, {Value: "deepseek", Label: T("thinkingDeepSeek")}, {Value: "omlx", Label: T("thinkingOmlx")}, {Value: "custom", Label: T("thinkingCustom")},
+				}, func(mode string) { d.thinkingMode = mode; d.err = ""; d.probeText = ""; k.invalidate() })
+			})
+			if d.thinkingMode == "custom" {
+				ui.Text(c, T("thinkingJSON")).FontSize(12)
+				if ui.TextArea(c.Key("thinking-json"), &d.thinkingParams).Label(T("thinkingJSON")).Placeholder(`{"thinking":{"type":"disabled"}}`).Lines(3, 6).FillWidth().Changed() {
+					d.err = ""
+					d.probeText = ""
+					k.invalidate()
+				}
+				if _, err := cleanup.ThinkingParams(d.thinkingMode, d.thinkingParams); err != nil {
+					ui.Text(c, T("errThinkingParams")).FontSize(11.5).TextColor(t.Danger)
+				}
+			}
+		})
+	}
 	if d.err != "" {
 		ui.Text(c, T(d.err)).FontSize(12).TextColor(t.Danger)
 	}
@@ -988,6 +1021,46 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 		connStatus(c, k)
 	})
 
+	if kind == providers.KindCleanup {
+		if !slices.Contains(d.models, d.testModel) {
+			d.testModel = ""
+			if len(d.models) > 0 {
+				d.testModel = d.models[0]
+			}
+		}
+		opts := make([]selectOption, 0, len(d.models))
+		for _, m := range d.models {
+			opts = append(opts, selectOption{Value: m, Label: m})
+		}
+		labelled(c, "test-model", T("thinkingTestModel"), "", func() {
+			p.standardSelect(c, "custom-test-model", T("thinkingTestModel"), d.testModel, T("noModelsYet"), 260, len(opts) == 0, opts, func(m string) { d.testModel = m; d.probeText = ""; k.invalidate() })
+		})
+		if labelButton(c.Key("probe"), icLink, T("thinkingTest")).Disabled(k.loading != nil || d.testModel == "").Clicked() {
+			_, err := cleanup.ThinkingParams(d.thinkingMode, d.thinkingParams)
+			if err != nil {
+				d.err = "errThinkingParams"
+			} else {
+				key := d.key
+				if key == "" && id != "" {
+					key = p.a.secret(account)
+				}
+				o := cleanup.Options{BaseURL: providers.APIBase(strings.TrimSpace(d.url)), Model: d.testModel, APIKey: key, ThinkingMode: d.thinkingMode, ThinkingParams: d.thinkingParams}
+				d.probeText = ""
+				p.runWithTimeout(k, "testing", 30*time.Second, func(ctx context.Context) (bool, func() string, func()) {
+					start := time.Now()
+					out, err := cleanup.Run(ctx, o, "嗯，请保留这2个按钮，先不要发送，等我确认以后再发送。")
+					elapsed := time.Since(start).Seconds()
+					if err != nil {
+						return false, func() string { return explain(err) }, nil
+					}
+					return true, func() string { return T("thinkingTestOK", elapsed) }, func() { d.probeText = out }
+				})
+			}
+		}
+		if d.probeText != "" {
+			ui.Text(c, d.probeText).FontSize(12).Selectable()
+		}
+	}
 	ui.Row(c.Key("foot")).Gap(8).AlignItems(ui.Center).Children(func() {
 		if id != "" && labelButton(c.Key("remove"), icTrash, T("removeProvider")).Clicked() {
 			name := d.name
@@ -998,6 +1071,7 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 			})
 			go p.a.setSecret(account, "") // its key goes with it
 			delete(p.custom, slot)
+			k.invalidate()
 			p.dlgOpen = false
 			if cleared {
 				p.say("assignCleared", name)
@@ -1008,17 +1082,25 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 		ui.Spacer(c)
 		if ui.Button(c.Key("cancel"), T("cancelBtn")).Clicked() {
 			delete(p.custom, slot) // Cancel discards; closing keeps the draft
+			k.invalidate()
 			p.dlgOpen = false
 		}
 		if ui.PrimaryButton(c.Key("save"), T("save")).Clicked() {
 			name, url := strings.TrimSpace(d.name), strings.TrimSpace(d.url)
+			_, thinkingErr := cleanup.ThinkingParams(d.thinkingMode, d.thinkingParams)
 			switch {
+			case kind == providers.KindCleanup && thinkingErr != nil:
+				d.err = "errThinkingParams"
 			case name == "":
 				d.err = "errName"
 			case !providers.ValidURL(url):
 				d.err = "eBadURL"
 			default:
 				saved := config.CustomProvider{ID: id, Kind: kind, Name: name, URL: url, Models: slices.Clone(d.models), Enabled: d.enabled}
+				if kind == providers.KindCleanup {
+					saved.ThinkingMode = d.thinkingMode
+					saved.ThinkingParams = d.thinkingParams
+				}
 				if saved.ID == "" {
 					saved.ID = "cp" + strconv.FormatInt(time.Now().UnixNano(), 36)
 				}
@@ -1043,6 +1125,7 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 					}()
 				}
 				delete(p.custom, slot)
+				k.invalidate()
 				p.dlgOpen = false
 				if cleared {
 					p.say("assignCleared", name)

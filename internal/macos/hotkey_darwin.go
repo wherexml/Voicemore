@@ -4,6 +4,7 @@ package macos
 
 import (
 	"errors"
+	"log"
 	"os/exec"
 	"strings"
 	"sync"
@@ -16,6 +17,7 @@ import (
 // It observes key events and never changes or swallows them.
 
 const (
+	cgHIDEventTap            = 0
 	cgSessionEventTap        = 1
 	cgHeadInsertEventTap     = 0
 	cgEventTapListenOnly     = 1
@@ -57,7 +59,17 @@ func hotkeyEvent(proxy, typ, event, user uintptr) uintptr {
 	h := &hotkey
 	switch uint32(typ) {
 	case cgEventTapDisabledByTime, cgEventTapDisabledByUser:
-		// The system disables a tap whose callback was slow.
+		// An interruption can lose a release. Do not treat the next press
+		// as a repeat, or turn an orphan release into a toggle. In hold
+		// mode, finish/cancel the interrupted gesture instead of leaving
+		// the microphone waiting forever for the missing release.
+		wasDown := h.down
+		h.down, h.combo = false, false
+		if wasDown && h.onUp != nil {
+			fn := h.onUp
+			go fn(true)
+		}
+		log.Printf("trigger: event tap interrupted (%#x), re-enabling", uint32(typ))
 		if h.tap != 0 {
 			cgEventTapEnable(h.tap, true)
 		}
@@ -125,15 +137,32 @@ func StartHotkey(key string, onDown func(), onUp func(combo bool), onCancel func
 			h.callback = purego.NewCallback(hotkeyEvent)
 		}
 		mask := uint64(1)<<cgEventKeyDown | uint64(1)<<cgEventFlagsChanged
-		tap := cgEventTapCreate(cgSessionEventTap, cgHeadInsertEventTap, cgEventTapListenOnly, mask, h.callback, 0)
+		// Observe before session-level shortcut filters. Some keyboard and
+		// dictation utilities delay or consume Fn while another app is
+		// frontmost. Remain listen-only: never suppress system shortcuts.
+		location := uint32(cgHIDEventTap)
+		tap := cgEventTapCreate(location, cgHeadInsertEventTap, cgEventTapListenOnly, mask, h.callback, 0)
+		if tap == 0 {
+			// Some macOS/security configurations do not allow HID taps.
+			// Preserve the existing session-level compatibility path.
+			location = cgSessionEventTap
+			tap = cgEventTapCreate(location, cgHeadInsertEventTap, cgEventTapListenOnly, mask, h.callback, 0)
+		}
 		if tap == 0 {
 			err = errors.New("macOS did not allow watching the keyboard: grant Input Monitoring to Voicemore in System Settings → Privacy & Security, then start it again")
 			return
 		}
+		source := cfMachPortCreateRunLoopSource(0, tap, 0)
+		if source == 0 {
+			cfRelease(tap)
+			err = errors.New("macOS could not create the keyboard listener run-loop source")
+			return
+		}
+		log.Printf("trigger: listening key=%s layer=%d (0=HID, 1=session)", key, location)
 		h.key, h.down, h.combo, h.onDown, h.onUp = k, false, false, onDown, onUp
 		h.onCancel = onCancel
 		h.tap = tap
-		h.source = cfMachPortCreateRunLoopSource(0, tap, 0)
+		h.source = source
 		cfRunLoopAddSource(cfRunLoopGetMain(), h.source, cfRunLoopCommonModes)
 		cgEventTapEnable(tap, true)
 	})

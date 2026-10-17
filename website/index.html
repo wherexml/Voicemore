@@ -6,11 +6,11 @@
 <title>Voicemore：自然说话，文字落在光标处｜macOS 语音输入</title>
 <meta name="description" content="Voicemore 是专注听写的原生 macOS 语音输入工具。按下 Fn 说话，再按一次，文字写入当前输入框。模型下载后可在本机离线识别，也可接入阿里云或火山引擎；文字整理可选且默认关闭。适用于 Apple Silicon，macOS 26.2 或更新系统。">
 <meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f5f2ea" media="(prefers-color-scheme: light)">
-<meta name="theme-color" content="#0f1424" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#0d2a6b" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#081633" media="(prefers-color-scheme: dark)">
 <link rel="icon" type="image/png" href="assets/icon.png">
 <link rel="apple-touch-icon" href="assets/icon.png">
-<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/site.css?v=20261017-atmosphere">
 
 <!--
   Mock of the official website: three static pages with shared assets,
@@ -40,8 +40,7 @@
 <meta property="og:image:alt" content="Voicemore 应用图标">
 <meta name="twitter:card" content="summary">
 
-<script type="application/ld+json">
-{
+<script type="application/ld+json">{
   "@context": "https://schema.org",
   "@graph": [
     {
@@ -50,11 +49,11 @@
       "description": "原生 macOS 语音输入工具。按下 Fn 说话，再按一次，识别结果写入当前输入框。支持本地识别、云端服务，以及按需使用语言模型整理表达。",
       "applicationCategory": "UtilitiesApplication",
       "operatingSystem": "macOS 26.2 或更新系统（Apple Silicon）",
-      "softwareVersion": "0.3.4",
+      "softwareVersion": "0.3.7",
       "inLanguage": "zh-Hans",
       "image": "assets/icon.png",
-      "downloadUrl": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.4",
-      "releaseNotes": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.4",
+      "downloadUrl": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.7",
+      "releaseNotes": "https://github.com/wherexml/Voicemore/releases/tag/v0.3.7",
       "sameAs": "https://github.com/wherexml/Voicemore"
     },
     {
@@ -63,71 +62,30 @@
       "mainEntity": [
         {
           "@type": "Question",
-          "name": "Voicemore 支持哪些 Mac？",
+          "name": "可以离线使用吗？",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "需要 Apple Silicon（M 系列）芯片及 macOS 26.2 或更新系统。当前安装包不支持 Intel Mac。最低系统版本由内置的 MLX 运行库决定。"
+            "text": "可以，下载模型后即可。云端服务需联网。"
           }
         },
         {
           "@type": "Question",
-          "name": "安装包是否已完成 Apple 公证？",
+          "name": "怎样更新？",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "v0.3.4 已完成 Developer ID 正式签名和 Apple 公证。下载后拖入“应用程序”并启动；由开发签名旧版升级时，macOS 可能要求重新确认麦克风、辅助功能与输入监控权限。"
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "必须联网才能使用吗？",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "安装包包含推理运行环境，不包含模型权重。首次部署本地模型需要联网下载约 2.47 GB 模型文件，并解压约 0.65 GB 运行环境。完成后本地识别可离线使用。云端识别和云端文字整理需要保持联网。"
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "需要授予哪些系统权限？",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "麦克风、辅助功能和输入监控，都在“系统设置 → 隐私与安全性”中授予。授予键盘相关权限后需要重启应用。"
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "按 Fn 时系统弹出了表情或切换了输入法？",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "在系统键盘设置中把“按下 🌐 键时”改成“不执行任何操作”，或在 Voicemore 的设置里换用其他快捷键。"
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "在所有应用里都能写入文字吗？",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "写入效果受目标应用和系统权限影响。已验证在 TextEdit 中听写；部分编辑器和受保护的输入框仍可能存在兼容性差异。遇到问题欢迎在 GitHub 上反馈。"
-          }
-        },
-        {
-          "@type": "Question",
-          "name": "之后怎样更新？",
-          "acceptedAnswer": {
-            "@type": "Answer",
-            "text": "从 0.3.0 起，应用会在启动后及运行期间每小时检查新版本，可在应用内一键下载、验证 Ed25519 签名、安装并重启。设置、模型、历史及凭证均保留。应用需要安装在“应用程序”文件夹中。"
+            "text": "在应用内更新，设置、模型和历史都保留。"
           }
         }
       ]
     }
   ]
-}
-</script>
+}</script>
 </head>
 
 <body>
 <a class="skip" href="#main">跳到正文</a>
 
-<header class="site-head">
+<header class="site-head" id="site-head">
   <div class="wrap">
     <a class="brand" href="#top" aria-label="Voicemore 首页">
       <img src="assets/icon.png" width="28" height="28" alt="">
@@ -135,7 +93,6 @@
     </a>
     <nav class="site-nav" aria-label="页面导航">
       <a href="#features">功能</a>
-      <a href="#compare">比较</a>
       <a href="#privacy">隐私</a>
       <a href="#faq">常见问题</a>
     </nav>
@@ -146,25 +103,26 @@
 
 <main id="main">
 
-  <section class="hero" id="top">
-    <div class="wrap">
-      <p class="eyebrow">专注听写的原生 Mac 应用 · 早期版本</p>
-      <h1>自然说话，<br>文字落在<em>光标处</em>。</h1>
-      <p class="lede">按下 <kbd>Fn</kbd> 开始说话，再按一次，识别结果就写入你正在用的输入框。Voicemore 只做听写这一件事，并且可以完全在这台 Mac 上完成。</p>
-      <ul class="pillars" aria-label="产品要点"><li>模型下载后，本地识别可离线使用</li><li>文字整理可选，默认关闭</li><li>词典纠错建议，确认后才生效</li></ul>
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="wrap hero-copy">
+      <h1 id="hero-title">开口说，<br><span>字落光标处。</span></h1>
+      <p class="lede">按 Fn，开口说，字就打好了。</p>
       <div class="cta">
-        <a class="btn" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.4" rel="noopener">下载 Apple Silicon 版</a>
-        <a class="btn ghost" href="#demo">先看演示</a>
+        <a class="btn light" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.7" rel="noopener"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M17.05 12.54c.03 3.03 2.66 4.04 2.69 4.05-.02.07-.42 1.44-1.39 2.85-.84 1.22-1.71 2.44-3.08 2.47-1.34.03-1.78-.8-3.32-.8-1.54 0-2.02.77-3.29.83-1.32.05-2.32-1.32-3.17-2.54-1.73-2.5-3.05-7.07-1.28-10.16.88-1.53 2.45-2.5 4.15-2.53 1.3-.03 2.52.88 3.31.88.79 0 2.27-1.09 3.82-.93.65.03 2.5.26 3.69 2.01-.1.06-2.2 1.28-2.13 3.87ZM14.5 5.02c.7-.85 1.17-2.03 1.04-3.21-1.01.04-2.24.67-2.96 1.52-.65.75-1.22 1.95-1.07 3.1 1.13.09 2.28-.57 2.99-1.41Z"/></svg>下载 Apple Silicon 版</a>
+        <a class="btn glass" href="https://github.com/wherexml/Voicemore" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 查看源码（新窗口）"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .75a11.25 11.25 0 0 0-3.558 21.922c.563.104.77-.244.77-.542 0-.267-.01-.975-.015-1.914-3.13.68-3.79-1.508-3.79-1.508-.512-1.3-1.25-1.646-1.25-1.646-1.023-.7.078-.686.078-.686 1.132.08 1.728 1.162 1.728 1.162 1.006 1.725 2.64 1.227 3.283.938.103-.73.394-1.228.716-1.51-2.498-.284-5.124-1.249-5.124-5.562 0-1.23.44-2.233 1.16-3.02-.117-.285-.503-1.43.11-2.98 0 0 .945-.303 3.094 1.154a10.78 10.78 0 0 1 5.634 0c2.15-1.457 3.093-1.154 3.093-1.154.615 1.55.228 2.695.112 2.98.722.787 1.158 1.79 1.158 3.02 0 4.324-2.63 5.275-5.136 5.553.404.35.765 1.042.765 2.1 0 1.517-.014 2.741-.014 3.113 0 .301.203.651.774.54A11.25 11.25 0 0 0 12 .75Z"/></svg>GitHub<svg class="arrow" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 11 11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
       </div>
-      <p class="fine">早期版本 v0.3.4 · 需要 M 系列芯片与 macOS 26.2 或更新系统</p>
     </div>
+
+
   </section>
 
-  <section class="demo" id="demo" aria-labelledby="demo-title">
-    <div class="wrap">
-      <h2 id="demo-title" hidden>听写演示</h2>
+  <section class="product-story" id="features" aria-label="一眼掌握，随时开口。"><div class="story-pin"><figure class="story-panel panel-0"><div class="story-image"><img src="assets/home-mock.png?v=20261016-hd"  alt="Voicemore 主界面：快捷键、模型与最近的听写" loading="eager" decoding="async"></div><figcaption>一眼掌握，随时开口。</figcaption></figure>
+<figure class="story-panel panel-1"><div class="story-image"><img src="assets/capsule-mock.png?v=20261016-hd"  alt="屏幕底部的听写胶囊，显示正在识别的文字" loading="eager" decoding="async"></div><figcaption>说到哪里，看到哪里。</figcaption></figure>
+<figure class="story-panel panel-2"><div class="story-image"><img src="assets/models-mock.png?v=20261016-hd"  alt="模型设置界面：分别选择语音识别模型与文字整理模型" loading="eager" decoding="async"></div><figcaption>本地或云端，由你选择。</figcaption></figure>
+<div class="story-progress" aria-hidden="true"><i></i><i></i><i></i></div></div></section>
+  <section class="dictation-section" aria-labelledby="experience-title"><h2 id="experience-title">听写体验</h2>    <div class="wrap demo" id="demo" role="region" aria-labelledby="demo-title">
+      <h2 id="demo-title" class="visually-hidden">听写演示</h2>
       <div class="stage" id="stage" data-phase="idle" data-pause="暂停" data-resume="继续" data-raw="嗯，那个，明天下午三点开会，然后记得带上合同。" data-clean="明天下午三点开会，记得带上合同。" data-listening="正在聆听。说完后再点一次。" data-pill-listen="正在聆听" data-pill-work="正在转录" data-pill-tidy="正在整理" data-work="正在转录……" data-work-tidy="正在转录并整理……" data-done="已写入光标位置。再点一次重来。" data-done-tidy="已写入，口头语已去掉。再点一次重来。">
-        <p class="sim"><span aria-hidden="true"></span>模拟演示 · 不会访问麦克风</p>
         <div class="mac" role="img" aria-label="一个文本编辑器窗口，演示听写文字写入光标位置">
           <div class="mac-bar" aria-hidden="true"><i></i><i></i><i></i><span>备忘 — 文本编辑</span></div>
           <div class="mac-doc">
@@ -176,195 +134,62 @@
             </div>
           </div>
         </div>
-
-        <div class="controls">
-          <button class="keycap" id="key" type="button" aria-describedby="hint">Fn<small aria-hidden="true">🌐</small></button>
-          <p class="hint" id="hint" role="status" aria-live="polite">点一下这个键，开始说话。</p>
-          <label class="switch">
-            <input type="checkbox" id="tidy">
-            <i aria-hidden="true"></i>
-            <span>文字整理</span>
-          </label>
+        <div class="console">
+          <div class="controls">
+            <button class="keycap" id="key" type="button" aria-describedby="hint">Fn<small aria-hidden="true">🌐</small></button>
+            <p class="hint" id="hint" role="status" aria-live="polite">点一下这个键，开始说话。</p>
+            <label class="switch">
+              <input type="checkbox" id="tidy">
+              <i aria-hidden="true"></i>
+              <span>文字整理</span>
+            </label>
+          </div>
+          <div class="transport" id="transport" role="group" aria-label="演示控制" hidden>
+            <button type="button" id="replay"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v2.8h2.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>重新播放</span></button>
+            <button type="button" id="pause" aria-pressed="false" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-pause" d="M5.5 3.5v9M10.5 3.5v9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path class="i-play" d="M5.5 3.5l7 4.5-7 4.5z" fill="currentColor"/></svg><span>暂停</span></button>
+          </div>
         </div>
-        <div class="transport" id="transport" role="group" aria-label="演示控制" hidden>
-          <button type="button" id="replay"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v2.8h2.8" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span>重新播放</span></button>
-          <button type="button" id="pause" aria-pressed="false" disabled><svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-pause" d="M5.5 3.5v9M10.5 3.5v9" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path class="i-play" d="M5.5 3.5l7 4.5-7 4.5z" fill="currentColor"/></svg><span>暂停</span></button>
-        </div>
-        <p class="demo-note">网页演示使用预设文本，不会访问麦克风。实际应用中“文字整理”默认关闭。</p>
       </div>
-    </div>
-  </section>
-
-  <section class="band" id="how" aria-labelledby="how-title">
-    <div class="wrap">
-      <div class="head">
-        <p class="kicker">怎样使用</p>
-        <h2 id="how-title">不用换窗口，也不用复制粘贴。</h2>
-      </div>
-      <ol class="steps">
-        <li>
-          <h3>把光标放在要写的地方</h3>
-          <p>邮件、文档、聊天框。Voicemore 待在菜单栏，不打断你正在做的事。</p>
-        </li>
-        <li>
-          <h3>按下快捷键，开口说</h3>
-          <p>默认是 Fn，可以换成别的键。按一次切换或按住说话，两种方式任选。</p>
-        </li>
-        <li>
-          <h3>文字写入当前输入框</h3>
-          <p>屏幕上的悬浮条显示录音和转录进度，结束后文字出现在光标所在的位置。</p>
-        </li>
-      </ol>
-    </div>
-  </section>
-
-  <section class="band tint" id="features" aria-labelledby="features-title">
-    <div class="wrap">
-      <div class="head">
-        <p class="kicker">功能</p>
-        <h2 id="features-title">只做语音输入这一件事，把它做完整。</h2>
-      </div>
-      <div class="grid">
-        <article>
-          <h3>本地语音模型</h3>
-          <p>内置管理 Qwen3-ASR-1.7B-8bit，在应用里下载、部署、启动。不需要另外安装推理工具。</p>
-        </article>
-        <article>
-          <h3>云端识别</h3>
-          <p>也可以接入阿里云或火山引擎，使用你自己的服务商账号和凭证。</p>
-        </article>
-        <article>
-          <h3>可选的文字整理</h3>
-          <p>连接本地或兼容的云端语言模型，把口语整理成书面表达。默认关闭，需要时再开。</p>
-        </article>
-        <article>
-          <h3>历史与回放</h3>
-          <p>查看每一次转录，修改结果，回听保存下来的录音。</p>
-        </article>
-        <article>
-          <h3>个人词典</h3>
-          <p>热词和纠错规则让专有名词写对。从你的修改中生成的建议，要你确认后才生效。</p>
-        </article>
-        <article>
-          <h3>原生界面</h3>
-          <p>Dock 与菜单栏入口，简体中文、繁体中文和英文界面，应用内一键更新。</p>
-        </article>
-      </div>
-    </div>
-  </section>
-
-  <section class="band" id="compare" aria-labelledby="compare-title">
-    <div class="wrap">
-      <div class="head">
-        <p class="kicker">比较</p>
-        <h2 id="compare-title">想专注听写，选择 Voicemore。</h2>
-        <p>在 Mac 上把话变成文字，让声音留在本机，也把是否改写的决定留给你。</p>
-      </div>
-      <div class="cmp two">
-        <article class="ours">
-          <p class="tag">本站</p>
-          <h3>Voicemore</h3>
-          <p class="stance">专注听写的原生 Mac 应用</p>
-          <ul><li>模型下载后，本地识别可离线使用</li><li>也可接入自己的云端服务商账号</li><li>文字整理可选，默认关闭</li><li>词典纠错建议需要你确认后才生效</li></ul>
-          <p class="src">早期版本；仅支持 Apple Silicon 与 macOS 26.2 或更新系统。</p>
-        </article>
-        <article>
-          <h3>Typeless</h3>
-          <p class="stance">云端处理，零保留</p>
-          <ul><li>数据控制页写明：转录在云端处理</li><li>同一页面写明：零数据保留</li></ul>
-          <p class="src">官方来源: <a href="https://www.typeless.com/data-controls" rel="noopener nofollow">数据控制说明</a></p>
-        </article>
-      </div>
-      <dl class="cmp-notes">
-        <div><dt>离线也能写</dt><dd>相对采用云端转录的 Typeless，Voicemore 在模型下载后可离线识别，音频无需发往云端。</dd></div>
-        <div><dt>按你的表达来</dt><dd>文字整理默认关闭；需要润色时再开启。词典纠错建议由你确认后生效。</dd></div>
-        <div><dt>专注当前输入</dt><dd>若你更需要一款专注的 Mac 听写工具，Voicemore 提供这样的选择。</dd></div>
-      </dl>
-      <p class="src">依据官方页面核对于 2026-10-14；非完整功能清单。产品详情以各家官网为准。</p>
-    </div>
-  </section>
+    </div></section>
 
   <section class="band tint" id="privacy" aria-labelledby="privacy-title">
     <div class="wrap split">
       <div class="head">
-        <p class="kicker">隐私与数据</p>
-        <h2 id="privacy-title">声音去了哪里，说得清清楚楚。</h2>
-        <p>你选择哪种识别方式，决定了音频会不会离开这台 Mac。</p>
+        <p class="kicker">隐私</p>
+        <h2 id="privacy-title">声音去了哪里。</h2>
       </div>
-      <div>
-        <dl class="facts">
-          <div>
-            <dt>本地识别</dt>
-            <dd>音频只发送到本机回环地址 <code>127.0.0.1:48132</code> 上的推理进程。模型部署完成后可离线使用。</dd>
-          </div>
-          <div>
-            <dt>云端识别</dt>
-            <dd>选择后，音频发送到你配置的服务商。开启云端文字整理时，转录文字发送到你配置的接口。</dd>
-          </div>
-          <div>
-            <dt>数据存放</dt>
-            <dd>设置、历史、录音、词典、模型和加密凭证都保存在本机的 <code>~/Library/Application Support/Voice Input/</code>。</dd>
-          </div>
-          <div>
-            <dt>录音保留</dt>
-            <dd>默认保存录音，保留 30 天，可在设置中调整。</dd>
-          </div>
-        </dl>
-        <p class="caveat">API 凭证使用本机 AES-GCM 加密存储，密钥同样存于本机并使用严格的文件权限。这能避免明文暴露，但不能抵御以同一 macOS 用户身份运行的软件。</p>
-      </div>
+      <dl class="facts">
+          <div><dt>本地</dt><dd>模型下载后离线识别。</dd></div>
+          <div><dt>云端</dt><dd>仅在你选择时发送音频或文字。</dd></div>
+          <div><dt>存储</dt><dd>设置、历史和录音都在本机。</dd></div>
+          <div><dt>保留</dt><dd>录音默认保留 30 天，可调整。</dd></div>
+      </dl>
     </div>
   </section>
 
   <section class="band" id="faq" aria-labelledby="faq-title">
-    <div class="wrap">
+    <div class="wrap split">
       <div class="head">
         <p class="kicker">常见问题</p>
-        <h2 id="faq-title">安装之前，你可能想知道。</h2>
+        <h2 id="faq-title">快速解答。</h2>
       </div>
       <div class="faq">
-        <details>
-          <summary>Voicemore 支持哪些 Mac？</summary>
-          <p>需要 Apple Silicon（M 系列）芯片及 macOS 26.2 或更新系统。当前安装包不支持 Intel Mac。最低系统版本由内置的 MLX 运行库决定。</p>
-        </details>
-        <details>
-          <summary>安装包是否已完成 Apple 公证？</summary>
-          <p>v0.3.4 已完成 Developer ID 正式签名和 Apple 公证。下载后拖入“应用程序”并启动；由开发签名旧版升级时，macOS 可能要求重新确认麦克风、辅助功能与输入监控权限。</p>
-        </details>
-        <details>
-          <summary>必须联网才能使用吗？</summary>
-          <p>安装包包含推理运行环境，不包含模型权重。首次部署本地模型需要联网下载约 2.47 GB 模型文件，并解压约 0.65 GB 运行环境。完成后本地识别可离线使用。云端识别和云端文字整理需要保持联网。</p>
-        </details>
-        <details>
-          <summary>需要授予哪些系统权限？</summary>
-          <p>麦克风、辅助功能和输入监控，都在“系统设置 → 隐私与安全性”中授予。授予键盘相关权限后需要重启应用。</p>
-        </details>
-        <details>
-          <summary>按 Fn 时系统弹出了表情或切换了输入法？</summary>
-          <p>在系统键盘设置中把“按下 🌐 键时”改成“不执行任何操作”，或在 Voicemore 的设置里换用其他快捷键。</p>
-        </details>
-        <details>
-          <summary>在所有应用里都能写入文字吗？</summary>
-          <p>写入效果受目标应用和系统权限影响。已验证在 TextEdit 中听写；部分编辑器和受保护的输入框仍可能存在兼容性差异。遇到问题欢迎在 GitHub 上反馈。</p>
-        </details>
-        <details>
-          <summary>之后怎样更新？</summary>
-          <p>从 0.3.0 起，应用会在启动后及运行期间每小时检查新版本，可在应用内一键下载、验证 Ed25519 签名、安装并重启。设置、模型、历史及凭证均保留。应用需要安装在“应用程序”文件夹中。</p>
-        </details>
+        <details><summary>可以离线使用吗？</summary><p>可以，下载模型后即可。云端服务需联网。</p></details>
+        <details><summary>怎样更新？</summary><p>在应用内更新，设置、模型和历史都保留。</p></details>
       </div>
     </div>
   </section>
 
   <section class="get" id="download" aria-labelledby="download-title">
+    <div class="sky" aria-hidden="true"><i class="glow g1"></i><i class="glow g2"></i></div>
     <div class="wrap">
-      <img src="assets/icon.png" width="104" height="104" alt="Voicemore 应用图标" loading="lazy">
+      <img class="get-icon" src="assets/icon.png" width="104" height="104" alt="Voicemore 应用图标" loading="lazy">
       <h2 id="download-title">开口，就是输入。</h2>
-      <p>下载 <strong>Voicemore-0.3.4-arm64.dmg</strong>，打开后把 Voicemore 拖到“应用程序”，再从“应用程序”启动。</p>
       <div class="cta">
-        <a class="btn" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.4" rel="noopener">前往 v0.3.4 发布页下载</a>
-        <a class="btn ghost" href="https://github.com/wherexml/Voicemore" rel="noopener">查看源码</a>
+        <a class="btn light" href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.7" rel="noopener"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M17.05 12.54c.03 3.03 2.66 4.04 2.69 4.05-.02.07-.42 1.44-1.39 2.85-.84 1.22-1.71 2.44-3.08 2.47-1.34.03-1.78-.8-3.32-.8-1.54 0-2.02.77-3.29.83-1.32.05-2.32-1.32-3.17-2.54-1.73-2.5-3.05-7.07-1.28-10.16.88-1.53 2.45-2.5 4.15-2.53 1.3-.03 2.52.88 3.31.88.79 0 2.27-1.09 3.82-.93.65.03 2.5.26 3.69 2.01-.1.06-2.2 1.28-2.13 3.87ZM14.5 5.02c.7-.85 1.17-2.03 1.04-3.21-1.01.04-2.24.67-2.96 1.52-.65.75-1.22 1.95-1.07 3.1 1.13.09 2.28-.57 2.99-1.41Z"/></svg>下载 Apple Silicon 版</a>
+        <a class="btn glass" href="https://github.com/wherexml/Voicemore" target="_blank" rel="noopener noreferrer" aria-label="在 GitHub 查看源码（新窗口）"><svg class="btn-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path fill="currentColor" d="M12 .75a11.25 11.25 0 0 0-3.558 21.922c.563.104.77-.244.77-.542 0-.267-.01-.975-.015-1.914-3.13.68-3.79-1.508-3.79-1.508-.512-1.3-1.25-1.646-1.25-1.646-1.023-.7.078-.686.078-.686 1.132.08 1.728 1.162 1.728 1.162 1.006 1.725 2.64 1.227 3.283.938.103-.73.394-1.228.716-1.51-2.498-.284-5.124-1.249-5.124-5.562 0-1.23.44-2.233 1.16-3.02-.117-.285-.503-1.43.11-2.98 0 0 .945-.303 3.094 1.154a10.78 10.78 0 0 1 5.634 0c2.15-1.457 3.093-1.154 3.093-1.154.615 1.55.228 2.695.112 2.98.722.787 1.158 1.79 1.158 3.02 0 4.324-2.63 5.275-5.136 5.553.404.35.765 1.042.765 2.1 0 1.517-.014 2.741-.014 3.113 0 .301.203.651.774.54A11.25 11.25 0 0 0 12 .75Z"/></svg>GitHub<svg class="arrow" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M5 11 11 5M6 5h5v5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
       </div>
       <ul class="req" aria-label="系统要求"><li>Apple Silicon（M 系列）</li><li>macOS 26.2 或更新</li><li>不支持 Intel Mac</li></ul>
-      <p class="preview"><strong>签名与公证：</strong>v0.3.4 已完成 Developer ID 正式签名与 Apple 公证，安装包附带公证票据。支持 Apple Silicon，macOS 26.2 或更新版本。</p>
     </div>
   </section>
 
@@ -372,7 +197,7 @@
 
 <footer class="site-foot">
   <div class="wrap">
-    <span>Voicemore · 早期版本 v0.3.4</span>
+    <span class="foot-brand"><img src="assets/icon.png" width="20" height="20" alt="">Voicemore</span>
     <nav aria-label="页脚链接">
       <a href="https://github.com/wherexml/Voicemore" rel="noopener">GitHub</a>
       <a href="https://github.com/wherexml/Voicemore/releases" rel="noopener">全部版本</a>
@@ -381,6 +206,6 @@
   </div>
 </footer>
 
-<script src="assets/site.js" defer></script>
+<script src="assets/site.js?v=20261016-story" defer></script>
 </body>
 </html>

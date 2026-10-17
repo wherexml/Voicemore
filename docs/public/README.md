@@ -7,13 +7,15 @@
 | DMG 安装窗口 | [布局、固定英文提示与原生验收](DMG-INSTALLER.md) | `scripts/build-dmg.py`、`scripts/verify-dmg-layout.py` |
 | 首页与历史 | [布局、功能与原生验收](HOME-HISTORY.md) | `home.go`、`journal.go`、`history.go`、`history_stats.go`、`app_identity.go`、`prefs.go` |
 | 权限授权 | [共享拖拽引导与原生验收](PERMISSIONS.md) | `permission_drag.go`、`internal/macos/settings_window_darwin.go` |
-| 开始使用引导 | [窗口布局与原生验收](ONBOARDING.md) | `onboarding.go` |
+| 开始使用引导 | [窗口布局与原生验收](ONBOARDING.md) | `onboarding.go`、`onboarding_bridge.go`、`resources/onboarding/` |
+| 全局触发键 | [后台监听与原生验收](HOTKEY.md) | `internal/macos/hotkey_darwin.go` |
 | 蓝牙音频恢复 | [AirPods 播放恢复与实机验收](BLUETOOTH-AUDIO.md) | `internal/macos/bluetooth_output_darwin.go`、`internal/macos/mic_darwin.go` |
 | DJI 麦克风按钮 | [设备匹配与原生验收](DJI-BUTTON.md) | `internal/macos/dji_darwin.go` |
 | 听写胶囊 | [显示规则与原生验收](CAPSULE.md) | `overlay.go`、`overlay_v2.go` |
 | 远程桌面输入 | [匹配规则、剪贴板与原生验收](REMOTE-INPUT.md) | `prefs_remote.go`、`internal/macos/remote_darwin.go`、`internal/session/controller.go` |
-| 本地语音模型 | [按需加载、句尾预览与验收](LOCAL-ASR.md) | `internal/localasr/`、`internal/session/controller.go` |
+| 本地语音模型 | [按需加载、句尾预览与验收](LOCAL-ASR.md)、[识别语言](LOCAL-ASR.md#识别语言)、[Qwen3-ASR 自定义能力与参数](QWEN3-ASR-CUSTOMIZATION.md) | `internal/localasr/`、`internal/session/controller.go` |
 | 云端语音识别 | [豆包 DDC 默认与验收](../../internal/cloudasr/README.md) | `internal/cloudasr/volc.go` |
+| 私密应用 | [判定、延迟落盘与原生验收](PRIVATE-APPS.md) | `internal/session/privacy.go`、`prefs_privacy.go` |
 | 配置持久化 | [远程规则结构及兼容约定](../../internal/config/README.md) | `internal/config/config.go`、`remote.go` |
 | 词典与纠正学习 | [V2 页面、热词与纠正验收](DICTIONARY.md) | `dictionary.go`、`internal/dict/`、`internal/cloudasr/volc.go`、`internal/session/controller.go` |
 | 基础格式与数字 | [数字默认与保留边界](TEXT-FORMATTING.md) | `internal/textstyle/`、`prefs.go` |

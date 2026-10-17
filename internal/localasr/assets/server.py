@@ -1,5 +1,5 @@
 """Local incremental ASR. Full-utterance redecoding, not a causal streaming model."""
-import asyncio, collections, concurrent.futures, json, time, os
+import asyncio, collections, concurrent.futures, json, re, time, os
 from contextlib import asynccontextmanager
 from pathlib import Path
 import numpy as np
@@ -40,24 +40,30 @@ def load():
  print(json.dumps({'event':'loaded','seconds':time.monotonic()-started,'model':str(DATA/'model'),'memory_gb':mx.get_active_memory()/1e9}),flush=True)
 
 DEFAULT_HOTWORDS=[]  # Personal dictionary is supplied by the app for each session.
+# Session speech language. A session without one is Chinese, as before the
+# setting existed; None asks the model to detect the language itself.
+LANGUAGES={'zh':'Chinese','auto':None,'en':'English'}
+DEFAULT_LANGUAGE='zh'
+# Auto detection may lead the text with the detected language tag.
+LANGUAGE_TAG=re.compile(r'^\s*language\s+[^<\n]{0,40}<asr_text>\s*')
 MAX_HOTWORDS=128
 MAX_HOTWORD_CHARS=4096
 
-def recognition_options(sample_count,hotwords,system_prompt=None):
+def recognition_options(sample_count,hotwords,system_prompt=None,language='Chinese'):
  # Keep real short replies, but do not condition weak acoustic evidence on text.
  # The optional context is used by offline acceptance, not exposed over /ws.
  use_hints=sample_count>=MIN_HINT_AUDIO
- return dict(language='Chinese',hotwords=hotwords if use_hints else None,
+ return dict(language=language,hotwords=hotwords if use_hints else None,
              system_prompt=system_prompt if use_hints else None,
              max_tokens=512,temperature=0,verbose=False)
 
-def recognize(samples,hotwords,system_prompt=None):
- return MODEL.generate(samples,**recognition_options(len(samples),hotwords,system_prompt))
+def recognize(samples,hotwords,system_prompt=None,language='Chinese'):
+ return MODEL.generate(samples,**recognition_options(len(samples),hotwords,system_prompt,language))
 
-def transcribe(samples,hotwords):
+def transcribe(samples,hotwords,language='Chinese'):
  t=time.monotonic()
- result=recognize(samples,hotwords)
- return result.text.strip(),time.monotonic()-t
+ result=recognize(samples,hotwords,language=language)
+ return LANGUAGE_TAG.sub('',result.text.strip(),count=1).strip(),time.monotonic()-t
 
 @asynccontextmanager
 async def lifespan(app):
@@ -70,7 +76,7 @@ async def lifespan(app):
 app=FastAPI(lifespan=lifespan)
 app.add_middleware(TrustedHostMiddleware,allowed_hosts=['127.0.0.1','localhost'])
 @app.get('/health')
-def health(): return {'instance':os.environ['VOICE_INPUT_INSTANCE'],'ready':READY,'busy':BUSY,'model':'Qwen3-ASR-1.7B-8bit','step_s':STEP,'silence_s':None,'target_segment_s':MAX_SEGMENT,'max_segment_s':MAX_SEGMENT+MAX_SEGMENT_EXTENSION,'finalization':'stop-or-pause-after-target-or-hard-limit','min_hint_audio_s':MIN_HINT_AUDIO/SR,'mode':'incremental utterance redecoding','vad':'Silero ONNX CPU','min_speech_ms':96,'default_hotword_count':len(DEFAULT_HOTWORDS)}
+def health(): return {'instance':os.environ['VOICE_INPUT_INSTANCE'],'ready':READY,'busy':BUSY,'model':'Qwen3-ASR-1.7B-8bit','step_s':STEP,'silence_s':None,'target_segment_s':MAX_SEGMENT,'max_segment_s':MAX_SEGMENT+MAX_SEGMENT_EXTENSION,'finalization':'stop-or-pause-after-target-or-hard-limit','min_hint_audio_s':MIN_HINT_AUDIO/SR,'mode':'incremental utterance redecoding','vad':'Silero ONNX CPU','min_speech_ms':96,'default_hotword_count':len(DEFAULT_HOTWORDS),'languages':list(LANGUAGES)}
 @app.websocket('/ws')
 async def live(ws:WebSocket):
  global BUSY
@@ -86,6 +92,11 @@ async def live(ws:WebSocket):
   await ws.send_json({'type':'error','message':'术语总长度请控制在 4096 字符以内。'})
   await ws.close(code=1008);return
  hotwords=DEFAULT_HOTWORDS if raw_terms is None else [x.strip() for x in raw_terms.replace('，',',').split(',') if x.strip()]
+ language_id=ws.query_params.get('language',DEFAULT_LANGUAGE)
+ if language_id not in LANGUAGES:
+  await ws.send_json({'type':'error','message':'不支持的识别语言。'})
+  await ws.close(code=1008);return
+ language=LANGUAGES[language_id]
  if len(hotwords)>MAX_HOTWORDS:
   await ws.send_json({'type':'error','message':'术语最多 128 项，请减少后重试。'})
   await ws.close(code=1008);return
@@ -105,7 +116,7 @@ async def live(ws:WebSocket):
      if latest is not None and latest[0]<=job[0]:latest=None
     else:job=latest;latest=None
     sid,audio,final=job
-    text,dt=await asyncio.get_running_loop().run_in_executor(POOL,transcribe,audio,hotwords)
+    text,dt=await asyncio.get_running_loop().run_in_executor(POOL,transcribe,audio,hotwords,language)
     await ws.send_json({'type':'final' if final else 'partial','segment':sid,'text':text,'audio_s':len(audio)/SR,'hints_suppressed':len(audio)<MIN_HINT_AUDIO,'decode_s':dt,'elapsed_s':time.monotonic()-started})
    if stopping:
     await ws.send_json({'type':'done','elapsed_s':time.monotonic()-started});return
@@ -139,7 +150,7 @@ async def live(ws:WebSocket):
    latest=(segment,np.concatenate(chunks)[:end],False);tail_previewed=True;since=0;wake.set()
  task=asyncio.create_task(decode_loop())
  try:
-  await ws.send_json({'type':'ready','sample_rate':SR,'hotword_count':len(hotwords)})
+  await ws.send_json({'type':'ready','sample_rate':SR,'hotword_count':len(hotwords),'language':language_id})
   while True:
    msg=await asyncio.wait_for(ws.receive(),timeout=120)
    if msg['type']=='websocket.disconnect':break

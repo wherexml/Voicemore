@@ -17,6 +17,53 @@
     a.setAttribute("href", id && id !== "top" ? file + "#" + id : file);
   });
 
+  /* The header is transparent with light text while it sits on the hero's
+     dark sky, and turns solid once the page scrolls past it. */
+  var head = document.getElementById("site-head"), hero = document.getElementById("top");
+  if (head && hero) {
+    var sky = function () {
+      if (hero.querySelector("h1").getBoundingClientRect().bottom > head.offsetHeight) head.dataset.over = "hero";
+      else delete head.dataset.over;
+    };
+    sky();
+    window.addEventListener("scroll", sky, { passive: true });
+    window.addEventListener("resize", sky);
+  }
+
+  /* Native, reversible scroll narrative. No timers or pointer effects. */
+  (function () {
+    var root=document.documentElement, mq=matchMedia('(prefers-reduced-motion: reduce)'), narrow=matchMedia('(max-width: 760px)');
+    var story=document.querySelector('.product-story'), copy=document.querySelector('.hero-copy'), panels=Array.from(document.querySelectorAll('.story-panel')), bars=Array.from(document.querySelectorAll('.story-progress i'));
+    if(!story) return;
+    var raf=0, active=false;
+    function clamp(n){return Math.max(0,Math.min(1,n));}
+    function smooth(n){n=clamp(n);return n*n*(3-2*n);}
+    function render(){
+      raf=0;if(!active)return;
+      var r=story.getBoundingClientRect(), vh=innerHeight;
+      var entry=clamp((vh-r.top)/(vh-90));
+      var p=clamp((90-r.top)/Math.max(1,story.offsetHeight-(vh-90)));
+      var a=smooth((p-.28)/.12),b=smooth((p-.64)/.12),values=[1-a,a*(1-b),b];
+      panels.forEach(function(el,i){
+        el.style.opacity=values[i];el.style.visibility=values[i]>.001?'visible':'hidden';el.setAttribute('aria-hidden',values[i]<.5?'true':'false');
+        var scale=i===0?.84+.16*smooth(entry):.94+.06*smooth(i===1?(p-.28)/.28:(p-.64)/.3);
+        el.querySelector('.story-image').style.transform='perspective(1600px) rotateX('+ (i===0?(1-entry)*10:0)+'deg) scale('+scale+')';
+        var caption=el.querySelector('figcaption');caption.style.opacity=clamp((values[i]-.5)*2);
+        bars[i].style.opacity=values[i]>.5?'1':'.2';
+      });
+      var fade=clamp(scrollY/(vh*.52));copy.style.transform='translateY('+(-fade*85)+'px)';copy.style.opacity=1-fade;
+    }
+    function queue(){if(active&&!raf)raf=requestAnimationFrame(render);}
+    function sync(){
+      active=!mq.matches&&!narrow.matches;root.classList.toggle('scroll-story',active);
+      if(active)queue();else{
+        cancelAnimationFrame(raf);raf=0;copy.style.transform='';copy.style.opacity='';
+        panels.forEach(function(el){el.style.opacity='';el.style.visibility='';el.removeAttribute('aria-hidden');el.querySelector('.story-image').style.transform='';el.querySelector('figcaption').style.opacity='';});
+      }
+    }
+    addEventListener('scroll',queue,{passive:true});addEventListener('resize',queue);mq.addEventListener('change',sync);narrow.addEventListener('change',sync);sync();
+  })();
+
   /* The dictation demo. A simulation with the page's preset text: it never
      asks for the microphone. One run is: listening (the waveform moves and
      the words appear in the floating bar as they are heard), a short
@@ -33,7 +80,12 @@
   if (!stage || !key || !hint || !typed || !pill || !live || !tidy || !transport || !replay || !pause) return;
 
   var S = stage.dataset;
-  var still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var still = false;
+  (function (mq) {
+    still = mq.matches;
+    var update = function () { still = mq.matches; };
+    if (mq.addEventListener) mq.addEventListener("change", update); else if (mq.addListener) mq.addListener(update);
+  })(window.matchMedia("(prefers-reduced-motion: reduce)"));
   var timer = 0, pending = null, due = 0, left = 0, paused = false;
 
   /* One step waits at a time, so a pause only has to hold that one. */
@@ -110,12 +162,4 @@
   });
 
   transport.hidden = false;
-  if (still || !("IntersectionObserver" in window)) return; // the finished sentence stays; Replay or Fn plays it
-  typed.textContent = "";
-  var seen = new IntersectionObserver(function (entries) {
-    if (!entries.some(function (e) { return e.isIntersecting; })) return;
-    seen.disconnect();
-    if (S.phase === "idle" && !typed.textContent) listen(false);
-  }, { threshold: 0.6 });
-  seen.observe(stage);
 })();

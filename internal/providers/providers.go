@@ -381,7 +381,9 @@ func ASR(s config.Settings, sec Secrets) (asr.Dialer, error) {
 func Dialer(provider, model string, s config.Settings, sec Secrets) asr.Dialer {
 	switch provider {
 	case Local:
-		return asr.Local(s.ASRURL)
+		// Only the local service takes the speech language; custom
+		// services and the cloud keep their own routing and defaults.
+		return asr.LocalLanguage(s.ASRURL, config.LocalASRLanguage(s.ASRLanguage))
 	case Aliyun:
 		return cloudasr.Aliyun{Base: AliyunBase(s), APIKey: sec(Account(Aliyun, s, "apiKey")), Model: model}
 	case Volc:
@@ -415,8 +417,11 @@ func CleanupOptions(s config.Settings, sec Secrets) (cleanup.Options, error) {
 		}
 		return cleanup.Options{BaseURL: s.CleanupURL, Model: s.CleanupModel, APIKey: key, DisableThinking: true}, nil
 	case DeepSeek:
-		return cleanup.Options{BaseURL: APIBase(Endpoint(s)), Model: a.Model, APIKey: sec(Account(DeepSeek, s, "apiKey"))}, nil
+		return cleanup.Options{BaseURL: APIBase(Endpoint(s)), Model: a.Model, APIKey: sec(Account(DeepSeek, s, "apiKey")), DisableDeepSeekThinking: true}, nil
 	}
 	c, _ := Custom(a.Provider, s)
-	return cleanup.Options{BaseURL: APIBase(c.URL), Model: a.Model, APIKey: sec(CustomAccount(c.ID))}, nil
+	if _, err := cleanup.ThinkingParams(c.ThinkingMode, c.ThinkingParams); err != nil {
+		return cleanup.Options{}, err
+	}
+	return cleanup.Options{BaseURL: APIBase(c.URL), Model: a.Model, APIKey: sec(CustomAccount(c.ID)), ThinkingMode: c.ThinkingMode, ThinkingParams: c.ThinkingParams}, nil
 }

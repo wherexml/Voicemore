@@ -1,18 +1,18 @@
 <p align="center"><img src="https://raw.githubusercontent.com/wherexml/Voicemore/main/resources/icon.png" width="112" alt="Voicemore icon"></p>
 <h1 align="center">Voicemore</h1>
 <p align="center">Speak naturally. Write where your cursor is.</p>
-<p align="center"><a href="README.zh-CN.md">简体中文</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.5">Download for Apple Silicon</a></p>
+<p align="center"><a href="README.zh-CN.md">简体中文</a> · <a href="https://github.com/wherexml/Voicemore/releases/tag/v0.3.7">Download for Apple Silicon</a></p>
 
 Voicemore is a native macOS dictation app. Press **Fn**, speak, and press **Fn** again to insert the transcript into the focused text field. Run speech recognition locally, connect a cloud provider, and optionally tidy your words with a language model.
 
-## What’s new in 0.3.5
+## What’s new in 0.3.7
 
-- Clearer Settings and Dictionary groups, visible input fields, and aligned model dropdowns.
-- Simpler correction suggestions: review the original input, then add a keyword or accept a replacement rule.
-- A refreshed Home, shared history timeline, and clearer first-run permission guidance.
-- On-demand local speech-model loading, idle memory release, and improved previews after a pause.
-- Improved correction learning after sending or continuing text, cloud vocabulary hints, and remote input handling.
-- Dictation capsules follow the active display/desktop as focus changes.
+- Local speech-language selection: Chinese, automatic detection, or English, including history retranscription.
+- Private applications: insert text without saving this dictation's transcript, recording, or correction suggestions.
+- A continuous dictation/send-countdown capsule; insertion only by default, with optional per-app automatic sending, cancellation and editing.
+- Improved AirPods audio restoration and global shortcut recovery; shared microphone and trigger-key selectors.
+- A five-step onboarding guide with native readiness checks and inline local-model setup.
+- Custom cleanup thinking modes and a real cleanup probe; DeepSeek thinking disabled by default, with better grouping and text preservation.
 
 ## A look inside
 
@@ -40,13 +40,13 @@ Run speech recognition on your Mac, or configure a cloud provider. Choose a sepa
 
 **Apple Silicon (M-series), macOS 26.2 or later.** Intel Macs are not supported by this package. The current bundled MLX runtime sets the minimum OS requirement. Native installation and local dictation have been verified on macOS 26.2 arm64; local development was also verified on macOS 27.0 arm64.
 
-1. Download **Voicemore-0.3.5-arm64.dmg** from [v0.3.5 Releases](https://github.com/wherexml/Voicemore/releases/tag/v0.3.5).
+1. Download **Voicemore-0.3.7-arm64.dmg** from [v0.3.7 Releases](https://github.com/wherexml/Voicemore/releases/tag/v0.3.7).
 2. Open the disk image and drag **Voicemore** onto **Applications**.
 3. Eject the disk image, then open Voicemore from Applications.
 4. Grant **Microphone**, **Accessibility**, and **Input Monitoring** in System Settings → Privacy & Security. Restart after granting keyboard permissions.
 5. In **Settings → Models**, open the local speech model and choose download/deploy. Wait until it is ready, then try dictation in a text editor.
 
-**Signed and notarized:** v0.3.5 uses Developer ID signing and Apple notarization, with stapled app and DMG tickets. Upgrading from a development-signed preview may require confirming microphone, Accessibility and Input Monitoring permissions again.
+**Signed and notarized:** v0.3.7 uses Developer ID signing and Apple notarization, with stapled app and DMG tickets. Upgrading from a development-signed preview may require confirming microphone, Accessibility and Input Monitoring permissions again.
 
 The DMG includes the inference runtime, but **not model weights**. Initial local setup downloads roughly **2.47 GB** of model files and extracts roughly **0.65 GB** of runtime. Internet access is needed for the download; local recognition works offline after setup. You can also copy a compatible existing model. Cloud recognition needs your own provider credentials and network access.
 
@@ -61,9 +61,10 @@ Click the indigo update icon above Settings to download, verify the Ed25519-sign
 ## Features
 
 - **Dictate into the active app:** configurable trigger key, toggle/hold behavior, recording feedback, and a compact transcription overlay.
-- **Local speech recognition:** app-managed Qwen3-ASR-1.7B-8bit on Apple Silicon, with a separate inference process. No existing oMLX installation required for speech recognition.
+- **Local speech recognition:** app-managed Qwen3-ASR-1.7B-8bit on Apple Silicon, with Chinese, automatic, and English modes and a separate inference process. No existing oMLX installation required for speech recognition.
 - **Cloud options:** Alibaba Cloud and Volcengine speech recognition using your own accounts.
 - **Optional text cleanup:** connect a local or compatible hosted language-model endpoint; cleanup is off by default.
+- **Private applications:** choose apps whose dictations are inserted without saved history, recordings or correction learning. Existing history is preserved.
 - **History and playback:** review transcripts, edit results, and replay saved recordings.
 - **Personal dictionary:** vocabulary hints, correction rules, and suggestions from edits. Suggested rules need confirmation; observing edits in other apps is opt-in.
 - **Native interface:** Dock app, menu-bar controls, and English, Simplified Chinese, and Traditional Chinese UI.
