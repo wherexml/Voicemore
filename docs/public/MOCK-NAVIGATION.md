@@ -35,3 +35,5 @@ python3 -m http.server 38127 --bind 127.0.0.1 --directory mock
 全部模块与归档页面共享 `mock/components/mock-navigation.js`，左下角固定“返回导航”，直接返回统一入口，不依赖浏览器历史。组件使用独立样式，页面重绘时保留；V1/V2 对照的内嵌页面隐藏重复入口，仅外层显示。入口支持 Tab 聚焦与 Enter 跳转，打印时隐藏。新增 HTML 须使用相对路径加载该组件。
 
 复验：从导航打开每个模块，点击“返回导航”，确认回到 `mock/index.html`；设置切换后入口仍可用；归档及深层隔夜方案返回同一入口。证据：`artifacts/mock-navigation/return-navigation/`。
+
+胶囊入口已同步原生连续动效基线：480 ms 伸缩、状态文字错峰进出与发送控件展开。预选整理和自动发送便于完整重播；应用实际验收见[胶囊规格](./CAPSULE.md)。

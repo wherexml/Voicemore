@@ -62,6 +62,7 @@ var (
 
 // v2State is what the V2 renderer keeps across frames of one dictation.
 type v2State struct {
+	motion  v2MotionState
 	heard   bool      // the microphone has heard speech: Listening, not Waiting for speech
 	hoverAt time.Time // when the pointer was last over the pill or Close
 	panelH  int       // the measured height of the card, for the window
@@ -90,6 +91,7 @@ const (
 	v2MicFail
 	v2MicLost
 	v2Failed
+	v2Sending
 )
 
 var v2Labels = [...]string{"v2Preparing", "v2Listening", "v2Quiet", "v2Transcribing", "v2Cleaning",
@@ -181,7 +183,7 @@ func (o *overlay) viewV2(c *ui.Context) {
 	if still {
 		alpha = o.fadeTo
 	}
-	if now.Sub(o.fadeAt) < 180*time.Millisecond {
+	if now.Sub(o.fadeAt) < 220*time.Millisecond {
 		c.After(16 * time.Millisecond)
 	}
 	for _, l := range v.Levels {
@@ -190,9 +192,14 @@ func (o *overlay) viewV2(c *ui.Context) {
 		}
 	}
 	kind := o.v2Kind()
-	label := T(v2Labels[kind])
-	canExpand := kind == v2Listening || kind == v2Quiet || kind == v2Transcribing || kind == v2Cleaning
-	canClose := !o.closing && v.Phase != session.Inserting
+	sending := o.v2Sending()
+	if sending {
+		kind = v2Sending
+		c.OnShortcut(0, ui.KeyEscape, o.a.cancelInput)
+	}
+	_, label, _ := o.v2Caption(kind)
+	canExpand := !sending && (kind == v2Listening || kind == v2Quiet || kind == v2Transcribing || kind == v2Cleaning)
+	canClose := !o.closing && !sending && v.Phase != session.Inserting
 	if canClose {
 		// Keep pointer visibility correct even with Reduce Motion enabled
 		// or while a terminal notice is otherwise idle.
@@ -205,7 +212,7 @@ func (o *overlay) viewV2(c *ui.Context) {
 
 	ui.Column(c).Fill().Padding(0, 0, float32(o.room), 0).Justify(ui.End).AlignItems(ui.Center).
 		Gap(v2PanelGap).Opacity(alpha).Translate(0, rise).Children(func() {
-		if pk := o.panelKind(); pk != panelNone {
+		if pk := o.panelKind(); pk != panelNone && !sending {
 			o.panelV2(c, pk, kind)
 		}
 		// Close, the pill, and on the right the same room again, so the
@@ -234,6 +241,9 @@ func (o *overlay) viewV2(c *ui.Context) {
 		})
 	})
 
+	if !still && (sending || now.Sub(o.v2.motion.changedAt) < v2MorphDuration) {
+		c.After(16 * time.Millisecond)
+	}
 	switch v.Phase {
 	case session.Recording, session.Preparing, session.Finalizing, session.Cleaning, session.Inserting:
 		if !still {
@@ -317,89 +327,162 @@ func (o *overlay) v2Close(c *ui.Context, reveal, can bool) bool {
 
 // v2Pill builds the status and live transcript. The trigger key ends recording.
 func (o *overlay) v2Pill(c *ui.Context, kind int, label string, canExpand bool) {
-	inline := o.v2Inline(kind)
-	labelW, _ := c.MeasureText(0, ui.Span{Text: label, Size: v2FontSize, Weight: 500})
-	textW := float32(0)
-	if inline != "" {
-		textW, _ = c.MeasureText(0, ui.Span{Text: inline, Size: v2FontSize, Weight: 400})
+	now, still := c.Now(), c.Preferences().ReduceMotion
+	m := &o.v2.motion
+	sending := o.v2Sending()
+	key, text, widthText := o.v2Caption(kind)
+	m.caption(key, text, now, still)
+	labelW, _ := c.MeasureText(0, ui.Span{Text: widthText, Size: v2FontSize, Weight: 500})
+	labelW = float32(math.Ceil(float64(labelW)))
+	if sending {
+		labelW = max(84, labelW)
 	}
-	// The words take what the window leaves, up to 20 em: the fixed parts
-	// of the pill and Close's room on both sides come off first.
+	inline := o.v2Inline(kind)
+	if inline != "" {
+		m.inline = inline
+		m.inlineWidth, _ = c.MeasureText(0, ui.Span{Text: inline, Size: v2FontSize, Weight: 400})
+	}
 	fixed := float32(2*v2Inset+2*v2Pad+v2Mark+v2Gap) + labelW
 	textCap := max(0, min(v2LiveMax, overlayV2W-2*(v2Hit+v2CloseGap-v2HitOut)-fixed-(v2Gap+1+v2TextPad)))
-	liveTarget := float32(0)
+	liveTarget, liveAlpha, markTarget, toolsTarget := float32(0), float32(0), float32(v2Mark+v2Gap), float32(0)
 	if inline != "" {
-		liveTarget = v2Gap + 1 + v2TextPad + min(textW+1, textCap)
+		liveTarget = v2Gap + 1 + v2TextPad + min(m.inlineWidth+1, textCap)
+		liveAlpha = 1
 	}
-
+	if kind == v2Transcribing || kind == v2Cleaning {
+		liveAlpha = .5
+	}
+	if inline == "" {
+		liveAlpha = 0
+	}
+	if sending {
+		markTarget = 0
+		toolsTarget = 66
+	}
 	pill := ui.Row(c.Key("v2pill")).Height(v2H).Radius(v2H/2).Padding(0, v2Inset).AlignItems(ui.Center).
-		Gradient(v2Indigo, v2IndigoEnd, 135).Border(0.5, ui.RGBA(255, 255, 255, 0.11)).
-		Shadow(0, 10, 24, -8, ui.RGBA(20, 27, 56, 0.44)).Label(T("v2Group"))
+		Gradient(v2Indigo, v2IndigoEnd, 135).InsetShadow(0, 1, 0, 0, ui.RGBA(255, 255, 255, .11)).
+		Shadow(0, 10, 24, -8, ui.RGBA(20, 27, 56, .44)).Label(T("v2Group"))
+	m.labelWidth = pill.AnimateWith("label-width", labelW, v2MorphDuration, v2MorphEase)
+	m.markWidth = pill.AnimateWith("mark-width", markTarget, v2MorphDuration, v2MorphEase)
+	m.liveWidth = pill.AnimateWith("live-width", liveTarget, v2MorphDuration, v2MorphEase)
+	m.liveAlpha = pill.AnimateWith("live-alpha", liveAlpha, 240*time.Millisecond, ui.EaseInOut)
+	m.toolsWidth = pill.AnimateWith("tools-width", toolsTarget, v2MorphDuration, v2MorphEase)
+	toolsAlpha := float32(0)
+	if sending {
+		toolsAlpha = 1
+	}
+	m.toolsAlpha = pill.AnimateWith("tools-alpha", toolsAlpha, 240*time.Millisecond, ui.EaseInOut)
+	m.toolsReveal = pill.AnimateWith("tools-reveal", toolsAlpha, 400*time.Millisecond, v2MorphEase)
+	mark := v2MarkOf(kind)
+	if mark == markBars && !sending {
+		m.barKind = kind
+	}
+	for i := range m.markWeight {
+		target := float32(0)
+		if i == mark && !sending {
+			target = 1
+		}
+		m.markWeight[i] = pill.AnimateWith(struct{ Mark int }{i}, target, 220*time.Millisecond, ui.EaseInOut)
+		m.markReveal[i] = pill.AnimateWith(struct{ MarkTransform int }{i}, target, 360*time.Millisecond, v2MorphEase)
+	}
+	// Recording uses real, smoothed audio levels; their displayed heights flatten
+	// continuously when finalizing, rather than restarting as a different waveform.
+	dt := now.Sub(o.levelAt).Seconds()
+	o.levelAt = now
+	for i, target := range o.v.Levels {
+		if !session.Voiced(target) {
+			target = 0
+		}
+		tau := .09
+		if target > o.levels[i] {
+			tau = .035
+		}
+		blend := float32(1 - math.Exp(-min(dt, .05)/tau))
+		if still {
+			blend = 1
+		}
+		o.levels[i] += (target - o.levels[i]) * blend
+	}
+	for i := range m.barHeight {
+		target := float32(6)
+		duration := 360 * time.Millisecond
+		if m.barKind == v2Listening || m.barKind == v2Quiet {
+			target = 5 + 13*min(1, o.levels[session.Levels-5+i])
+			duration = 90 * time.Millisecond
+		}
+		m.barHeight[i] = pill.AnimateWith(struct{ Bar int }{i}, target, duration, v2MorphEase)
+	}
+	m.kind = kind
+	pill.DrawOver(func(_ *ui.Painter, r ui.Rect) { m.bounds = r; m.paintAt = now })
 	pill.Children(func() {
-		body := ui.Row(c.Key("v2body")).Height(v2H).Radius(v2H/2).Padding(0, v2Pad).AlignItems(ui.Center).
-			Label(label)
+		body := ui.Row(c.Key("v2body")).Height(v2H).Radius(v2H/2).Padding(0, v2Pad).AlignItems(ui.Center).Label(label)
 		if canExpand {
 			body.Role(ui.RoleButton).Expanded(o.expanded).Cursor(ui.CursorPointer)
 			if body.Clicked() {
-				// After this frame: resizing the window is not part of building it.
-				go o.win.Update(func() {
-					o.expanded = !o.expanded
-					o.place()
-				})
+				go o.win.Update(func() { o.expanded = !o.expanded; o.place() })
 			}
 		}
 		body.Children(func() {
-			ui.Box(c.Key("v2mark")).Size(v2Mark, 18).Draw(func(p *ui.Painter, r ui.Rect) { o.v2DrawMark(c, p, r, kind) })
-			ui.Box(c).Width(v2Gap).Height(1)
-			ui.Text(c, label).FontSize(v2FontSize).FontWeight(500).TextColor(v2Ink).MaxLines(1).MinWidth(31).Shrink(1)
-			// The words: their box opens smoothly to fit them, the newest
-			// revealed as it opens; at the cap they move to keep the newest
-			// in view. Empty, it takes no room at all.
-			live := ui.Box(c.Key("v2live")).Height(v2H).Shrink(0)
-			w := live.Animate("w", liveTarget, 180*time.Millisecond)
-			inner := max(0, w-(v2Gap+1+v2TextPad))
-			shiftTarget := max(0, textW-min(textW+1, textCap))
-			shift := live.Animate("shift", shiftTarget, 160*time.Millisecond)
-			dim := kind == v2Transcribing || kind == v2Cleaning
-			live.Width(w).Draw(func(p *ui.Painter, r ui.Rect) {
-				if r.W < 0.5 || inline == "" {
-					return
-				}
-				a := min(1, r.W/(v2Gap+1+v2TextPad))
-				cy := r.Y + r.H/2
-				p.Fill(ui.Rect{X: r.X + v2Gap, Y: cy - 7, W: 1, H: 14}, ui.RGBA(247, 250, 255, 0.22*a), 0)
-				col := ui.RGBA(247, 250, 255, 0.84*a)
-				if dim {
-					col = ui.RGBA(247, 250, 255, 0.42*a)
-				}
-				span := ui.Span{Text: inline, Size: v2FontSize, Weight: 400, Color: col}
-				_, th := p.MeasureText(0, span)
-				box := ui.Rect{X: r.X + v2Gap + 1 + v2TextPad, Y: r.Y, W: inner, H: r.H}
-				p.Clip(box, 0, func() {
-					p.RichText(box.X-shift, cy-th/2, 0, span)
-				})
-				if shift > 0.5 {
-					// The oldest words fade out at the edge, into the pill.
-					p.FillGradient(ui.Rect{X: box.X, Y: cy - th/2, W: 18, H: th},
-						ui.LinearGradient{From: ui.Hex("#262d66"), To: ui.RGBA(38, 45, 102, 0), Angle: 90}, 0)
+			ui.Box(c.Key("v2mark")).Size(m.markWidth, 18).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) {
+				r.W = v2Mark
+				for i, a := range m.markWeight {
+					if a < .001 {
+						continue
+					}
+					k := m.barKind
+					switch i {
+					case markStar:
+						k = v2Cleaning
+					case markOK:
+						k = v2Done
+					case markDash:
+						k = v2Retained
+					case markErr:
+						k = v2Failed
+					}
+					reveal := m.markReveal[i]
+					scale := .8 + .2*reveal
+					p.Transform(ui.Scaling(scale, scale).Then(ui.Translation(0, 3*(1-reveal))), r.X+r.W/2, r.Y+r.H/2, func() { o.v2DrawMark(c, p, r, k, a) })
 				}
 			})
+			ui.Box(c.Key("v2label")).Size(m.labelWidth, v2H).Shrink(0).Draw(func(p *ui.Painter, r ui.Rect) { m.drawCaption(p, r, now) })
+			live := ui.Box(c.Key("v2live")).Size(m.liveWidth, v2H).Shrink(0)
+			shiftTarget := max(0, m.inlineWidth-min(m.inlineWidth+1, textCap))
+			shift := live.Animate("shift", shiftTarget, 160*time.Millisecond)
+			live.Draw(func(p *ui.Painter, r ui.Rect) {
+				if r.W < .5 || m.liveAlpha < .001 || m.inline == "" {
+					return
+				}
+				a := min(1, r.W/(v2Gap+1+v2TextPad)) * m.liveAlpha
+				cy := r.Y + r.H/2
+				p.Clip(r, 0, func() {
+					p.Fill(ui.Rect{X: r.X + v2Gap, Y: cy - 7, W: 1, H: 14}, ui.RGBA(247, 250, 255, .22*a), 0)
+					span := ui.Span{Text: m.inline, Size: v2FontSize, Weight: 400, Color: ui.RGBA(247, 250, 255, .84*a)}
+					_, h := p.MeasureText(0, span)
+					box := ui.Rect{X: r.X + v2Gap + 1 + v2TextPad, Y: r.Y, W: max(0, r.W-(v2Gap+1+v2TextPad)), H: r.H}
+					p.Clip(box, 0, func() { p.RichText(box.X-shift, cy-h/2, 0, span) })
+					if shift > .5 {
+						p.FillGradient(ui.Rect{X: box.X, Y: cy - h/2, W: 18, H: h}, ui.LinearGradient{From: ui.Hex("#262d66").Alpha(a), To: ui.RGBA(38, 45, 102, 0), Angle: 90}, 0)
+					}
+				})
+			})
 		})
-
+		o.v2SendTools(c, m.toolsWidth, m.toolsAlpha, m.toolsReveal)
 	})
 }
 
 // v2DrawMark paints the 27×18 slot: five bars while working, the mint star
 // while tidying, then a check, a dash or an exclamation mark.
-func (o *overlay) v2DrawMark(c *ui.Context, p *ui.Painter, r ui.Rect, kind int) {
+func (o *overlay) v2DrawMark(c *ui.Context, p *ui.Painter, r ui.Rect, kind int, alpha float32) {
 	still := c.Preferences().ReduceMotion
 	t := float64(c.Now().UnixMilli()) / 1000
 	cx, cy := r.X+r.W/2, r.Y+r.H/2
 	bar := func(i int, h, a float32) {
-		col := ui.RGBA(247, 250, 255, a)
+		col := ui.RGBA(247, 250, 255, a*alpha)
 		if i == 4 {
-			col = ui.RGBA(105, 231, 195, a)
+			col = ui.RGBA(105, 231, 195, a*alpha)
 		}
+		h = o.v2.motion.barHeight[i]
 		x := r.X + float32(i)*6
 		p.Fill(ui.Rect{X: x, Y: cy - h/2, W: 3, H: h}, col, 1.5)
 	}
@@ -409,22 +492,6 @@ func (o *overlay) v2DrawMark(c *ui.Context, p *ui.Painter, r ui.Rect, kind int) 
 		case v2Listening, v2Quiet:
 			// The newest five levels, smoothed between audio callbacks; in
 			// silence the bars settle into short still strokes.
-			dt := c.Now().Sub(o.levelAt).Seconds()
-			o.levelAt = c.Now()
-			for i, target := range o.v.Levels {
-				if !session.Voiced(target) {
-					target = 0
-				}
-				tau := 0.09
-				if target > o.levels[i] {
-					tau = 0.035
-				}
-				blend := float32(1 - math.Exp(-min(dt, 0.05)/tau))
-				if still {
-					blend = 1
-				}
-				o.levels[i] += (target - o.levels[i]) * blend
-			}
 			for i := range 5 {
 				l := o.levels[session.Levels-5+i]
 				if l > 0.005 {
@@ -448,16 +515,16 @@ func (o *overlay) v2DrawMark(c *ui.Context, p *ui.Painter, r ui.Rect, kind int) 
 			}
 		}
 	case markStar:
-		v2DrawStar(p, r, t, still)
+		v2DrawStar(p, r, t, still, alpha)
 	case markOK:
 		k := float32(1)
 		check := (&ui.Path{}).MoveTo(cx+(3.5-8)*k, cy+(8.4-8)*k).LineTo(cx+(6.5-8)*k, cy+(11.4-8)*k).LineTo(cx+(12.5-8)*k, cy+(5-8)*k)
-		p.StrokePath(check, 1.8, v2Mint)
+		p.StrokePath(check, 1.8, v2Mint.Alpha(alpha))
 	case markDash:
-		p.Line(cx-4, cy, cx+4, cy, 1.8, v2Muted)
+		p.Line(cx-4, cy, cx+4, cy, 1.8, v2Muted.Alpha(alpha))
 	case markErr:
-		p.Fill(ui.Rect{X: cx - 0.9, Y: cy - 5.9, W: 1.8, H: 7.1}, v2ErrMark, 0.9)
-		p.Fill(ui.Rect{X: cx - 0.9, Y: cy + 3.5, W: 1.8, H: 1.8}, v2ErrMark, 0.9)
+		p.Fill(ui.Rect{X: cx - 0.9, Y: cy - 5.9, W: 1.8, H: 7.1}, v2ErrMark.Alpha(alpha), 0.9)
+		p.Fill(ui.Rect{X: cx - 0.9, Y: cy + 3.5, W: 1.8, H: 1.8}, v2ErrMark.Alpha(alpha), 0.9)
 	}
 }
 
@@ -465,7 +532,7 @@ func (o *overlay) v2DrawMark(c *ui.Context, p *ui.Painter, r ui.Rect, kind int) 
 // rest. Each 1.6 s it turns in from −15°, opens from 78% to full size with
 // a soft glow, eases back slightly, then gathers again. With less motion
 // it stands still at full size, without the glow.
-func v2DrawStar(p *ui.Painter, r ui.Rect, t float64, still bool) {
+func v2DrawStar(p *ui.Painter, r ui.Rect, t float64, still bool, weight float32) {
 	ox, oy := r.X+(r.W-27)/2, r.Y+(r.H-18)/2
 	star := func() *ui.Path {
 		pt := func(x, y float32) (float32, float32) { return ox + x, oy + y }
@@ -491,7 +558,7 @@ func v2DrawStar(p *ui.Painter, r ui.Rect, t float64, still bool) {
 	}()
 	cx, cy := ox+13.5, oy+9
 	if still {
-		p.FillPath(star, v2Mint)
+		p.FillPath(star, v2Mint.Alpha(weight))
 		return
 	}
 	// The mock's keyframes: 0% and 100% gathered, 42% open and glowing,
@@ -512,11 +579,11 @@ func v2DrawStar(p *ui.Painter, r ui.Rect, t float64, still bool) {
 	scale, rot, alpha, glow := mix(a.scale, b.scale), mix(a.rot, b.rot), mix(a.alpha, b.alpha), mix(a.glow, b.glow)
 	if glow > 0.01 {
 		p.Transform(ui.Scaling(scale*1.22, scale*1.22).Then(ui.Rotation(rot)), cx, cy, func() {
-			p.FillPath(star, ui.RGBA(105, 231, 195, 0.28*glow))
+			p.FillPath(star, ui.RGBA(105, 231, 195, 0.28*glow*weight))
 		})
 	}
 	p.Transform(ui.Scaling(scale, scale).Then(ui.Rotation(rot)), cx, cy, func() {
-		p.FillPath(star, ui.RGBA(105, 231, 195, alpha))
+		p.FillPath(star, ui.RGBA(105, 231, 195, alpha*weight))
 	})
 }
 

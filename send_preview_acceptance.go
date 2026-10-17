@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-	"voiceinput/internal/config"
 	"voiceinput/internal/macos"
 	"voiceinput/internal/session"
 )
@@ -21,7 +20,15 @@ func (a *app) startSendPreviewAcceptance() {
 	if dir == "" {
 		return
 	}
+	// Use the production Escape listener, without binding dictation or DJI inputs.
+	stopEscape, escapeErr := macos.StartHotkey("", nil, nil, a.cancelInput)
+	if escapeErr != nil {
+		os.WriteFile(filepath.Join(dir, "escape-error.txt"), []byte(escapeErr.Error()), 0600)
+	}
 	go func() {
+		if stopEscape != nil {
+			defer stopEscape()
+		}
 		last := ""
 		for !a.quitting {
 			data, _ := os.ReadFile(filepath.Join(dir, "preview-command"))
@@ -37,9 +44,14 @@ func (a *app) startSendPreviewAcceptance() {
 					b, _ := json.Marshal(map[string]any{"bundleID": target.BundleID, "command": cmd})
 					os.WriteFile(filepath.Join(dir, "preview-target.json"), b, 0600)
 					valid := target.BundleID == "dev.steve.voice-input.acceptance-fixture"
+					var fixtureTarget *macos.Target
+					if valid {
+						fixtureTarget = target.Retain()
+					}
 					target.Release()
 					if valid {
 						go func() {
+							defer fixtureTarget.Release()
 							delay := 2 * time.Second
 							if cmd == "start-slow" || cmd == "flow-slow" {
 								delay = 30 * time.Second
@@ -52,6 +64,11 @@ func (a *app) startSendPreviewAcceptance() {
 										o.v = session.View{Phase: phase, Final: "好的，我们明天下午三点见。"}
 										if phase == session.Preparing {
 											o.sendFinished = false
+											o.closing = false
+											a.sendPreview.exiting = false
+											if !o.win.IsVisible() {
+												o.v2 = v2State{}
+											}
 											o.classic = false
 											o.expanded = false
 											o.area = mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
@@ -63,19 +80,22 @@ func (a *app) startSendPreviewAcceptance() {
 										close(done)
 									})
 									<-done
-									time.Sleep(800 * time.Millisecond)
+									pause := 800 * time.Millisecond
+									if cmd == "flow-fast" {
+										pause = 100 * time.Millisecond
+									}
+									time.Sleep(pause)
 								}
 							}
-							cfg := config.DefaultAutoSend()
-							cfg.Enabled = cmd != "input-only"
-							res, err := macos.Insert("好的，我们明天下午三点见。", macos.InsertOptions{RestoreDelayMs: 200, AutoSend: cfg, BeforeSend: func(t *macos.Target) bool {
-								return a.sendPreview.wait(context.Background(), "好的，我们明天下午三点见。", t, delay, func(string) {})
-							}})
-							if res.Target != nil {
-								res.Target.Release()
-								res.Target = nil
+							// Scope all acceptance writes to the already captured fixture AX field.
+							// Never synthesize global paste/Enter: another foreground app may be in use.
+							original, readable := fixtureTarget.ReadValue()
+							inserted := readable && fixtureTarget.ReplaceValue(original, "好的，我们明天下午三点见。")
+							send := false
+							if inserted && cmd != "input-only" && cmd != "flow-input-only" {
+								send = a.sendPreview.wait(context.Background(), "好的，我们明天下午三点见。", fixtureTarget, delay, func(string) {})
 							}
-							b, _ := json.Marshal(map[string]any{"result": res, "error": err})
+							b, _ := json.Marshal(map[string]any{"command": cmd, "inserted": inserted, "sendDecision": send, "inputMethod": "captured-fixture-AX", "sendKeyDispatched": false})
 							os.WriteFile(filepath.Join(dir, "preview-result.json"), b, 0600)
 						}()
 					}
@@ -83,14 +103,27 @@ func (a *app) startSendPreviewAcceptance() {
 			}
 			a.sendPreview.win.Update(func() {
 				p := a.sendPreview
-				b, _ := json.Marshal(map[string]any{"phase": a.overlay.v.Phase, "windowVisible": p.win.IsVisible(), "visible": p.visible, "pending": p.pending, "text": p.draft, "bounds": p.win.Bounds(), "window": fmt.Sprint(p.win.NativeHandle()), "overlayWindow": fmt.Sprint(a.overlay.win.NativeHandle()), "capsuleBottom": p.win.Bounds().Y + p.win.Bounds().Height - a.overlay.room})
+				captions := []map[string]any{}
+				for _, layer := range a.overlay.v2.motion.captions {
+					alpha, y := layer.sample(time.Now())
+					captions = append(captions, map[string]any{"text": layer.text, "alpha": alpha, "y": y, "leaving": layer.leaving})
+				}
+				b, _ := json.Marshal(map[string]any{"phase": a.overlay.v.Phase, "windowVisible": p.win.IsVisible(), "visible": p.visible, "pending": p.pending, "text": p.draft, "bounds": p.win.Bounds(), "window": fmt.Sprint(p.win.NativeHandle()), "overlayWindow": fmt.Sprint(a.overlay.win.NativeHandle()), "capsuleBottom": p.win.Bounds().Y + p.win.Bounds().Height - a.overlay.room,
+					"exiting": p.exiting, "at": time.Now().UnixMilli(), "motion": map[string]any{
+						"kind": a.overlay.v2.motion.kind, "paintAt": a.overlay.v2.motion.paintAt.UnixMilli(),
+						"pill": a.overlay.v2.motion.bounds, "labelWidth": a.overlay.v2.motion.labelWidth,
+						"liveWidth": a.overlay.v2.motion.liveWidth, "markWidth": a.overlay.v2.motion.markWidth,
+						"toolsWidth": a.overlay.v2.motion.toolsWidth, "toolsAlpha": a.overlay.v2.motion.toolsAlpha,
+						"liveAlpha": a.overlay.v2.motion.liveAlpha, "markWeights": a.overlay.v2.motion.markWeight,
+						"barHeight": a.overlay.v2.motion.barHeight, "captions": captions, "opacity": a.overlay.opacity(time.Now()),
+					}})
 				os.WriteFile(filepath.Join(dir, "preview-state.json"), b, 0600)
 				if f, err := os.OpenFile(filepath.Join(dir, "timeline.jsonl"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600); err == nil {
 					f.Write(append(b, '\n'))
 					f.Close()
 				}
 			})
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(20 * time.Millisecond)
 		}
 	}()
 }
