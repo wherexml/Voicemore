@@ -6,7 +6,8 @@ import Foundation
 let output = URL(fileURLWithPath: CommandLine.arguments.dropFirst().first ?? "resources/symbols", isDirectory: true)
 try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
 let pixels = 128
-for name in ["doc.on.doc", "trash"] {
+let names = Array(CommandLine.arguments.dropFirst(2))
+for name in names.isEmpty ? ["doc.on.doc", "trash", "arrow.clockwise"] : names {
     guard let symbol = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
         .withSymbolConfiguration(.init(pointSize: 16, weight: .regular, scale: .medium)),
         let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,

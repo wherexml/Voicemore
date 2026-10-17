@@ -19,9 +19,9 @@ Idle/current panels show the current version and check action without an automat
 
 ## Refresh icon
 
-The idle/current and retry states use a dedicated 24 px rail icon with a 1.2-unit stroke in a 16-unit viewBox, matching the Settings control. The clockwise arc ends exactly at the arrow tip (13, 5.5), with a clear opening below it. Rounded caps and joins stay consistent with the rail. Model-list refresh keeps its separate compact icon.
+The idle/current and retry states use Apple's original SF Symbols `arrow.clockwise`, exported from macOS with Regular weight and Medium scale. The visible icon is 16×16 DIP, centered in the existing rail control; the click target remains unchanged. The 128×128 white alpha mask is tinted with the current theme color, including the existing retry accent. See [system symbol assets](../../resources/symbols/README.md) for the reproducible export command. Model-list refresh keeps its separate compact icon; download/progress states keep their existing indicators.
 
-Visual acceptance: inspect the idle icon at native display scale, open its popover, close with Escape, and confirm the icon remains centered above Settings without a detached arrow or heavy junction. Save a native screenshot locally under `artifacts/update-ui/`.
+Visual acceptance: build and launch the locally signed app, inspect the idle icon at native display scale, open its popover, close with Escape, and confirm the smaller system symbol remains centered above Settings. Save a native screenshot locally under `artifacts/update-ui/`. The screenshot and a short result record are local evidence, not repository assets.
 
 ## Repeatable native E2E
 

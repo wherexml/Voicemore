@@ -15,13 +15,12 @@ func railIcon(body string) *ui.SVG {
 }
 
 var (
-	icAllApps    = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.8"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.8"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.8"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.8"/></svg>`))
-	railHome     = railIcon(`<path d="M2.6 7.6L8 2.9l5.4 4.7M4.1 6.6v6.3h7.8V6.6"/>`)
-	railHistory  = railIcon(`<circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/>`)
-	railDict     = railIcon(`<path d="M3 2.6h8.2a1.8 1.8 0 0 1 1.8 1.8v9H4.6A1.6 1.6 0 0 1 3 11.8z"/><path d="M3 11.8a1.6 1.6 0 0 1 1.6-1.6H13M6 5.6h4"/>`)
-	railSettings = railIcon(`<path d="M3 5.6h10M3 10.4h10"/>`) // two plain strokes
-	// The arc meets the arrow tip exactly; keep the rail stroke at 1.2 units.
-	railUpdate = railIcon(`<path d="M13 5.5C12.1 3.7 10.3 2.7 8.3 2.7C5.35 2.7 3 5.05 3 8s2.35 5.3 5.3 5.3c2.65 0 4.7-1.9 5.2-4.3M13 2.3v3.2H9.8"/>`)
+	icAllApps                   = ui.MustParseSVG([]byte(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3.5" y="3.5" width="6.5" height="6.5" rx="1.8"/><rect x="14" y="3.5" width="6.5" height="6.5" rx="1.8"/><rect x="3.5" y="14" width="6.5" height="6.5" rx="1.8"/><rect x="14" y="14" width="6.5" height="6.5" rx="1.8"/></svg>`))
+	railHome                    = railIcon(`<path d="M2.6 7.6L8 2.9l5.4 4.7M4.1 6.6v6.3h7.8V6.6"/>`)
+	railHistory                 = railIcon(`<circle cx="8" cy="8" r="6"/><path d="M8 4.6V8l2.3 1.5"/>`)
+	railDict                    = railIcon(`<path d="M3 2.6h8.2a1.8 1.8 0 0 1 1.8 1.8v9H4.6A1.6 1.6 0 0 1 3 11.8z"/><path d="M3 11.8a1.6 1.6 0 0 1 1.6-1.6H13M6 5.6h4"/>`)
+	railSettings                = railIcon(`<path d="M3 5.6h10M3 10.4h10"/>`) // two plain strokes
+	railUpdate   ui.ImageSource = actionSymbol(updateSymbolPNG)
 
 	icBack    = icon(`<path d="M10 4L6 8l4 4"/>`)
 	icUp      = icon(`<path d="M4 10l4-4 4 4"/>`)
