@@ -100,6 +100,11 @@ func (o *overlay) sync() {
 			}
 		}
 		if v.Phase == session.Preparing || v.Phase == session.Failed {
+			if o.a.sendPreview != nil {
+				o.a.sendPreview.exiting = false
+			}
+		}
+		if v.Phase == session.Preparing || v.Phase == session.Failed {
 			o.sendFinished = false
 		}
 		if o.sendFinished {
@@ -111,21 +116,7 @@ func (o *overlay) sync() {
 			if o.closing || !o.win.IsVisible() {
 				return
 			}
-			o.closing = true
-			o.fade(0)
-			id := o.fadeID
-			go func() {
-				time.Sleep(180 * time.Millisecond)
-				o.win.Update(func() {
-					if o.closing && o.fadeID == id {
-						o.followID++
-						o.win.Hide()
-						o.v = session.View{}
-						o.expanded = false
-						o.closing = false
-					}
-				})
-			}()
+			o.hideAfterFade(nil)
 			return
 		}
 		o.v = v
@@ -189,7 +180,7 @@ func (o *overlay) follow(id uint64) {
 
 // Retarget from the currently displayed opacity, so a rapid restart never jumps.
 func (o *overlay) opacity(now time.Time) float32 {
-	t := min(1, max(0, float32(now.Sub(o.fadeAt).Seconds()/0.18)))
+	t := min(1, max(0, float32(now.Sub(o.fadeAt).Seconds()/0.22)))
 	t = 1 - (1-t)*(1-t)*(1-t)
 	return o.fadeFrom + (o.fadeTo-o.fadeFrom)*t
 }
@@ -198,6 +189,28 @@ func (o *overlay) fade(to float32) {
 	o.fadeFrom, o.fadeTo = o.opacity(now), to
 	o.fadeAt = now
 	o.fadeID++
+}
+
+// A generation check protects a new dictation or countdown from an old exit.
+func (o *overlay) hideAfterFade(after func()) {
+	o.closing = true
+	o.fade(0)
+	id := o.fadeID
+	time.AfterFunc(220*time.Millisecond, func() {
+		o.win.Update(func() {
+			if !o.closing || o.fadeID != id {
+				return
+			}
+			o.followID++
+			o.win.Hide()
+			o.v = session.View{}
+			o.expanded = false
+			o.closing = false
+			if after != nil {
+				after()
+			}
+		})
+	})
 }
 
 // place sizes the window for what it shows and keeps the capsule still.
@@ -276,8 +289,12 @@ func panelHeight(kind int) int {
 }
 
 func (o *overlay) view(c *ui.Context) {
-	if p := o.a.sendPreview; p != nil && p.visible {
-		p.view(c)
+	if p := o.a.sendPreview; p != nil && (p.visible || p.exiting) {
+		if !o.classic {
+			o.viewV2(c)
+		} else {
+			p.view(c)
+		}
 		return
 	}
 	if !o.classic {

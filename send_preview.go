@@ -16,6 +16,8 @@ type sendPreviewWindow struct {
 	a                *app
 	win              *mygo.Window
 	visible, pending bool
+	exiting          bool
+	exitRemain       float64
 	draft            string
 	target           *macos.Target
 	end              time.Time
@@ -67,7 +69,13 @@ func (p *sendPreviewWindow) close() {
 	if wasVisible {
 		p.a.overlay.sendFinished = true
 		p.a.overlay.followID++
-		p.win.Hide()
+		if p.a.overlay.classic {
+			p.win.Hide()
+		} else {
+			p.exitRemain = max(0, time.Until(p.end).Seconds())
+			p.exiting = true
+			p.a.overlay.hideAfterFade(func() { p.exiting = false })
+		}
 	}
 	if p.target != nil {
 		p.target.Release()
@@ -93,8 +101,12 @@ func (p *sendPreviewWindow) wait(ctx context.Context, text string, target *macos
 		p.end = time.Now().Add(delay)
 		o := p.a.overlay
 		o.sendFinished = false
+		p.exiting = false
+		o.closing = false
+		o.fade(1)
 		// Keep the existing window, bounds and bottom anchor throughout the run.
 		if !p.win.IsVisible() {
+			o.v2 = v2State{}
 			o.area = mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
 			o.expanded = false
 			o.place()
