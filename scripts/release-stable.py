@@ -51,6 +51,7 @@ def submit(work, name, path, profile):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--candidate', type=Path)
+    p.add_argument('--source-ref', help='Committed source for an existing candidate; publication requires it already on the remote default branch')
     p.add_argument('--output-parent', type=Path, default=Path.home() / 'Library/Caches/voicemore-release')
     p.add_argument('--keychain-profile', default='voicemore-skylance')
     p.add_argument('--publish', action='store_true')
@@ -59,6 +60,8 @@ def main():
     p.add_argument('--verify-only', action='store_true', help='Verify existing candidate without publishing')
     p.add_argument('--cache-dir', type=Path, default=runtime_cache.DEFAULT_CACHE)
     a = p.parse_args()
+    if a.source_ref and not a.candidate:
+        p.error('--source-ref requires --candidate')
     if a.verify_only and (not a.candidate or a.publish):
         p.error('--verify-only requires --candidate and cannot publish')
     if a.full_e2e and not a.e2e and (a.publish or a.verify_only):
@@ -102,16 +105,17 @@ def main():
     final = read(work / 'final-candidate.json')
     dmg = Path(final['dmg'])
     version = c['version']
-    config = json.loads(subprocess.check_output(['git', 'show', 'HEAD:mygo.json']))
+    source_commit = subprocess.check_output(['git', 'rev-parse', '--verify', (a.source_ref or 'HEAD') + '^{commit}'], text=True).strip()
+    config = json.loads(subprocess.check_output(['git', 'show', source_commit + ':mygo.json']))
     if version != config['version']:
         raise SystemExit('Candidate version differs from source.')
     for rel, digest in c['source_sha256'].items():
         if rel == 'CHANGELOG.md':
             continue  # Release notes are not compiled into the application.
-        committed = subprocess.check_output(['git', 'show', 'HEAD:' + rel])
+        committed = subprocess.check_output(['git', 'show', source_commit + ':' + rel])
         if hashlib.sha256(committed).hexdigest() != digest:
             raise SystemExit('Candidate differs from committed source: ' + rel)
-    names = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', 'HEAD'], text=True).splitlines()
+    names = subprocess.check_output(['git', 'ls-tree', '-r', '--name-only', source_commit], text=True).splitlines()
     compiled = {n for n in names if n.endswith('.go') or n in ('go.mod', 'go.sum', 'mygo.json') or n.startswith(('internal/', 'resources/'))}
     if compiled != set(c['source_sha256']) - {'CHANGELOG.md'}:
         raise SystemExit('Committed source inventory differs from candidate.')
@@ -130,7 +134,7 @@ def main():
             raise SystemExit(name + ' notarization not accepted.')
     if not prepared:
         run(ROOT / 'scripts/verify-distribution.sh', app, dmg, work / 'publish-evidence')
-    verification = dict(version=version, dmg_sha256=sha(dmg), status='passed', mode='full-e2e' if report else 'artifact', runtime_cache_hit=c.get('runtime_cache_hit', False))
+    verification = dict(version=version, commit=source_commit, dmg_sha256=sha(dmg), status='passed', mode='full-e2e' if report else 'artifact', runtime_cache_hit=c.get('runtime_cache_hit', False))
     (work / 'verification.json').write_text(json.dumps(verification, indent=2) + '\n')
     if a.verify_only:
         print('PASS: automatic release verification; no publication performed.')
@@ -163,7 +167,7 @@ def main():
         raise SystemExit('Updater key does not match pinned public key.')
     signature = key.sign(bytes.fromhex(sha(archive)))
     Ed25519PublicKey.from_public_bytes(public).verify(signature, bytes.fromhex(sha(archive)))
-    changelog = subprocess.check_output(['git', 'show', 'HEAD:CHANGELOG.md'], text=True)
+    changelog = subprocess.check_output(['git', 'show', source_commit + ':CHANGELOG.md'], text=True)
     notes = changelog.split('## ' + version + '\n', 1)[1].split('\n## ', 1)[0].strip()
     manifest = dict(version=version, notes=notes, date=datetime.now(timezone.utc).isoformat(), url=f'https://github.com/{REPO}/releases/download/{tag}/{archive.name}', size=archive.stat().st_size, signature=base64.b64encode(signature).decode())
     manifest_path = stage / 'update-darwin-arm64.json'
@@ -172,14 +176,22 @@ def main():
     checksums.write_text(''.join(f'{sha(f)}  {f.name}\n' for f in (target, archive, manifest_path)))
     notes_file = work / 'release-notes.md'
     notes_file.write_text(notes + '\n\nApple Silicon / macOS 26.2+. Developer ID signed and Apple notarized, with stapled app and DMG tickets. Update archive authenticated with the existing Ed25519 key.\n\n首次安装下载 DMG，拖入 Applications。此版本已完成 Developer ID 正式签名与 Apple 公证。由开发签名旧版升级后，macOS 可能要求重新确认麦克风、辅助功能与输入监控权限。\n')
-    head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+    head = source_commit
+    if a.source_ref:
+        # A concurrent main may have moved ahead. Never move it backwards or
+        # publish an unpushed source commit through the explicit-ref path.
+        run('git', 'fetch', '--no-tags', 'origin', 'HEAD')
+        run('git', 'merge-base', '--is-ancestor', head, 'FETCH_HEAD')
     existing = subprocess.run(['git', 'rev-list', '-n', '1', tag], capture_output=True, text=True)
     if existing.returncode == 0:
         if existing.stdout.strip() != head:
-            raise SystemExit('Existing tag differs from HEAD.')
+            raise SystemExit('Existing tag differs from selected source commit.')
     else:
-        run('git', 'tag', '-a', tag, '-m', 'Voicemore ' + version + ' notarized release')
-    run('git', 'push', 'origin', 'HEAD', tag)
+        run('git', 'tag', '-a', tag, head, '-m', 'Voicemore ' + version + ' notarized release')
+    if a.source_ref:
+        run('git', 'push', 'origin', tag)
+    else:
+        run('git', 'push', 'origin', 'HEAD', tag)
     run('gh', 'release', 'create', tag, '--repo', REPO, '--verify-tag', '--draft', '--title', 'Voicemore ' + version, '--notes-file', notes_file, target, archive, manifest_path, checksums)
     # Verify GitHub stored the exact assets before exposing the stable update feed.
     with tempfile.TemporaryDirectory(prefix='voicemore-upload-check-') as temp:
