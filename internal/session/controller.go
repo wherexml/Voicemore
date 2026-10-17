@@ -132,14 +132,25 @@ type run struct {
 	// Read from the settings when the dictation starts.
 	holdCopied bool
 
-	pcm      []byte
-	more     chan struct{} // signals new samples to the sender
-	stopAt   time.Time
-	finalAt  time.Time
-	firstMs  int64
+	pcm     []byte
+	more    chan struct{} // signals new samples to the sender
+	stopAt  time.Time
+	finalAt time.Time
+	firstMs int64
+	text    string // the transcript after the dictionary's rules
+
+	// rec is the run's record. finish prepares it in memory; persist writes
+	// it, once the apps the run touched are known (privacy.go). Until then
+	// note changes it here, afterwards in the history.
 	rec      store.Record
-	recSaved bool
-	text     string // the transcript after the dictionary's rules
+	prepared bool // finish built rec
+	recDone  bool // persist decided: written, or dropped as private
+	recSaved bool // rec is in the history
+	// private is sticky: the app at the start, or the one the text went
+	// to, is a private app. Such a run is never written to the history, as
+	// text or audio, and never observed for dictionary learning.
+	private bool
+	saving  sync.Mutex // held by persist, so that note waits for the write
 
 	// sink, when set, makes this a practice run of the first-run guide:
 	// its transcript is given to the sink instead of being inserted. Such
@@ -371,25 +382,26 @@ func (c *Controller) cancel(practiceOnly bool) {
 	r.cancelled = true
 	c.cur = nil
 	c.view = View{}
-	capture, pcm, saved := r.capture, r.pcm, r.recSaved
+	capture, pcm, prepared := r.capture, r.pcm, r.prepared
+	// An insertion in flight settles the record itself, with the app it
+	// actually reached.
+	inserting := r.inserted && !r.recDone
 	c.mu.Unlock()
 	r.stop()
 	c.stopCapture(r, capture)
 	s := c.Settings.Get()
-	if saved {
-		c.History.Update(r.id, func(rec *store.Record) {
+	switch {
+	case prepared:
+		c.note(r, func(rec *store.Record) {
 			if rec.Status != store.StatusInserted {
 				rec.Status, rec.StatusDetail = store.StatusCancelled, c.tr("detailCancelled")
 			}
 		})
-		c.historyChanged()
-	} else if s.KeepCancelled && len(pcm) > 0 {
-		rec := store.Record{ID: r.id, StartedAt: r.started, DurationMs: pcmMs(pcm), Status: store.StatusCancelled, StatusDetail: c.tr("detailCancelled")}
-		if s.SaveAudio && c.History.WriteWAV(r.id+".wav", pcm) == nil {
-			rec.AudioFile = r.id + ".wav"
+		if !inserting {
+			go c.persist(r, s, nil) // off the caller's thread: it may be the main one
 		}
-		c.History.Add(rec)
-		c.historyChanged()
+	case s.KeepCancelled && len(pcm) > 0:
+		go c.keepCancelled(r, s, pcm)
 	}
 	r.release()
 	c.changed()
@@ -411,6 +423,9 @@ func (c *Controller) Dismiss() {
 	if !observing {
 		r.release()
 	}
+	// A dictation that ends here without inserting (a failed cleanup left
+	// as it is) is settled now; one already written is left alone.
+	go c.persist(r, c.Settings.Get(), nil)
 	c.changed()
 }
 
@@ -429,6 +444,7 @@ func (c *Controller) CopyFailed() {
 	}
 	c.CopyText(text)
 	c.done(r, c.tr("copiedFallback"))
+	go c.persist(r, c.Settings.Get(), nil)
 }
 
 // cleanupOptions is the one cleanup configuration: the dictation's cleanup,
@@ -452,7 +468,7 @@ func (c *Controller) dialer(s config.Settings) (asr.Dialer, error) {
 	if c.ResolveASR != nil {
 		return c.ResolveASR(s)
 	}
-	return asr.Local(s.ASRURL), nil
+	return asr.LocalLanguage(s.ASRURL, config.LocalASRLanguage(s.ASRLanguage)), nil
 }
 
 func pcmMs(pcm []byte) int64 { return int64(len(pcm)) * 1000 / (2 * asr.SampleRate) }
@@ -552,6 +568,7 @@ func (c *Controller) endCue(r *run) {
 // record is the goroutine of a dictation, up to the final transcript.
 func (c *Controller) record(r *run, s config.Settings) {
 	r.target = macos.CaptureTarget()
+	c.markPrivate(r, s, r.target.BundleID)
 	r.rec = store.Record{ID: r.id, StartedAt: r.started, TargetApp: r.target.AppName, TargetBundleID: r.target.BundleID, ASRModel: providers.ModelName(providers.KindASR, s), CleanupRequested: r.cleanup, Status: store.StatusFailed}
 
 	switch macos.MicrophoneStatus() {
@@ -679,6 +696,8 @@ func (c *Controller) record(r *run, s config.Settings) {
 	switch err = service.Check(dialCtx); {
 	case errors.Is(err, asr.ErrBusy):
 		err = errors.New(c.tr("asrBusy"))
+	case errors.Is(err, asr.ErrLanguage):
+		err = errors.New(c.tr("asrLanguageOld"))
 	case err != nil:
 		err = errors.New(c.tr("asrUnreachable", service.Label(), cause(err)))
 	}
@@ -824,6 +843,12 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 
 	raw = strings.TrimSpace(raw)
 	text, applied := c.formatTranscript(raw, s)
+	c.mu.Lock()
+	if !c.active(r) {
+		c.mu.Unlock()
+		r.release()
+		return
+	}
 	r.text = text
 	r.rec.DurationMs = pcmMs(pcm)
 	r.rec.RawText, r.rec.AppliedRules = raw, applied
@@ -834,13 +859,6 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 	if !r.stopAt.IsZero() {
 		r.rec.Timing.StopToFinalMs = r.finalAt.Sub(r.stopAt).Milliseconds()
 	}
-	if s.SaveAudio && len(pcm) > 0 {
-		if werr := c.History.WriteWAV(r.id+".wav", pcm); werr == nil {
-			r.rec.AudioFile = r.id + ".wav"
-		} else {
-			r.rec.AudioRemoved = c.tr("detailAudio", werr.Error())
-		}
-	}
 	switch {
 	case err != nil:
 		r.rec.Status, r.rec.StatusDetail = store.StatusFailed, err.Error()
@@ -849,17 +867,18 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 	default:
 		r.rec.Status, r.rec.StatusDetail = store.StatusNotInserted, c.tr("detailProgress")
 	}
-	c.mu.Lock()
-	r.recSaved = true
+	// The record and the recording stay in memory until the apps the run
+	// touched are known: nothing of a private run reaches the disk.
+	r.prepared = true
 	c.mu.Unlock()
-	c.History.Add(r.rec)
-	c.historyChanged()
 
 	switch {
 	case err != nil:
 		c.fail(r, err, text)
+		c.persist(r, s, nil)
 	case text == "":
 		c.done(r, c.tr("noSpeech"))
+		c.persist(r, s, nil)
 	case r.cleanup:
 		c.clean(r, s)
 	default:
@@ -900,7 +919,7 @@ func (c *Controller) clean(r *run, s config.Settings) {
 		return // cancelled meanwhile: the late result is dropped
 	}
 	if err != nil {
-		c.update(r, func(rec *store.Record) {
+		c.note(r, func(rec *store.Record) {
 			rec.CleanupError, rec.Timing.CleanupMs = c.cleanupFailure(err), took
 			rec.CleanupModel = opts.Model
 			rec.StatusDetail = c.cleanupFailure(err)
@@ -914,7 +933,7 @@ func (c *Controller) clean(r *run, s config.Settings) {
 		return
 	}
 	cleaned, _ = textstyle.Apply(cleaned, s.TextStyle, c.Dict.Hotwords())
-	c.update(r, func(rec *store.Record) {
+	c.note(r, func(rec *store.Record) {
 		rec.CleanedText, rec.CleanupError, rec.Timing.CleanupMs = cleaned, "", took
 		rec.CleanupModel = opts.Model
 	})
@@ -949,10 +968,11 @@ func (c *Controller) failedCleanup() *run {
 // insert writes text to the target, once per dictation whatever happens.
 func (c *Controller) insert(r *run, s config.Settings, text string) {
 	if strings.TrimSpace(text) == "" {
-		c.update(r, func(rec *store.Record) {
+		c.note(r, func(rec *store.Record) {
 			rec.Status, rec.StatusDetail = store.StatusNotInserted, c.tr("detailNoSpeech")
 		})
 		c.done(r, c.tr("noSpeech"))
+		c.persist(r, s, nil)
 		return
 	}
 	c.mu.Lock()
@@ -969,7 +989,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		// A practice run: the transcript goes to the guide's own field and
 		// nowhere else. Nothing is inserted into any app, the clipboard is
 		// not read or written, and no edit is observed afterwards.
-		c.update(r, func(rec *store.Record) {
+		c.note(r, func(rec *store.Record) {
 			rec.Status, rec.StatusDetail = store.StatusNotInserted, c.tr("detailPractice")
 			rec.Timing.FinalToInsertMs = time.Since(r.finalAt).Milliseconds()
 		})
@@ -980,11 +1000,14 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 			r.sink(text)
 		}
 		c.done(r, "")
+		c.persist(r, s, nil)
 		return
 	}
 	var observing bool
 	onPasted := func(target *macos.Target) {
-		if !s.ObserveEdits {
+		// The app pasted into decides as much as the one at the start: a
+		// private run is never observed, so nothing of it is learned.
+		if c.markPrivate(r, s, target.BundleID) || !s.ObserveEdits {
 			return
 		}
 		observing = true
@@ -995,24 +1018,31 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 	}
 	var editMu sync.Mutex
 	editedText := text
-	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs, RemoteInputs: s.RemoteInputs, AutoSend: s.AutoSend, OnPasted: onPasted, BeforeSend: func(target *macos.Target) bool {
+	res, err := macos.Insert(text, macos.InsertOptions{Context: r.ctx, RestoreDelayMs: s.ClipboardRestoreDelayMs, RemoteInputs: s.RemoteInputs, AutoSend: s.AutoSend, OnTarget: func(target *macos.Target) {
+		c.markPrivate(r, s, target.BundleID)
+	}, OnPasted: onPasted, BeforeSend: func(target *macos.Target) bool {
+		c.markPrivate(r, s, target.BundleID)
 		if c.SendPreview == nil || s.AutoSend.Delay() == 0 {
 			return true
 		}
 		return c.SendPreview(r.ctx, text, target, time.Duration(s.AutoSend.Delay())*time.Millisecond, func(edited string) {
 			editMu.Lock()
 			editedText = edited
-			c.update(r, func(rec *store.Record) { rec.InsertedText = edited })
+			c.note(r, func(rec *store.Record) { rec.InsertedText = edited })
 			editMu.Unlock()
 		})
 	}})
 	if errors.Is(err, context.Canceled) {
+		// Cancelled while inserting: cancel left the record to be settled
+		// here. Where the text went is not known; the focused app decides.
+		c.persist(r, s, nil)
 		r.release()
 		return
 	}
 	if err != nil {
 		msg := c.tr("notInserted", err.Error())
-		c.update(r, func(rec *store.Record) { rec.Status, rec.StatusDetail = store.StatusNotInserted, err.Error() })
+		c.note(r, func(rec *store.Record) { rec.Status, rec.StatusDetail = store.StatusNotInserted, err.Error() })
+		c.persist(r, s, nil)
 		c.mu.Lock()
 		if c.active(r) {
 			c.view = View{Phase: Failed, Message: msg, Text: text, Cleanup: r.cleanup, Retained: true}
@@ -1023,10 +1053,12 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		return
 	}
 	if res.ClipboardOnly {
-		res.Target.Release()
-		c.update(r, func(rec *store.Record) {
+		// The text waits on the clipboard for the app that is focused.
+		c.note(r, func(rec *store.Record) {
 			rec.Status, rec.StatusDetail = store.StatusNotInserted, c.tr("copiedFallback")
 		})
+		c.persist(r, s, res.Target)
+		res.Target.Release()
 		c.done(r, c.tr("copiedFallback"))
 		return
 	}
@@ -1047,7 +1079,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		detail += "; " + c.tr("detailClipboard")
 	}
 	editMu.Lock()
-	c.update(r, func(rec *store.Record) {
+	c.note(r, func(rec *store.Record) {
 		rec.SendShortcut, rec.SendSkipped = res.SendShortcut, res.SendSkipped
 		rec.TargetApp = res.Target.AppName
 		rec.TargetBundleID = res.Target.BundleID
@@ -1055,6 +1087,7 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		rec.Timing.FinalToInsertMs = time.Since(r.finalAt).Milliseconds()
 	})
 	editMu.Unlock()
+	c.persist(r, s, res.Target)
 	if !observing {
 		res.Target.Release()
 	}
@@ -1095,12 +1128,15 @@ func (c *Controller) observe(r *run, s config.Settings, inserted string, target 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(max(s.ObserveSeconds, 5))*time.Second)
 	defer cancel()
 	revised, status := dict.Observe(ctx, inserted, target.ReadValue)
+	if c.markPrivate(r, s, target.BundleID) {
+		return
+	}
 	msg := c.tr(status)
 	if revised != "" && strings.TrimSpace(revised) != strings.TrimSpace(inserted) {
 		_, learned := c.Dict.Propose(inserted, revised, "observed-edit", r.id)
 		msg = c.tr("observeLearned", learned)
 	}
-	c.update(r, func(rec *store.Record) { rec.ObserveNote = msg })
+	c.note(r, func(rec *store.Record) { rec.ObserveNote = msg })
 	c.historyChanged()
 }
 
@@ -1178,7 +1214,13 @@ func (c *Controller) Retranscribe(id string) error {
 	if hotwords != nil && s.ASRAssign.Provider == "volc" {
 		note += "; " + c.tr("hotwordVolc")
 	}
+	if providers.Assigned(providers.KindASR, s).Provider == providers.Local {
+		note += "; " + c.tr("noteLanguage", c.tr("asrLang_"+config.LocalASRLanguage(s.ASRLanguage)))
+	}
 	raw, err := asr.Transcribe(ctx, service, hotwords, pcm)
+	if errors.Is(err, asr.ErrLanguage) {
+		return errors.New(c.tr("asrLanguageOld"))
+	}
 	if err != nil && raw == "" {
 		return errors.New(c.tr("asrUnreachable", service.Label(), c.explain(err)))
 	}

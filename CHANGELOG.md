@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.7
+
+- Add local speech-language selection: Chinese by default, automatic detection, or English; use the same selection when retranscribing history.
+- Add private applications: dictation still inserts, but a run touching a listed start or destination app saves no transcript or recording and produces no correction suggestions.
+- Keep dictation and the optional send countdown in one continuous capsule. Default to insertion only; configure automatic sending by application, with a two-second delay, cancellation and editing.
+- Improve AirPods playback and volume restoration without forcing sample rates or blocking transcript insertion.
+- Introduce the five-step dark onboarding guide, native permission and shortcut detection, and inline speech-model setup.
+- Add custom cleanup thinking modes and a real cleanup probe; disable DeepSeek thinking by default and improve paragraph grouping, disfluency removal and ambiguous-text preservation.
+- Unify microphone and trigger-key selectors, restore keyboard focus after selection, and recover interrupted global keyboard listeners.
+- Refresh the multilingual website source, product screenshots and release links.
+
+新增本地识别语言与私密应用：中文保持默认，支持自动识别和英语，历史重新转写共用语言设置；私密应用照常输入，但本次文字、录音及纠错学习不落盘。统一听写与发送倒计时胶囊，默认只输入，按应用配置自动发送，支持两秒延迟、取消与编辑。修复 AirPods 播放与音量恢复及听写收尾阻塞。更新固定深色五步引导、区域内模型操作、标准选择器及全局快捷键监听恢复。自定义整理服务支持思考模式与真实测试，DeepSeek 默认关闭思考，改善分段、去口吃和含糊字串保留；同步多语言官网源码与下载入口。
+
+Known limitation / 已知限制：a concatenated Chinese/English fixture still loses its Chinese portion in automatic mode; this release does not claim that bilingual recognition quality is resolved. 拼接的中英混合样本在自动模式仍遗漏中文，不能据此宣称已解决混说准确率。
+
 ## 0.3.6
 
 - Refresh the drag-to-install DMG with aligned waveform artwork, compact icon labels and a single-line English installation hint.

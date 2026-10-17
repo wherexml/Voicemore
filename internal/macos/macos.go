@@ -41,6 +41,9 @@ type InsertOptions struct {
 	RestoreDelayMs int
 	RemoteInputs   []config.RemoteInput
 	AutoSend       config.AutoSend
+	// OnTarget observes the actual destination before any paste, fallback or error.
+	// It must not retain or release the target.
+	OnTarget func(*Target)
 	// OnPasted starts observation before clipboard restoration. Local successful pastes only.
 	// The callback may retain Target until observation finishes; the caller owns its release.
 	OnPasted   func(*Target)

@@ -129,6 +129,8 @@ func explain(err error) string {
 		return T("eUnconfigured")
 	case errors.Is(err, providers.ErrNoAdapter):
 		return T("eNoAdapter")
+	case errors.Is(err, cleanup.ErrThinkingParams):
+		return T("errThinkingParams")
 	case errors.Is(err, cleanup.ErrNotConfigured):
 		return T("eNotConfigured")
 	case errors.Is(err, cleanup.ErrBadURL), errors.Is(err, asr.ErrBadURL):

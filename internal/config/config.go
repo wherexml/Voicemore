@@ -44,12 +44,14 @@ type Assignment struct {
 // CustomProvider is a provider the user added. Its API key, if any, is in
 // the encrypted local credential store, never here.
 type CustomProvider struct {
-	ID      string   `json:"id"`
-	Kind    string   `json:"kind"` // "asr" or "cleanup"
-	Name    string   `json:"name"`
-	URL     string   `json:"url"`
-	Models  []string `json:"models"`
-	Enabled bool     `json:"enabled"`
+	ThinkingMode   string   `json:"thinkingMode,omitempty"`   // empty/server inherits the service default
+	ThinkingParams string   `json:"thinkingParams,omitempty"` // non-secret JSON body fields
+	ID             string   `json:"id"`
+	Kind           string   `json:"kind"` // "asr" or "cleanup"
+	Name           string   `json:"name"`
+	URL            string   `json:"url"`
+	Models         []string `json:"models"`
+	Enabled        bool     `json:"enabled"`
 }
 
 // Providers is what is remembered about the cloud and custom providers,
@@ -85,11 +87,13 @@ func (p Providers) Clone() Providers {
 // not shown at launch any more: the user finished it or chose "Later", or
 // the settings are those of an installation older than the guide.
 type Onboarding struct {
-	Left      bool `json:"left"`
-	Step      int  `json:"step,omitempty"`
-	Seen      bool `json:"seen,omitempty"`      // the introduction was read
-	Practiced bool `json:"practiced,omitempty"` // a first dictation was inserted
-	Cloud     bool `json:"cloud,omitempty"`     // the speech step shows the cloud branch
+	GuideVersion int  `json:"guideVersion,omitempty"`
+	KeyDetected  bool `json:"keyDetected,omitempty"`
+	Left         bool `json:"left"`
+	Step         int  `json:"step,omitempty"`
+	Seen         bool `json:"seen,omitempty"`      // the introduction was read
+	Practiced    bool `json:"practiced,omitempty"` // a first dictation was inserted
+	Cloud        bool `json:"cloud,omitempty"`     // the speech step shows the cloud branch
 }
 
 type Settings struct {
@@ -121,6 +125,9 @@ type Settings struct {
 	ASRManaged         bool   `json:"asrManaged,omitempty"`
 	ASRURL             string `json:"asrUrl"`
 	FinalizeTimeoutSec int    `json:"finalizeTimeoutSec"`
+	// ASRLanguage is the speech language of the app-managed local worker:
+	// empty (Chinese, as before), "auto" or "en" (language_privacy.go).
+	ASRLanguage string `json:"asrLanguage,omitempty"`
 
 	// TriggerKey is "Fn", "RightOption", "RightCommand", "RightControl" or a
 	// MyGo accelerator such as "Ctrl+Alt+Space" (toggle only).
@@ -144,6 +151,9 @@ type Settings struct {
 	// TextRetentionDays 0 keeps text records until they are deleted.
 	TextRetentionDays int  `json:"textRetentionDays"`
 	KeepCancelled     bool `json:"keepCancelled"`
+	// PrivateApps are apps whose dictations insert but are never saved to
+	// the history, as text or audio, and never observed for learning.
+	PrivateApps []PrivateApp `json:"privateApps,omitempty"`
 
 	// OverlayBottomOffset is the gap between the capsule and the bottom of
 	// the work area of the display the recording started on.
@@ -284,6 +294,7 @@ func (st *Store) Get() Settings {
 	s.Providers = s.Providers.Clone()
 	s.RemoteInputs = append([]RemoteInput(nil), s.RemoteInputs...)
 	s.AutoSend = s.AutoSend.Clone()
+	s.PrivateApps = append([]PrivateApp(nil), s.PrivateApps...)
 	return s
 }
 
@@ -292,6 +303,7 @@ func (st *Store) Set(s Settings) error {
 	defer st.mu.Unlock()
 	s.RemoteInputs = append([]RemoteInput(nil), s.RemoteInputs...)
 	s.AutoSend = s.AutoSend.Clone()
+	s.PrivateApps = append([]PrivateApp(nil), s.PrivateApps...)
 	st.s = s
 	return WriteJSON(st.path, s)
 }

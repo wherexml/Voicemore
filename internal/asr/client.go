@@ -30,7 +30,13 @@ type Health struct {
 	Ready               bool `json:"ready"`
 	Busy                bool `json:"busy"`
 	DefaultHotwordCount int  `json:"default_hotword_count"`
+	// Languages are the speech languages the worker takes; empty for a
+	// worker older than the setting, which only recognises Chinese.
+	Languages []string `json:"languages,omitempty"`
 }
+
+// ErrLanguage: the running worker predates the speech-language setting.
+var ErrLanguage = errors.New("the local ASR service does not support this speech language; restart it")
 
 // CheckHealth asks the service whether it can take a recording.
 func CheckHealth(ctx context.Context, base string) (Health, error) {
@@ -218,6 +224,12 @@ type Session struct {
 // hotwords nil leaves the service's own default terms in use; a value,
 // even an empty one, replaces them.
 func Dial(ctx context.Context, base string, hotwords *string) (*Session, error) {
+	return DialLanguage(ctx, base, hotwords, "")
+}
+
+// DialLanguage is Dial with the worker's speech language ("zh", "auto" or
+// "en"). Empty sends none, and the worker keeps its Chinese default.
+func DialLanguage(ctx context.Context, base string, hotwords *string, language string) (*Session, error) {
 	u, err := url.Parse(strings.TrimRight(base, "/") + "/ws")
 	if err != nil {
 		return nil, err
@@ -228,9 +240,14 @@ func Dial(ctx context.Context, base string, hotwords *string) (*Session, error) 
 	case "https":
 		u.Scheme = "wss"
 	}
+	q := url.Values{}
 	if hotwords != nil {
-		u.RawQuery = url.Values{"hotwords": {*hotwords}}.Encode()
+		q.Set("hotwords", *hotwords)
 	}
+	if language != "" {
+		q.Set("language", language)
+	}
+	u.RawQuery = q.Encode()
 	conn, _, err := websocket.Dial(ctx, u.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("could not connect to the local ASR service: %w", err)
@@ -418,10 +435,20 @@ func (s *Session) Final() string         { return s.Transcript.Final() }
 func (s *Session) Pending() string       { return s.Transcript.Pending() }
 func (s *Session) SetOnUpdate(fn func()) { s.OnUpdate = fn }
 
-type localDialer struct{ base string }
+type localDialer struct{ base, language string }
 
 // Local is the dialer of a service speaking this app's own protocol.
-func Local(base string) Dialer { return localDialer{strings.TrimSpace(base)} }
+func Local(base string) Dialer { return localDialer{base: strings.TrimSpace(base)} }
+
+// LocalLanguage is Local with the speech language of the app-managed
+// worker. A language other than Chinese is refused by a worker that does
+// not list it, rather than silently recognised as Chinese.
+func LocalLanguage(base, language string) Dialer {
+	if language == "zh" {
+		language = ""
+	}
+	return localDialer{base: strings.TrimSpace(base), language: language}
+}
 
 func (d localDialer) Label() string  { return d.base }
 func (d localDialer) Hotwords() bool { return true }
@@ -433,10 +460,19 @@ func (d localDialer) Check(ctx context.Context) error {
 	if h.Busy {
 		return ErrBusy
 	}
+	if d.language != "" && !slices.Contains(h.Languages, d.language) {
+		return ErrLanguage
+	}
 	return nil
 }
 func (d localDialer) Dial(ctx context.Context, hotwords *string) (Stream, error) {
-	s, err := Dial(ctx, d.base, hotwords)
+	if d.language != "" {
+		// Retranscription dials without Check: ask here too.
+		if h, err := CheckHealth(ctx, d.base); err == nil && !slices.Contains(h.Languages, d.language) {
+			return nil, ErrLanguage
+		}
+	}
+	s, err := DialLanguage(ctx, d.base, hotwords, d.language)
 	if err != nil {
 		return nil, err // a nil *Session must not become a non-nil Stream
 	}

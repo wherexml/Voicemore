@@ -524,7 +524,7 @@ func (a *app) bindTrigger() {
 	key := a.settings.Get().TriggerKey
 	if macos.IsModifierKey(key) {
 		macos.InputMonitoringGranted(true)
-		stop, err := macos.StartHotkey(key, a.ctrl.KeyDown, a.ctrl.KeyUp, a.cancelInput)
+		stop, err := macos.StartHotkey(key, a.triggerDown, a.triggerUp, a.cancelInput)
 		if err != nil {
 			a.triggerErr = err.Error()
 			return
@@ -532,7 +532,7 @@ func (a *app) bindTrigger() {
 		a.stopHotkey = stop
 		return
 	}
-	if err := mygo.GlobalShortcut.Register(key, func() { go a.ctrl.Toggle() }); err != nil {
+	if err := mygo.GlobalShortcut.Register(key, func() { a.triggerUp(false) }); err != nil {
 		a.triggerErr = T("errShortcut", key, err.Error())
 		return
 	}

@@ -15,31 +15,9 @@ import (
 	"voiceinput/internal/session"
 )
 
-// onboardWindow is the first-run guide: a window of its own, about
-// 1040×600, one focus per screen as mock/claude.html has it (its default
-// Flat surface). A bare title bar with only the window controls; a stage
-// of at most 540 px, centered, with the step's visual, "Step n of 4", the
-// title and the one thing to do; and a footer with Back on the left, the
-// progress as four dots in the middle, and Later beside the one primary
-// action on the right. While it shows, the main window is hidden.
-//
-// Everything in it is real. A step is complete when the app is actually
-// ready for it, never because Continue was pressed:
-//
-//	how it works      it has been read (left once)
-//	speech model      the default speech model can serve: the on-device
-//	                  model is deployed and ready, or a cloud provider is
-//	                  set up and chosen. One or the other; text cleanup is
-//	                  not asked for.
-//	permissions       macOS reports microphone, accessibility and input
-//	                  monitoring as granted
-//	first dictation   a practice run started here delivered a transcript
-//	                  that is not empty to the guide's own field
-//
-// Progress is saved in the settings (config.Onboarding), so the guide
-// resumes where it was. Settings saved by a version older than the guide
-// are those of an existing user, who is not shown it at launch; it stays
-// available from Settings → General.
+// onboardWindow hosts the approved V6 interface in an embedded local page.
+// Permissions, hotkeys and practice transcripts come from the native bridge.
+// Progress is persisted; practice never inserts text into another application.
 type onboardWindow struct {
 	a   *app
 	win *mygo.Window
@@ -48,10 +26,13 @@ type onboardWindow struct {
 	// on them unless it is already complete, and completing the last step
 	// never leaves them by itself: only Finish or Enter Voicemore does,
 	// so the practice transcript stays to read, edit and try again.
-	review      bool
-	practice    string // the text of the practice field
-	practiceRun int    // counts practice runs and their discards: a sink of an earlier count is stale
-	permsWere   bool   // the permissions were all granted when last looked at
+	review            bool
+	pressed           bool
+	practice          string // the text of the practice field
+	practiceAttempt   bool
+	practiceDelivered bool
+	practiceRun       int  // counts practice runs and their discards: a sink of an earlier count is stale
+	permsWere         bool // the permissions were all granted when last looked at
 
 	// The stage is centered in the height between the title bar and the
 	// footer, from its height in the last frame (stageH) for the content
@@ -66,19 +47,26 @@ var obSteps = []string{"obS1", "obS2", "obS3", "obS4"}
 
 func newOnboardWindow(a *app) *onboardWindow {
 	o := &onboardWindow{a: a}
+	setupOnboardingFrontend(o)
 	o.win = mygo.NewWindow(mygo.WindowOptions{
 		Title:           T("obTitle"),
-		Width:           1040,
-		Height:          600,
-		MinWidth:        900,
+		Width:           720,
+		Height:          540,
+		MinWidth:        620,
 		MinHeight:       480,
 		Hidden:          true,
-		StateKey:        "onboarding",
+		StateKey:        "onboarding-v6",
 		TitleBarStyle:   mygo.TitleBarHidden,
 		DisableMinimize: true,
-		Content:         ui.View(o.view),
+		URL:             "/",
+		BackgroundColor: "#080d19",
 	})
-	// Closing it is "Later": into the normal window.
+	o.win.Page().OnWillNavigate(func(e *mygo.NavigateEvent) {
+		if e.URL != "mygo://localhost/" {
+			e.PreventDefault()
+		}
+	})
+	// Closing returns to the main window without claiming completion.
 	o.win.OnClose(func(e *mygo.CloseEvent) {
 		if !a.quitting {
 			e.PreventDefault()
@@ -111,21 +99,23 @@ func (o *onboardWindow) change(fn func(ob *config.Onboarding)) {
 func (o *onboardWindow) open() {
 	o.discardPractice()
 	s := o.a.settings.Get()
-	next := -1
-	for i := range obSteps {
-		if !o.done(i, s) {
-			next = i
-			break
-		}
+	if s.Onboarding.GuideVersion != 7 {
+		o.change(func(ob *config.Onboarding) {
+			if ob.GuideVersion == 6 {
+				ob.Step = 1
+			} else {
+				ob.Step = 0
+				ob.KeyDetected = false
+			}
+			ob.GuideVersion = 7
+			ob.Practiced = false
+		})
 	}
-	// A complete guide reopens on its summary; any other stays on the
-	// steps until the user leaves.
-	o.review = next >= 0
 	o.change(func(ob *config.Onboarding) {
-		ob.Left = false
-		if next >= 0 {
-			ob.Step = next
+		if ob.Step >= 4 {
+			ob.Step = 0
 		}
+		ob.Left = false
 	})
 	o.win.SetTitle(T("obTitle"))
 	o.a.main.stopPlayer()
@@ -789,7 +779,7 @@ func (o *onboardWindow) firstDictation(c *ui.Context, s config.Settings, ready b
 		ui.Column(c.Key("needs")).Radius(12).Background(noticeColor(t)).Padding(12, 14).Gap(2).Children(func() {
 			ui.Text(c, T("obNeedFirst")).FontSize(13).FontWeight(500)
 			for _, n := range needs {
-				ui.Row(c.Key("need-"+itoa(n.step))).MinHeight(34).Gap(10).AlignItems(ui.Center).Children(func() {
+				ui.Row(c.Key("need-" + itoa(n.step))).MinHeight(34).Gap(10).AlignItems(ui.Center).Children(func() {
 					ui.Text(c, n.name).FontSize(13).SingleLine()
 					ui.Text(c, n.what).FontSize(12.5).TextColor(t.TextMuted).SingleLine()
 					ui.Spacer(c)
@@ -913,6 +903,8 @@ func successEdge(t *ui.Theme, fresh bool) ui.Color {
 // transcript arrives, the run is cancelled and a result that still comes is
 // dropped.
 func (o *onboardWindow) startPractice() {
+	o.practiceAttempt = true
+	o.practiceDelivered = false
 	o.practiceRun++
 	run := o.practiceRun
 	sink := func(text string) {
@@ -924,6 +916,7 @@ func (o *onboardWindow) startPractice() {
 				o.practice = strings.TrimRight(o.practice, " \n") + " "
 			}
 			o.practice += text
+			o.practiceDelivered = true
 			o.practicedAt = time.Now() // the result line rises in
 			o.change(func(ob *config.Onboarding) { ob.Practiced = true })
 			o.refresh()
@@ -936,6 +929,7 @@ func (o *onboardWindow) startPractice() {
 // sure nothing it produces later is used. It is called whenever the step
 // or the window is left.
 func (o *onboardWindow) discardPractice() {
+	o.practiceAttempt = false
 	o.practiceRun++
 	o.a.ctrl.CancelPractice()
 }

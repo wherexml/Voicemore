@@ -18,6 +18,16 @@ Store.Get 和 Store.Set 都复制 RemoteInputs 切片，避免调用方修改规
 
 验收沿用远程输入 E2E：新增、修改、删除后重新打开设置及重启应用，核对规则值、顺序和旧配置兼容性。证据保存到被忽略的 `artifacts/remote-input/`。
 
+## 识别语言与私密应用
+
+`asrLanguage` 为可选字符串：缺失或空为中文（旧行为），`auto`、`en` 为其余选项，未知值按中文；仅本地服务使用，见[识别语言](../../docs/public/LOCAL-ASR.md#识别语言)。`privateApps[]` 为 `{bundleId, appName}`，按 Bundle ID 精确匹配，空 ID 不匹配；Store.Get/Set 复制该切片。行为见[私密应用](../../docs/public/PRIVATE-APPS.md)。
+
 ## 数字格式默认值
 
 `textStyle.arabicNumbers` 默认 true。`Open` 先载入 Defaults 再解码旧 JSON，缺字段时启用，已有其他格式开关不变；显式 false 保存重启后仍关闭。设置 → 通用 → 基础格式提供开关。规则及音频验收见[基础格式规格](../../docs/public/TEXT-FORMATTING.md)。
+
+## 自定义整理服务的思考参数
+
+`providers.custom[]` 新增可选字符串 `thinkingMode`（空/server、deepseek、omlx、custom）与 `thinkingParams`（非敏感 JSON 对象文本）。旧配置缺字段默认跟随服务端，不迁移为强制关闭。字符串字段随既有 Clone、Store.Set/Get、保存重开保留；取消只丢弃编辑草稿。模式及 JSON 在编辑保存和请求边界验证，不把 API Key 写入这些字段。
+
+协议、测试按钮与兼容边界见[整理规格](../cleanup/README.md#自定义服务的思考模式)；保存重开及 HTTP 验收：`go run ./cmd/custom-thinking-acceptance`。

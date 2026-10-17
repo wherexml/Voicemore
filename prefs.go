@@ -202,9 +202,13 @@ func (p *prefsWindow) conn(key string) *conn {
 // (what the check learned, if anything) is run, only if no newer check
 // and no edit came in between.
 func (p *prefsWindow) run(k *conn, loadingKey string, work func(ctx context.Context) (ok bool, result func() string, apply func())) {
+	p.runWithTimeout(k, loadingKey, 8*time.Second, work)
+}
+
+func (p *prefsWindow) runWithTimeout(k *conn, loadingKey string, timeout time.Duration, work func(ctx context.Context) (ok bool, result func() string, apply func())) {
 	k.invalidate()
 	gen := k.gen
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	k.cancel = cancel
 	k.loading = func() string { return T(loadingKey) }
 	go func() {
@@ -514,7 +518,7 @@ func (p *prefsWindow) audio(c *ui.Context) {
 	ui.Text(c, T("gAudio")).FontSize(16).TextColor(t.Text)
 	card(c, "audio", func() {
 		settingRow(c, "mic", nil, T("sMicDevice"), hint, notice, func() {
-			p.microphoneSelect(c, s, names, uids, 240)
+			p.microphoneSelect(c, s, names, uids, 340)
 		})
 		setting(c, "sounds", nil, T("sSounds"), T("sSoundsHint"), func() {
 			on := s.InteractionSounds
@@ -568,32 +572,23 @@ func (p *prefsWindow) microphoneOptions(c *ui.Context, s config.Settings) ([]str
 }
 
 func (p *prefsWindow) microphoneSelect(c *ui.Context, s config.Settings, names, uids []string, width float32) {
-	chosen := names[0]
+	opts := make([]selectOption, len(uids))
 	for i, uid := range uids {
+		opts[i] = selectOption{Value: uid, Label: names[i]}
+	}
+	p.standardSelect(c, "dictation-microphone", T("sMicDevice"), s.InputDevice, names[0], width, false, opts, func(uid string) {
 		if uid == s.InputDevice {
-			chosen = names[i]
+			return
 		}
-	}
-	sel := ui.Select(c.Key("sel"), &chosen, names).Label(T("sMicDevice"))
-	if width > 0 {
-		sel.Width(width)
-	} else {
-		sel.FillWidth().MinWidth(0).Height(28).Padding(0, 10)
-	}
-	if sel.Changed() {
-		for i, n := range names {
-			if n != chosen || uids[i] == s.InputDevice {
-				continue
+		name := ""
+		for _, m := range p.mics {
+			if m.UID == uid {
+				name = m.Name
+				break
 			}
-			uid, name := uids[i], ""
-			for _, m := range p.mics {
-				if m.UID == uid {
-					name = m.Name
-				}
-			}
-			p.change(func(s *config.Settings) { s.InputDevice, s.InputDeviceName = uid, name })
 		}
-	}
+		p.change(func(s *config.Settings) { s.InputDevice, s.InputDeviceName = uid, name })
+	})
 }
 
 // permissions shows the three permissions as macOS reports them, each with
@@ -745,28 +740,22 @@ func (p *prefsWindow) triggerKey(c *ui.Context, s config.Settings, compact ...bo
 		keys = append(keys, s.TriggerKey)
 		names = append(names, T("customKey", s.TriggerKey))
 	}
-	chosen := names[0]
-	for i, k := range keys {
-		if k == s.TriggerKey {
-			chosen = names[i]
-		}
+	opts := make([]selectOption, len(keys))
+	for i, key := range keys {
+		opts[i] = selectOption{Value: key, Label: names[i]}
 	}
-	sel := ui.Select(c.Key("sel"), &chosen, names).Label(T("sKey"))
+	width := float32(170)
 	if len(compact) > 0 && compact[0] {
-		sel.Grow(1).MinWidth(0).Height(28).Padding(0, 8)
-	} else {
-		sel.Width(170)
+		width = 0
 	}
-	if sel.Changed() {
-		for i, n := range names {
-			if n == chosen && keys[i] != s.TriggerKey {
-				key := keys[i]
-				p.change(func(s *config.Settings) { s.TriggerKey = key })
-				p.a.bindTrigger()
-				p.fnConflict = macos.FnKeyConflict()
-			}
+	p.standardSelect(c, "dictation-trigger", T("sKey"), s.TriggerKey, names[0], width, false, opts, func(key string) {
+		if key == s.TriggerKey {
+			return
 		}
-	}
+		p.change(func(s *config.Settings) { s.TriggerKey = key })
+		p.a.bindTrigger()
+		p.fnConflict = macos.FnKeyConflict()
+	})
 }
 
 func (p *prefsWindow) privacy(c *ui.Context) {
@@ -804,6 +793,7 @@ func (p *prefsWindow) privacy(c *ui.Context) {
 		})
 
 	})
+	p.privateApps(c)
 	ui.Row(c.Key("clear")).Children(func() {
 		if labelButton(c.Key("btn"), icTrash, T("clearAll")).Clicked() {
 			go p.clearHistory()
