@@ -46,7 +46,7 @@
 
 - V6 固定深色五步引导、双卡片模型选择与区域内下载、原生桥与防闪烁验收：[开始使用规格](docs/public/ONBOARDING.md)。
 
-- 更新按钮的圆弧箭头、侧栏线宽与原生验收见[更新界面规格](docs/public/UPDATE-UI.md#refresh-icon)。
+- 更新按钮使用 16 DIP 的 macOS SF Symbols `arrow.clockwise`，资源来源与原生验收见[更新界面规格](docs/public/UPDATE-UI.md#refresh-icon)。
 
 - 自动发送、全局继承、应用身份、标准下拉与原生验收见 [自动发送规格](docs/public/AUTO-SEND.md)；发送键触发不等于消息送达。
 

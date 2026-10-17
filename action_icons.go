@@ -16,6 +16,9 @@ var copySymbolPNG []byte
 //go:embed resources/symbols/trash.png
 var trashSymbolPNG []byte
 
+//go:embed resources/symbols/arrow.clockwise.png
+var updateSymbolPNG []byte
+
 func actionSymbol(data []byte) *ui.Bitmap {
 	b, err := ui.DecodeBitmap(data)
 	if err != nil {

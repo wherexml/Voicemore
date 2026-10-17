@@ -281,11 +281,11 @@ func (m *mainWindow) updateView(c *ui.Context) {
 				}
 				ui.Box(c).Size(24, 24).Draw(func(p *ui.Painter, r ui.Rect) { drawUpdateRing(p, r, progress, angle) })
 			case attention:
-				ui.Icon(c, railUpdate).FontSize(24).TextColor(color)
+				actionIcon(c, railUpdate, 16, color)
 			case u.available != nil:
 				ui.Icon(c, icImport).FontSize(24).TextColor(color)
 			default:
-				ui.Icon(c, railUpdate).FontSize(24).TextColor(color)
+				actionIcon(c, railUpdate, 16, color)
 			}
 		})
 	})
