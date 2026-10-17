@@ -20,9 +20,9 @@ func journalDay(at, now time.Time) string {
 	return strings.TrimSpace(strings.TrimSuffix(timeLabel(at, now), at.Format("15:04")))
 }
 
-func journalAction(c *ui.Context, svg *ui.SVG, label string) ui.Element {
+func journalAction(c *ui.Context, source ui.ImageSource, label string) ui.Element {
 	return ui.ButtonBase(c).Size(28, 28).Padding(0).Radius(6).Justify(ui.Center).AlignItems(ui.Center).
-		Label(label).Tooltip(label).Children(func() { ui.Icon(c, svg).Size(16, 16).TextColor(softText(c.Theme())) })
+		Label(label).Tooltip(label).Children(func() { actionIcon(c, source, 16, softText(c.Theme())) })
 }
 
 func (m *mainWindow) copyRecordButton(c *ui.Context, key, text, label string) ui.Element {

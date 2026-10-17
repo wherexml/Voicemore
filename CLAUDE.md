@@ -17,6 +17,8 @@
 
 - V3 首页、历史统一记录卡片、真实声纹与 CSV 导出：[首页与历史规格](docs/public/HOME-HISTORY.md#v3-首页与历史)。
 
+- 复制与删除共用 SF Symbols 原版，资源来源、主题着色及原生复验见[系统操作图标规格](docs/public/HOME-HISTORY.md#复制与删除系统图标)。
+
 - 豆包默认 DDC 与整理保留边界：[云端 ASR 规格](internal/cloudasr/README.md)。
 
 - 窗口背景拖动、底部拖动留白、细滚动条及首页操作按钮的独立滚动间距：[窗口交互规格](docs/public/HOME-HISTORY.md#窗口拖动与滚动条)。
