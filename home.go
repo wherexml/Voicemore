@@ -68,32 +68,36 @@ func (m *mainWindow) homeView(c *ui.Context) {
 	c.After(untilNextMinute(now))
 	stats := m.historySummary(m.a.history.List(""), now)
 	records := m.filteredHistory(m.a.history.List(m.query), stats.start, now)
-	ui.Column(c).Fill().Padding(26, 28, 0).Gap(0).Children(func() {
-		m.homeToolbar(c)
-		ui.Column(c).FillWidth().Margin(0, 0, 18).Padding(18, 0).BorderWidth(.5, 0, .5, 0).BorderColor(settingsGroupLine(c)).Children(func() { m.homeCharts(c, stats, now) })
-		ui.Row(c).FillWidth().Wrap().Padding(6, 2, 10).BorderWidth(0, 0, .5, 0).BorderColor(settingsGroupLine(c)).AlignItems(ui.Center).Gap(8).Children(func() {
-			ui.Text(c, T("v3Recent")).FontSize(15).FontWeight(600)
-			if ui.Button(c, T("v2All")).Height(26).Clicked() {
-				m.clearHistoryFilters()
-			}
-			for _, app := range stats.apps[:min(4, len(stats.apps))] {
-				b := ui.ButtonBase(c.Key(app.key)).Height(26).Padding(0, 6).Radius(13).Gap(5).AlignItems(ui.Center).Label(app.name).Children(func() { appIdentity(c, app.bundle, app.name, false, true) })
-				if m.hApp == app.key {
-					b.Background(settingsGroupColor(c.Theme()))
+	// Keep content aligned at 28 DIP, but give the recent-list scrollbar its
+	// own gutter near the window edge instead of overlaying record actions.
+	ui.Column(c).Fill().Padding(26, 8, 0, 28).Gap(0).Children(func() {
+		ui.Column(c.Key("home-header")).FillWidth().Padding(0, 20, 0, 0).Children(func() {
+			m.homeToolbar(c)
+			ui.Column(c).FillWidth().Margin(0, 0, 18).Padding(18, 0).BorderWidth(.5, 0, .5, 0).BorderColor(settingsGroupLine(c)).Children(func() { m.homeCharts(c, stats, now) })
+			ui.Row(c).FillWidth().Wrap().Padding(6, 2, 10).BorderWidth(0, 0, .5, 0).BorderColor(settingsGroupLine(c)).AlignItems(ui.Center).Gap(8).Children(func() {
+				ui.Text(c, T("v3Recent")).FontSize(15).FontWeight(600)
+				if ui.Button(c, T("v2All")).Height(26).Clicked() {
+					m.clearHistoryFilters()
 				}
-				if b.Clicked() {
+				for _, app := range stats.apps[:min(4, len(stats.apps))] {
+					b := ui.ButtonBase(c.Key(app.key)).Height(26).Padding(0, 6).Radius(13).Gap(5).AlignItems(ui.Center).Label(app.name).Children(func() { appIdentity(c, app.bundle, app.name, false, true) })
 					if m.hApp == app.key {
-						m.hApp = ""
-					} else {
-						m.hApp = app.key
+						b.Background(settingsGroupColor(c.Theme()))
+					}
+					if b.Clicked() {
+						if m.hApp == app.key {
+							m.hApp = ""
+						} else {
+							m.hApp = app.key
+						}
 					}
 				}
-			}
-			ui.Spacer(c)
-			searchInput(c, "home-search", &m.query, 180)
+				ui.Spacer(c)
+				searchInput(c, "home-search", &m.query, 180)
+			})
+			m.historyFilterChips(c)
 		})
-		m.historyFilterChips(c)
-		ui.Scroll(c.Key("recent")).Grow(1).FillWidth().MinHeight(0).Children(func() {
+		ui.Scroll(c.Key("recent")).Grow(1).FillWidth().MinHeight(0).Padding(0, 20, 0, 0).Children(func() {
 			m.journal(c, records[:min(12, len(records))], now)
 			if ui.Button(c, T("showAll")).Clicked() {
 				m.goTo("history")

@@ -30,7 +30,7 @@
 
 - 豆包默认 DDC 与整理保留边界：[云端 ASR 规格](internal/cloudasr/README.md)。
 
-- 窗口背景拖动、底部拖动留白与细滚动条：[窗口交互规格](docs/public/HOME-HISTORY.md#窗口拖动与滚动条)。
+- 窗口背景拖动、底部拖动留白、细滚动条及首页操作按钮的独立滚动间距：[窗口交互规格](docs/public/HOME-HISTORY.md#窗口拖动与滚动条)。
 
 - 历史应用名称与 Bundle ID 在成功写入时同步更新，跨应用验收见[应用身份与图标](docs/public/HOME-HISTORY.md#应用身份与图标)。
 
