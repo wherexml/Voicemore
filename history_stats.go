@@ -281,12 +281,29 @@ func (m *mainWindow) heatmap(c *ui.Context, s historySummary, now time.Time) {
 		ui.Row(c).FillWidth().AlignItems(ui.Center).Children(func() {
 			ui.Text(c, T("v2Trend")).FontSize(14).FontWeight(600).Grow(1)
 			options := []string{T("v2Seven"), T("v3Fourteen"), T("v2Thirty")}
-			chosen := options[m.homeRange]
-			if ui.Select(c.Key("home-range"), &chosen, options).Width(76).Height(22).FontSize(11).Label(T("v2Period")).Changed() {
-				m.homeRange = slices.Index(options, chosen)
+			choices := make([]selectOption, len(options))
+			for i, label := range options {
+				choices[i] = selectOption{Value: fmt.Sprint(i), Label: label}
+			}
+			m.a.prefs.standardSelect(c, "home-range", T("v2Period"), fmt.Sprint(m.homeRange), "", 0, false, choices, func(value string) {
+				for i := range options {
+					if fmt.Sprint(i) == value {
+						m.homeRange = i
+						break
+					}
+				}
 				m.clearHistoryFilters()
 				c.After(0)
-			}
+			}, selectPresentation{Trigger: func(open bool) ui.Element {
+				return ui.ButtonBase(c.Key("home-range-trigger")).Width(90).Height(22).Gap(6).AlignItems(ui.Center).Label(T("v2Period") + ": " + options[m.homeRange]).Children(func() {
+					ui.Text(c, options[m.homeRange]).FontSize(11).Grow(1)
+					arrow := icDown
+					if open {
+						arrow = icUp
+					}
+					ui.Icon(c, arrow).Size(12, 12)
+				})
+			}})
 		})
 		ui.Row(c).FillWidth().Gap(8).Children(func() {
 			ui.Row(c).Grow(1).MinWidth(0).Gap(2).Children(func() {

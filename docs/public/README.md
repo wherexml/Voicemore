@@ -5,7 +5,7 @@
 | 模块 | 规格与验收 | 实现入口 |
 | --- | --- | --- |
 | DMG 安装窗口 | [布局、固定英文提示与原生验收](DMG-INSTALLER.md) | `scripts/build-dmg.py`、`scripts/verify-dmg-layout.py` |
-| 首页与历史 | [布局、功能与原生验收](HOME-HISTORY.md) | `home.go`、`journal.go`、`history.go`、`history_stats.go`、`app_identity.go`、`action_icons.go`、`prefs.go` |
+| 首页与历史 | [布局、功能与原生验收](HOME-HISTORY.md)、[首页标准选择器](HOME-HISTORY.md#首页标准选择器2026-10-17) | `home.go`、`journal.go`、`history.go`、`history_stats.go`、`app_identity.go`、`action_icons.go`、`prefs.go`、`select.go` |
 | 权限授权 | [共享拖拽引导与原生验收](PERMISSIONS.md) | `permission_drag.go`、`internal/macos/settings_window_darwin.go` |
 | 开始使用引导 | [窗口布局与原生验收](ONBOARDING.md) | `onboarding.go`、`onboarding_bridge.go`、`resources/onboarding/` |
 | 全局触发键 | [后台监听与原生验收](HOTKEY.md) | `internal/macos/hotkey_darwin.go` |
