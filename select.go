@@ -5,11 +5,19 @@ import "github.com/egoist/mygo/ui"
 // selectOption separates a stable value from its localized text and optional
 // application/provider presentation. All settings pickers share this control.
 type selectOption struct {
-	Value, Label, Group string
-	Content             func(*ui.Context)
+	Value, Label, Group        string
+	Content                    func(*ui.Context)
+	Selected, Disabled, Action bool
 }
 
-func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholder string, width float32, disabled bool, opts []selectOption, onChange func(string)) {
+// selectPresentation lets compact toolbar buttons share the settings picker panel.
+type selectPresentation struct {
+	Trigger    func(bool) ui.Element
+	MenuWidth  float32
+	MenuHeight float32
+}
+
+func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholder string, width float32, disabled bool, opts []selectOption, onChange func(string), presentation ...selectPresentation) {
 	t := c.Theme()
 	open := p.pickOpen[id]
 	if open == nil {
@@ -21,7 +29,7 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 	}
 	chosen := -1
 	for i, o := range opts {
-		if o.Value == value {
+		if !o.Action && (o.Value == value || o.Selected) {
 			chosen = i
 			break
 		}
@@ -30,28 +38,38 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 	if chosen >= 0 {
 		accessibleLabel += ": " + opts[chosen].Label
 	}
-	trigger := ui.ButtonBase(c.Key(id+"-trigger")).Height(40).Padding(0, 12).Gap(10).Radius(9).AlignItems(ui.Center).Background(t.Background).Border(1, settingsGroupLine(c)).Label(accessibleLabel).Disabled(disabled)
-	if width > 0 {
-		trigger.Width(width)
-	} else {
-		trigger.FillWidth()
+	var style selectPresentation
+	if len(presentation) > 0 {
+		style = presentation[0]
 	}
-	trigger.Children(func() {
-		if chosen >= 0 && opts[chosen].Content != nil {
-			opts[chosen].Content(c)
+	var trigger ui.Element
+	if style.Trigger != nil {
+		trigger = style.Trigger(*open).Disabled(disabled)
+	} else {
+		trigger = ui.ButtonBase(c.Key(id+"-trigger")).Height(40).Padding(0, 12).Gap(10).Radius(9).AlignItems(ui.Center).Background(t.Background).Border(1, settingsGroupLine(c)).Label(accessibleLabel).Disabled(disabled)
+		if width > 0 {
+			trigger.Width(width)
 		} else {
-			name := placeholder
-			if chosen >= 0 {
-				name = opts[chosen].Label
+			trigger.FillWidth()
+		}
+		trigger.Children(func() {
+			if chosen >= 0 && opts[chosen].Content != nil {
+				opts[chosen].Content(c)
+			} else {
+				name := placeholder
+				if chosen >= 0 {
+					name = opts[chosen].Label
+				}
+				ui.Text(c, name).FontSize(13).Grow(1).SingleLine()
 			}
-			ui.Text(c, name).FontSize(13).Grow(1).SingleLine()
-		}
-		arrow := icDown
-		if *open {
-			arrow = icUp
-		}
-		ui.Icon(c, arrow).FontSize(14).TextColor(faintText(t))
-	})
+			arrow := icDown
+			if *open {
+				arrow = icUp
+			}
+			ui.Icon(c, arrow).FontSize(14).TextColor(faintText(t))
+		})
+	}
+
 	if trigger.Clicked() {
 		for k, v := range p.pickOpen {
 			if k != id {
@@ -80,7 +98,7 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 			trigger.Focus()
 			return
 		}
-		panel.Margin(6, 0, 0, 0).Padding(5).Radius(12).Width(max(160, trigger.Bounds().W)).Background(t.Background).Border(1, settingsGroupLine(c)).Shadow(0, 12, 34, 0, ui.RGBA(30, 38, 48, .12))
+		panel.Margin(6, 0, 0, 0).Padding(5).Radius(12).Width(max(160, trigger.Bounds().W, style.MenuWidth)).Background(t.Background).Border(1, settingsGroupLine(c)).Shadow(0, 12, 34, 0, ui.RGBA(30, 38, 48, .12))
 		if len(opts) == 0 {
 			ui.Text(c, T("selectEmpty")).FontSize(12).TextColor(t.TextMuted).Padding(12, 10)
 			return
@@ -96,31 +114,51 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 				focused = i
 			}
 		}
-		move := func(n int) { handles[(n+len(opts))%len(opts)].Focus() }
+		move := func(n, step int) {
+			for range opts {
+				i := (n + len(opts)) % len(opts)
+				if !opts[i].Disabled {
+					handles[i].Focus()
+					return
+				}
+				n = i + step
+			}
+		}
 		switch {
 		case c.Shortcut(0, ui.KeyDown):
 			if focused < 0 {
-				move(max(0, chosen))
+				move(max(0, chosen), 1)
 			} else {
-				move(focused + 1)
+				move(focused+1, 1)
 			}
 		case c.Shortcut(0, ui.KeyUp):
 			if focused < 0 {
-				move(max(0, chosen))
+				move(max(0, chosen), 1)
 			} else {
-				move(focused - 1)
+				move(focused-1, -1)
 			}
 		case c.Shortcut(0, ui.KeyHome):
-			move(0)
+			move(0, 1)
 		case c.Shortcut(0, ui.KeyEnd):
-			move(len(opts) - 1)
+			move(len(opts)-1, -1)
 		}
-		ui.Scroll(c).MaxHeight(330).Gap(1).Children(func() {
+		menuHeight := style.MenuHeight
+		if menuHeight <= 0 {
+			menuHeight = 330
+		}
+		ui.Scroll(c).MaxHeight(menuHeight).Gap(1).Children(func() {
 			for i, o := range opts {
+				if o.Action && i > 0 && !opts[i-1].Action {
+					ui.Box(c).FillWidth().Height(1).Margin(4, 5).Background(settingsGroupLine(c))
+				}
 				if o.Group != "" && (i == 0 || opts[i-1].Group != o.Group) {
 					ui.Text(c, o.Group).FontSize(12).FontWeight(500).TextColor(faintText(t)).Padding(7, 10)
 				}
-				row := ui.ButtonBase(c.Key(o.Value)).FillWidth().MinHeight(38).Padding(9, 10).Gap(10).Radius(8).AlignItems(ui.Center).Label(o.Label).Bind(&handles[i])
+				row := ui.ButtonBase(c.Key(o.Value)).FillWidth().MinHeight(38).Padding(9, 10).Gap(10).Radius(8).AlignItems(ui.Center).Label(o.Label).Disabled(o.Disabled).Bind(&handles[i])
+				selected := !o.Action && (o.Value == value || o.Selected)
+				if !o.Action {
+					row.Role(ui.RoleMenuItemRadio).Checked(selected)
+				}
 				row.Children(func() {
 					if o.Content != nil {
 						o.Content(c)
@@ -128,17 +166,17 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 						ui.Text(c, o.Label).FontSize(13).Grow(1).SingleLine()
 					}
 					check := ui.Icon(c, icCheck).FontSize(13).TextColor(t.Accent)
-					if chosen != i {
+					if !selected {
 						check.Invisible()
 					}
 				})
-				if chosen == i {
+				if selected {
 					row.Background(settingsGroupColor(t))
 				}
 				if row.Hovered() || focused == i {
 					row.Background(hoverColor(t))
 				}
-				if row.Clicked() {
+				if row.Clicked() && !o.Disabled {
 					*open = false
 					trigger.Focus()
 					onChange(o.Value)
@@ -147,7 +185,7 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 		})
 		if p.pickFocus[id] {
 			p.pickFocus[id] = false
-			handles[max(0, chosen)].Focus()
+			move(max(0, chosen), 1)
 		}
 	})
 }

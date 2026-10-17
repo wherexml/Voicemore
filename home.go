@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"time"
 
 	"github.com/egoist/mygo/ui"
@@ -139,23 +140,34 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 				})
 			}
 		}
-		homeControl(c.Key("trigger"), icKeyboard, keyName(s.TriggerKey)+" · "+T(map[bool]string{true: "modeHoldShort", false: "modeToggleShort"}[s.TriggerMode == config.TriggerHold]), true).Menu(func(menu *ui.Menu) {
-			for _, key := range []string{macos.KeyFn, macos.KeyRightOption, macos.KeyRightCommand, macos.KeyRightControl} {
-				if menu.Item(keyName(key)).Chosen() {
+		keys := []string{macos.KeyFn, macos.KeyRightOption, macos.KeyRightCommand, macos.KeyRightControl}
+		if !macos.IsModifierKey(s.TriggerKey) {
+			keys = append(keys, s.TriggerKey)
+		}
+		triggerOptions := []selectOption{}
+		for _, key := range keys {
+			triggerOptions = append(triggerOptions, selectOption{Value: "key:" + key, Label: keyName(key), Group: T("sKey"), Selected: key == s.TriggerKey})
+		}
+		for _, mode := range []string{config.TriggerToggle, config.TriggerHold} {
+			name := T("modeToggleShort")
+			if mode == config.TriggerHold {
+				name = T("modeHoldShort")
+			}
+			triggerOptions = append(triggerOptions, selectOption{Value: "mode:" + mode, Label: name, Group: T("sMode"), Selected: mode == s.TriggerMode, Disabled: mode == config.TriggerHold && !macos.IsModifierKey(s.TriggerKey)})
+		}
+		triggerOptions = append(triggerOptions, selectOption{Value: "settings", Label: T("catDictation"), Action: true})
+		m.homeSelect(c, "home-trigger", icKeyboard, keyName(s.TriggerKey)+" · "+T(map[bool]string{true: "modeHoldShort", false: "modeToggleShort"}[s.TriggerMode == config.TriggerHold]), "", 0, 220, triggerOptions, func(value string) {
+			switch {
+			case strings.HasPrefix(value, "key:"):
+				key := strings.TrimPrefix(value, "key:")
+				if key != s.TriggerKey {
 					p.change(func(s *config.Settings) { s.TriggerKey = key })
+					p.a.bindTrigger()
+					p.fnConflict = macos.FnKeyConflict()
 				}
-			}
-			menu.Separator()
-			for _, mode := range []string{config.TriggerToggle, config.TriggerHold} {
-				label := T("modeToggleShort")
-				if mode == config.TriggerHold {
-					label = T("modeHoldShort")
-				}
-				if menu.Item(label).Disabled(mode == config.TriggerHold && !macos.IsModifierKey(s.TriggerKey)).Chosen() {
-					p.change(func(s *config.Settings) { s.TriggerMode = mode })
-				}
-			}
-			if menu.Item(T("catDictation")).Chosen() {
+			case strings.HasPrefix(value, "mode:"):
+				p.change(func(s *config.Settings) { s.TriggerMode = strings.TrimPrefix(value, "mode:") })
+			default:
 				p.open("dictation")
 			}
 		})
@@ -163,56 +175,95 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 			label := m.a.modelLabel(kind, s)
 			if kind == providers.KindCleanup {
 				label = T("cleanup") + ": " + label
-			}
-			if kind == providers.KindCleanup && !s.CleanupDefault {
-				label = T("cleanup") + ": " + T("off")
-			}
-			homeControl(c.Key(kind), map[string]*ui.SVG{providers.KindASR: icWave, providers.KindCleanup: icSparkle}[kind], label, true).MaxWidth(175).Menu(func(menu *ui.Menu) {
-				if kind == providers.KindCleanup {
-					if menu.Item(T("off")).Chosen() {
-						p.change(func(s *config.Settings) { s.CleanupDefault = false })
-					}
-					menu.Separator()
+				if !s.CleanupDefault {
+					label = T("cleanup") + ": " + T("off")
 				}
-				for _, o := range providers.Eligible(kind, s, m.a.secret) {
-					if menu.Item(providerName(o.Provider, s, kind) + " · " + modelText(o.Provider, o.Model)).Chosen() {
-						p.assign(kind, o.Provider, o.Model)
-						if kind == providers.KindCleanup {
-							p.change(func(s *config.Settings) { s.CleanupDefault = true })
+			}
+			options := []selectOption{}
+			selected := ""
+			if kind == providers.KindCleanup {
+				options = append(options, selectOption{Value: "off", Label: T("off")})
+				if !s.CleanupDefault {
+					selected = "off"
+				}
+			}
+			assigned := providers.Assigned(kind, s)
+			eligible := providers.Eligible(kind, s, m.a.secret)
+			for _, o := range eligible {
+				id := o.Provider + "|" + o.Model
+				if providers.Check(kind, s, m.a.secret) == nil && o.Provider == assigned.Provider && (o.Provider == providers.Local || o.Model == assigned.Model) && (kind != providers.KindCleanup || s.CleanupDefault) {
+					selected = id
+				}
+				options = append(options, selectOption{Value: id, Label: modelText(o.Provider, o.Model), Group: providerName(o.Provider, s, kind), Content: func(c *ui.Context) {
+					logo(c, providerLogo(o.Provider, kind, s), 22)
+					ui.Text(c, modelText(o.Provider, o.Model)).FontSize(13).Grow(1).SingleLine()
+				}})
+			}
+			options = append(options, selectOption{Value: "manage", Label: T("manage"), Action: true})
+			m.homeSelect(c, "home-"+kind, map[string]*ui.SVG{providers.KindASR: icWave, providers.KindCleanup: icSparkle}[kind], label, selected, 175, 340, options, func(value string) {
+				switch value {
+				case "manage":
+					p.open("models")
+				case "off":
+					p.change(func(s *config.Settings) { s.CleanupDefault = false })
+				default:
+					for _, o := range eligible {
+						if o.Provider+"|"+o.Model == value {
+							p.assign(kind, o.Provider, o.Model)
+							if kind == providers.KindCleanup {
+								p.change(func(s *config.Settings) { s.CleanupDefault = true })
+							}
+							break
 						}
 					}
-				}
-				menu.Separator()
-				if menu.Item(T("manage")).Chosen() {
-					p.open("models")
 				}
 			})
 		}
 		names, uids, _, _ := p.microphoneOptions(c, s)
-		mic := T("micAuto")
+		mic := names[0]
+		micOptions := make([]selectOption, len(uids))
 		for i, uid := range uids {
-			if uid == s.InputDevice && uid != "" {
+			micOptions[i] = selectOption{Value: uid, Label: names[i]}
+			if uid == s.InputDevice {
 				mic = names[i]
 			}
 		}
-		homeControl(c.Key("mic"), icMic, mic, true).MaxWidth(130).Menu(func(menu *ui.Menu) {
-			for i, name := range names {
-				if menu.Item(name).Chosen() {
-					uid, device := uids[i], ""
-					for _, d := range p.mics {
-						if d.UID == uid {
-							device = d.Name
-						}
-					}
-					p.change(func(s *config.Settings) { s.InputDevice, s.InputDeviceName = uid, device })
+		m.homeSelect(c, "home-mic", icMic, mic, s.InputDevice, 130, 300, micOptions, func(uid string) {
+			if uid == s.InputDevice {
+				return
+			}
+			device := ""
+			for _, d := range p.mics {
+				if d.UID == uid {
+					device = d.Name
+					break
 				}
 			}
+			p.change(func(s *config.Settings) { s.InputDevice, s.InputDeviceName = uid, device })
 		})
 		if !permissionsGranted() {
 			if ui.Button(c, T("gPerms")).TextColor(t.Danger).Height(30).Clicked() {
 				p.open("perms")
 			}
 		}
+	})
+}
+
+// homeSelect keeps the compact toolbar while sharing selection, focus and panel styling.
+func (m *mainWindow) homeSelect(c *ui.Context, id string, glyph *ui.SVG, label, value string, width, menuWidth float32, options []selectOption, onChange func(string)) {
+	m.a.prefs.standardSelect(c, id, label, value, label, 0, false, options, onChange, selectPresentation{
+		MenuWidth:  menuWidth,
+		MenuHeight: 390,
+		Trigger: func(open bool) ui.Element {
+			button := homeControl(c.Key(id+"-trigger"), glyph, label, true)
+			if width > 0 {
+				button.MaxWidth(width)
+			}
+			if open {
+				button.Border(1, c.Theme().Accent)
+			}
+			return button
+		},
 	})
 }
 
