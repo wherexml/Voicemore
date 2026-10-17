@@ -8,7 +8,7 @@
 - Improve AirPods playback and volume restoration without forcing sample rates or blocking transcript insertion.
 - Introduce the five-step dark onboarding guide, native permission and shortcut detection, and inline speech-model setup.
 - Add custom cleanup thinking modes and a real cleanup probe; disable DeepSeek thinking by default and improve paragraph grouping, disfluency removal and ambiguous-text preservation.
-- Unify microphone and trigger-key selectors, restore keyboard focus after selection, and recover interrupted global keyboard listeners.
+- Unify microphone and trigger-key selectors, restore keyboard focus after selection, and recover interrupted global keyboard listeners. Custom accelerators keep toggling even when an older setting retains hold mode.
 - Refresh the multilingual website source, product screenshots and release links.
 
 新增本地识别语言与私密应用：中文保持默认，支持自动识别和英语，历史重新转写共用语言设置；私密应用照常输入，但本次文字、录音及纠错学习不落盘。统一听写与发送倒计时胶囊，默认只输入，按应用配置自动发送，支持两秒延迟、取消与编辑。修复 AirPods 播放与音量恢复及听写收尾阻塞。更新固定深色五步引导、区域内模型操作、标准选择器及全局快捷键监听恢复。自定义整理服务支持思考模式与真实测试，DeepSeek 默认关闭思考，改善分段、去口吃和含糊字串保留；同步多语言官网源码与下载入口。

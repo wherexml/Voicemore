@@ -88,9 +88,13 @@ func (o *onboardWindow) guideState() map[string]any {
 	if theme == "" || theme == "system" {
 		theme = "auto"
 	}
+	mode := s.TriggerMode
+	if !macos.IsModifierKey(s.TriggerKey) {
+		mode = config.TriggerToggle
+	}
 	st := o.a.localASR.Snapshot()
 	model := map[string]any{"cloud": s.Onboarding.Cloud, "ready": o.speechReady(s) && s.Onboarding.Cloud == (s.ASRAssign.Provider != providers.Local), "name": localasr.Model, "phase": st.Phase, "status": localASRState(st), "installed": st.Installed, "busy": st.Busy(), "done": st.Done, "total": st.Total, "detail": st.Detail, "sizeGB": float64(localasr.ModelBytes())/1e9 + 0.65, "selected": s.ASRAssign.Provider == providers.Local && s.ASRManaged, "current": o.a.modelLabel(providers.KindASR, s)}
-	return map[string]any{"model": model, "language": langIndex.Load(), "step": s.Onboarding.Step, "perms": []bool{macos.MicrophoneStatus() == "authorized", macos.AccessibilityTrusted(false), macos.InputMonitoringGranted(false)}, "shortcut": key, "mode": s.TriggerMode, "keySeen": s.Onboarding.KeyDetected, "practiced": s.Onboarding.Practiced, "text": o.practice, "theme": theme, "speechReady": o.speechReady(s), "phase": phase, "pressed": o.pressed, "message": v.Message}
+	return map[string]any{"model": model, "language": langIndex.Load(), "step": s.Onboarding.Step, "perms": []bool{macos.MicrophoneStatus() == "authorized", macos.AccessibilityTrusted(false), macos.InputMonitoringGranted(false)}, "shortcut": key, "mode": mode, "keySeen": s.Onboarding.KeyDetected, "practiced": s.Onboarding.Practiced, "text": o.practice, "theme": theme, "speechReady": o.speechReady(s), "phase": phase, "pressed": o.pressed, "message": v.Message}
 }
 func (b *onboardingBridge) State(ctx context.Context) (map[string]any, error) {
 	var state map[string]any
@@ -265,12 +269,13 @@ func (a *app) triggerDown() {
 }
 func (a *app) triggerUp(combo bool) {
 	mygo.RunOnMain(func() {
+		s := a.settings.Get()
+		modifier := macos.IsModifierKey(s.TriggerKey)
 		if a.onboard != nil && a.onboard.visible() {
 			o := a.onboard
-			s := a.settings.Get()
 			o.pressed = false
 			if combo {
-				if s.TriggerMode == config.TriggerHold {
+				if modifier && s.TriggerMode == config.TriggerHold {
 					o.discardPractice()
 				}
 				return
@@ -281,7 +286,7 @@ func (a *app) triggerUp(combo bool) {
 					o.change(func(ob *config.Onboarding) { ob.KeyDetected = true })
 				}
 			case 3:
-				if s.TriggerMode == config.TriggerHold {
+				if modifier && s.TriggerMode == config.TriggerHold {
 					go a.ctrl.Confirm()
 				} else {
 					o.toggleGuidePractice()
@@ -289,7 +294,13 @@ func (a *app) triggerUp(combo bool) {
 			}
 			return
 		}
-		go a.ctrl.KeyUp(combo)
+		if modifier {
+			go a.ctrl.KeyUp(combo)
+		} else if !combo {
+			// GlobalShortcut only reports activation, with no release. Keep
+			// custom accelerators toggling even if an old setting says hold.
+			go a.ctrl.Toggle()
+		}
 	})
 }
 
