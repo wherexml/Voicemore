@@ -22,7 +22,7 @@ python3 -m http.server 38127 --bind 127.0.0.1 --directory mock
 | 识别语言 · 私密应用 | `language-privacy.html` |
 | 开始使用 | `onboarding-v6.html` |
 | 模型选择 | `onboarding-model-v2.html` |
-| 连续胶囊状态 | `capsule-states-v2.html` |
+| 连续胶囊状态 | `capsule-states-v2.html?tidy=1&autoSend=1` |
 
 旧稿导航：`mock/archive/index.html`；本次归档：`mock/archive/2026-10-17/`。早期备份留在 `mock/archive/`，隔夜快照留在 `mock/archive/overnight-20261016/`，均由归档导航收录。独立设备按键稿已归档，当前入口为听写设置。
 
