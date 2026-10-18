@@ -188,37 +188,51 @@ func (w *progressWriter) Write(b []byte) (int, error) {
 }
 
 func (u *Update) Install(ctx context.Context, progress func(int64, int64)) error {
+	p, err := u.Prepare(ctx, progress)
+	if err != nil {
+		return err
+	}
+	defer p.Close()
+	return p.Commit(ctx)
+}
+
+func (u *Update) Prepare(ctx context.Context, progress func(int64, int64)) (*Prepared, error) {
 	c, m := u.client, u.manifest
 	before, err := os.Lstat(c.Target)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if !before.IsDir() || before.Mode()&os.ModeSymlink != 0 {
-		return fmt.Errorf("update target must be a real app directory")
+		return nil, fmt.Errorf("update target must be a real app directory")
 	}
 	if err := distribution.VerifyApp(ctx, c.Target); err != nil {
-		return err
+		return nil, err
 	}
 	current, err := distribution.BundleValue(ctx, c.Target, "CFBundleShortVersionString")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if ok, err := newer(m.Version, current); err != nil || !ok {
-		return fmt.Errorf("update no longer newer than installed app")
+		return nil, fmt.Errorf("update no longer newer than installed app")
 	}
 	work, err := os.MkdirTemp(filepath.Dir(c.Target), ".Voicemore.app.update-")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer os.RemoveAll(work)
+	keep := false
+	defer func() {
+		if !keep {
+			os.RemoveAll(work)
+		}
+	}()
 	archive, err := os.Create(filepath.Join(work, "archive.tar.gz"))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	resp, err := get(ctx, m.URL)
 	if err != nil {
 		archive.Close()
-		return err
+		return nil, err
 	}
 	hash := sha256.New()
 	w := &progressWriter{file: archive, hash: hash, total: m.Size, progress: progress}
@@ -226,52 +240,71 @@ func (u *Update) Install(ctx context.Context, progress func(int64, int64)) error
 	resp.Body.Close()
 	closeErr := archive.Close()
 	if err := errors.Join(copyErr, closeErr); err != nil {
-		return err
+		return nil, err
 	}
 	if w.done != m.Size {
-		return fmt.Errorf("update size mismatch")
+		return nil, fmt.Errorf("update size mismatch")
 	}
 	key, err := base64.StdEncoding.DecodeString(c.PublicKey)
 	if err != nil || len(key) != ed25519.PublicKeySize {
-		return fmt.Errorf("invalid update public key")
+		return nil, fmt.Errorf("invalid update public key")
 	}
 	sig, _ := base64.StdEncoding.DecodeString(m.Signature)
 	if !ed25519.Verify(key, hash.Sum(nil), sig) {
-		return fmt.Errorf("update archive signature rejected")
+		return nil, fmt.Errorf("update archive signature rejected")
 	}
 	extracted := filepath.Join(work, "extracted")
 	if err := extract(ctx, filepath.Join(work, "archive.tar.gz"), extracted); err != nil {
-		return err
+		return nil, err
 	}
 	candidate := filepath.Join(extracted, "Voicemore.app")
 	actual, err := distribution.BundleValue(ctx, candidate, "CFBundleShortVersionString")
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if actual != m.Version {
-		return fmt.Errorf("update bundle version does not match manifest")
+		return nil, fmt.Errorf("update bundle version does not match manifest")
 	}
 	if err := distribution.VerifyUpgrade(ctx, c.Target, candidate); err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	keep = true
+	return &Prepared{target: c.Target, candidate: candidate, work: work, before: before}, nil
+}
+
+// Prepared owns a verified staging directory. Preparing never replaces the running app.
+// Call Commit only after the user requests restart and active work has finished.
+type Prepared struct {
+	target, candidate, work string
+	before                  os.FileInfo
+}
+
+func (p *Prepared) Close() { _ = os.RemoveAll(p.work) }
+func (p *Prepared) Commit(ctx context.Context) error {
+	if err := distribution.VerifyUpgrade(ctx, p.target, p.candidate); err != nil {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	after, err := os.Lstat(c.Target)
+	after, err := os.Lstat(p.target)
 	if err != nil {
 		return err
 	}
-	if !os.SameFile(before, after) {
+	if !os.SameFile(p.before, after) {
 		return fmt.Errorf("installed app changed during update")
 	}
 	// Retain the previous sealed bundle for recovery. The backup is outside the
 	// disposable staging directory and never replaced by a later failed update.
-	backup := work + ".previous.app"
-	if err := os.Rename(c.Target, backup); err != nil {
+	backup := p.work + ".previous.app"
+	if err := os.Rename(p.target, backup); err != nil {
 		return err
 	}
-	if err := os.Rename(candidate, c.Target); err != nil {
-		if rollback := os.Rename(backup, c.Target); rollback != nil {
+	if err := os.Rename(p.candidate, p.target); err != nil {
+		if rollback := os.Rename(backup, p.target); rollback != nil {
 			return fmt.Errorf("install failed: %v; restore %s: %w", err, backup, rollback)
 		}
 		return err

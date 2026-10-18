@@ -99,6 +99,7 @@ func main() {
 	old := flag.String("old", "", "real signed older app")
 	archive := flag.String("archive", "", "real signed 0.3.8 archive")
 	development := flag.String("development", "", "development-signed app with production ID")
+	nextVersion := flag.String("next-version", "0.3.8", "archive bundle version")
 	out := flag.String("out", "", "evidence output directory")
 	flag.Parse()
 	if *old == "" || *archive == "" || *development == "" || *out == "" {
@@ -174,7 +175,7 @@ func main() {
 	}
 	devPayload, err := os.ReadFile(devArchive)
 	must(err)
-	cases := []string{"http-error", "malformed", "bad-signature", "wrong-size", "truncated", "cancelled", "traversal", "symlink", "chained-symlink", "hardlink", "duplicate", "oversized", "wrong-version", "development-candidate", "development-installed", "wrong-bundle", "invalid-code", "not-notarized", "no-downgrade", "valid-upgrade"}
+	cases := []string{"http-error", "malformed", "bad-signature", "wrong-size", "truncated", "cancelled", "traversal", "symlink", "chained-symlink", "hardlink", "duplicate", "oversized", "wrong-version", "development-candidate", "development-installed", "wrong-bundle", "invalid-code", "not-notarized", "no-downgrade", "prepare-discard", "commit-cancelled", "changed-target", "valid-upgrade"}
 	results := []map[string]any{}
 	for _, scenario := range cases {
 		mode = scenario
@@ -201,15 +202,15 @@ func main() {
 		if scenario == "bad-signature" {
 			signature[0] ^= 1
 		}
-		m = map[string]any{"version": "0.3.8", "url": "http://127.0.0.1:48149/archive", "size": len(payload), "signature": base64.StdEncoding.EncodeToString(signature)}
+		m = map[string]any{"version": *nextVersion, "url": "http://127.0.0.1:48149/archive", "size": len(payload), "signature": base64.StdEncoding.EncodeToString(signature)}
 		if scenario == "wrong-size" {
 			m["size"] = len(payload) + 1
 		}
 		if scenario == "wrong-version" {
-			m["version"] = "0.3.9"
+			m["version"] = "99.0.0"
 		}
 		if scenario == "no-downgrade" {
-			m["version"] = "0.3.6"
+			m["version"] = "0.0.0"
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 		client := updateclient.Client{Target: target, Feed: "http://127.0.0.1:48149/feed", PublicKey: base64.StdEncoding.EncodeToString(pub)}
@@ -218,17 +219,40 @@ func main() {
 			if scenario == "cancelled" {
 				cancel()
 			}
-			actualErr = up.Install(ctx, nil)
+			var prepared *updateclient.Prepared
+			prepared, actualErr = up.Prepare(ctx, nil)
+			if actualErr == nil {
+				if hashFile(filepath.Join(target, "Contents/MacOS/Voicemore")) != before {
+					panic("Prepare replaced the installed app")
+				}
+				switch scenario {
+				case "prepare-discard":
+				case "commit-cancelled":
+					cancel()
+					actualErr = prepared.Commit(ctx)
+				case "changed-target":
+					moved := target + ".moved"
+					must(os.Rename(target, moved))
+					run("/usr/bin/ditto", moved, target)
+					actualErr = prepared.Commit(ctx)
+				default:
+					actualErr = prepared.Commit(ctx)
+				}
+				prepared.Close()
+			}
 		}
 		cancel()
 		after := hashFile(filepath.Join(target, "Contents/MacOS/Voicemore"))
 		expected := map[string]string{
-			"http-error": "HTTP 503", "malformed": "invalid character", "bad-signature": "archive signature rejected", "wrong-size": "size mismatch", "truncated": "size mismatch", "cancelled": "context canceled", "traversal": "unsafe or duplicate", "symlink": "unsafe update symlink", "chained-symlink": "unsafe update symlink", "hardlink": "unsupported update entry", "duplicate": "unsafe or duplicate", "oversized": "expansion limit", "wrong-version": "version does not match", "development-candidate": "candidate identity", "development-installed": "stable signing identity", "wrong-bundle": "unexpected bundle identifier", "invalid-code": "candidate identity", "not-notarized": "spctl",
+			"commit-cancelled": "context canceled", "changed-target": "installed app changed", "http-error": "HTTP 503", "malformed": "invalid character", "bad-signature": "archive signature rejected", "wrong-size": "size mismatch", "truncated": "size mismatch", "cancelled": "context canceled", "traversal": "unsafe or duplicate", "symlink": "unsafe update symlink", "chained-symlink": "unsafe update symlink", "hardlink": "unsupported update entry", "duplicate": "unsafe or duplicate", "oversized": "expansion limit", "wrong-version": "version does not match", "development-candidate": "candidate identity", "development-installed": "stable signing identity", "wrong-bundle": "unexpected bundle identifier", "invalid-code": "candidate identity", "not-notarized": "spctl",
 		}
 		passed := actualErr != nil && strings.Contains(actualErr.Error(), expected[scenario]) && before == after
 		detail := ""
 		if actualErr != nil {
 			detail = actualErr.Error()
+		}
+		if scenario == "prepare-discard" {
+			passed = actualErr == nil && before == after
 		}
 		if scenario == "no-downgrade" {
 			passed = actualErr == nil && up == nil && before == after
@@ -239,7 +263,7 @@ func main() {
 			verifyErr := distribution.VerifyUpgrade(ctx, *old, target)
 			backups, _ := filepath.Glob(filepath.Join(dir, ".Voicemore.app.update-*.previous.app"))
 			backupOK := len(backups) == 1 && hashFile(filepath.Join(backups[0], "Contents/MacOS/Voicemore")) == before
-			passed = actualErr == nil && vErr == nil && v == "0.3.8" && verifyErr == nil && backupOK && after != before
+			passed = actualErr == nil && vErr == nil && v == *nextVersion && verifyErr == nil && backupOK && after != before
 			if verifyErr != nil {
 				detail += verifyErr.Error()
 			}

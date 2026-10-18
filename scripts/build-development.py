@@ -15,7 +15,6 @@ if os.environ.get('SIGNING_IDENTITY', identity) != identity:
 identities = subprocess.check_output(['security', 'find-identity', '-v', '-p', 'codesigning'], text=True)
 if f'"{identity}"' not in identities:
     raise SystemExit('Fixed development identity unavailable.')
-subprocess.run([ROOT / 'scripts/fetch-asr-runtime.sh'], cwd=ROOT, check=True)
 parent = Path.home() / 'Library/Caches/voicemore-development'
 parent.mkdir(parents=True, exist_ok=True)
 work = Path(tempfile.mkdtemp(prefix='source-', dir=parent))
@@ -25,6 +24,8 @@ for raw in sorted(set(names)):
         continue
     rel = Path(os.fsdecode(raw))
     if not (rel.suffix == '.go' or rel.as_posix() in ('go.mod', 'go.sum', 'mygo.json') or rel.parts[0] in ('internal', 'resources')):
+        continue
+    if rel.parts[:2] == ('resources', 'local-asr') and rel.name.endswith(('.tar.gz', '.tar.bz2')):
         continue
     original = ROOT / rel
     if not original.is_file():

@@ -694,7 +694,7 @@ func (p *prefsWindow) localASR(c *ui.Context, s config.Settings) {
 	ui.Text(c, T("builtinNote")).FontSize(11.5).TextColor(t.TextMuted)
 	labelled(c, "model", T("mModel"), "", func() { ui.Text(c, localasr.Model).FontSize(12.5).Selectable() })
 	p.asrLanguageSelect(c, s)
-	ui.Text(c, T("builtinSize", float64(localasr.ModelBytes())/1e9)).FontSize(11.5).TextColor(t.TextMuted)
+	ui.Text(c, T("builtinSize", float64(localasr.DownloadBytes())/1e9)).FontSize(11.5).TextColor(t.TextMuted)
 	ui.Text(c, T("builtinIdle")).FontSize(11.5).TextColor(t.TextMuted)
 	source := p.draft("asr.source", localasr.DefaultSource)
 	if !state.Installed || state.Phase == "error" {

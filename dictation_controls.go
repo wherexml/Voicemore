@@ -57,7 +57,7 @@ func (p *prefsWindow) shortcutControl(c *ui.Context, kind, value string, compact
 }
 func (p *prefsWindow) beginShortcut(kind string) {
 	v := p.a.ctrl.View()
-	if p.a.updates.installing {
+	if p.a.updates.committing {
 		p.say("updateBusy")
 		return
 	}

@@ -599,7 +599,7 @@ func (o *onboardWindow) speechBranch(c *ui.Context, s config.Settings) {
 				o.activateLocal()
 				o.a.localASR.Deploy("")
 			}
-			ui.Text(c, T("obDownloadSize", float64(localasr.ModelBytes())/1e9+0.65)).FontSize(12.5).TextColor(t.TextMuted)
+			ui.Text(c, T("obDownloadSize", float64(localasr.DownloadBytes())/1e9)).FontSize(12.5).TextColor(t.TextMuted)
 		}
 		if st.Installed && st.Phase != "ready" && !st.Busy() {
 			if ui.PrimaryButton(c.Key("start"), T("builtinStart")).Clicked() {
@@ -870,9 +870,9 @@ func (o *onboardWindow) firstDictation(c *ui.Context, s config.Settings, ready b
 				}
 				var start ui.Element
 				if practiced {
-					start = ui.Button(c.Key("start"), "").Label(label).Disabled(!ready || busy || o.a.updates.installing).Children(content)
+					start = ui.Button(c.Key("start"), "").Label(label).Disabled(!ready || busy || o.a.updates.committing).Children(content)
 				} else {
-					start = ui.PrimaryButton(c.Key("start"), "").Label(label).Disabled(!ready || busy || o.a.updates.installing).Children(content)
+					start = ui.PrimaryButton(c.Key("start"), "").Label(label).Disabled(!ready || busy || o.a.updates.committing).Children(content)
 				}
 				if start.Clicked() {
 					o.startPractice()

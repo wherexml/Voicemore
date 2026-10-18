@@ -122,8 +122,8 @@ def store(work, cache=DEFAULT_CACHE, profile='voicemore-skylance'):
         spec = specification(pin.read_text().strip())
     if spec != specification(spec['source_sha256']):
         raise SystemExit('Signing identity/policy changed; do not seed stale runtime.')
-    archive = work / 'source/resources/local-asr/runtime.tar.gz'
-    if sha(archive) != c['runtime_sha256']:
+    archive = work / 'runtime-cache.tar.gz' if 'cache_runtime_sha256' in c else work / 'source/resources/local-asr/runtime.tar.gz'
+    if sha(archive) != c.get('cache_runtime_sha256', c['runtime_sha256']):
         raise SystemExit('Candidate runtime archive changed.')
     cache = Path(cache)
     cache.mkdir(parents=True, exist_ok=True, mode=0o700)

@@ -4,6 +4,7 @@ package localasr
 
 import (
 	"archive/tar"
+	"compress/bzip2"
 	"compress/gzip"
 	"context"
 	"crypto/rand"
@@ -365,20 +366,43 @@ func (m *Manager) writeWorker() error {
 	})
 }
 func (m *Manager) installRuntime(ctx context.Context) error {
+	hashBytes, _ := assets.ReadFile("assets/runtime.sha256")
+	return m.installRuntimeArchive(ctx, strings.TrimSpace(string(hashBytes)))
+}
+
+func (m *Manager) installRuntimeArchive(ctx context.Context, expected string) error {
 	if err := os.MkdirAll(m.Root, 0700); err != nil {
 		return err
 	}
-	hashBytes, _ := assets.ReadFile("assets/runtime.sha256")
-	expected := strings.TrimSpace(string(hashBytes))
 	stamp := filepath.Join(m.Root, "runtime/version.sha256")
-	if b, e := os.ReadFile(stamp); e == nil && strings.TrimSpace(string(b)) == expected {
-		if _, e = os.Stat(filepath.Join(m.Root, "runtime/bin/python3.11")); e == nil {
-			return nil
+	if b, e := os.ReadFile(stamp); e == nil {
+		installed := strings.TrimSpace(string(b))
+		compatible := installed == expected
+		// Official packaging supplies aliases only for byte-identical extracted runtimes.
+		if runtimeManifest.SHA256 == expected {
+			for _, previous := range runtimeManifest.CompatibleInstalledSHA256 {
+				compatible = compatible || installed == previous
+			}
+		}
+		if compatible {
+			if _, e = os.Stat(filepath.Join(m.Root, "runtime/bin/python3.11")); e == nil {
+				return nil
+			}
 		}
 	}
-	f, err := os.Open(m.Archive)
+	archive := m.Archive
+	if _, err := os.Stat(archive); os.IsNotExist(err) || archive == "" {
+		if runtimeManifest.SHA256 != expected {
+			return errors.New("本地识别环境清单校验失败")
+		}
+		archive, err = m.downloadRuntime(ctx, runtimeManifest)
+		if err != nil {
+			return err
+		}
+	}
+	f, err := os.Open(archive)
 	if err != nil {
-		return fmt.Errorf("应用缺少独立 ASR 运行环境，请重新安装完整应用：%w", err)
+		return fmt.Errorf("本地识别环境不可用：%w", err)
 	}
 	defer f.Close()
 	h := sha256.New()
@@ -386,22 +410,33 @@ func (m *Manager) installRuntime(ctx context.Context) error {
 		return err
 	}
 	if hex.EncodeToString(h.Sum(nil)) != expected {
-		return errors.New("独立推理环境校验失败，请重新安装应用")
+		return errors.New("本地识别环境校验失败，请重新下载")
 	}
 	if _, err = f.Seek(0, 0); err != nil {
 		return err
 	}
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		return err
+	var stream io.Reader
+	if strings.HasSuffix(archive, ".bz2") {
+		stream = bzip2.NewReader(f)
+	} else {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return err
+		}
+		defer gz.Close()
+		stream = gz
 	}
-	defer gz.Close()
 	stage, err := os.MkdirTemp(m.Root, "runtime-stage-")
 	if err != nil {
 		return err
 	}
-	defer os.RemoveAll(stage)
-	tr := tar.NewReader(gz)
+	retainStage := false
+	defer func() {
+		if !retainStage {
+			os.RemoveAll(stage)
+		}
+	}()
+	tr := tar.NewReader(stream)
 	for {
 		hdr, err := tr.Next()
 		if err == io.EOF {
@@ -449,14 +484,31 @@ func (m *Manager) installRuntime(ctx context.Context) error {
 			return err
 		}
 	}
-	final := filepath.Join(m.Root, "runtime")
-	if err = os.RemoveAll(final); err != nil {
+	if err = os.WriteFile(filepath.Join(stage, "runtime/version.sha256"), []byte(expected), 0600); err != nil {
 		return err
+	}
+	final := filepath.Join(m.Root, "runtime")
+	if err = ctx.Err(); err != nil {
+		return err
+	}
+	previous := filepath.Join(stage, "previous-runtime")
+	hadOld := false
+	if _, err := os.Lstat(final); err == nil {
+		if err = os.Rename(final, previous); err != nil {
+			return err
+		}
+		hadOld = true
 	}
 	if err = os.Rename(filepath.Join(stage, "runtime"), final); err != nil {
+		if hadOld {
+			if restoreErr := os.Rename(previous, final); restoreErr != nil {
+				retainStage = true
+				return fmt.Errorf("runtime replacement failed; previous runtime retained at %s: %w", previous, errors.Join(err, restoreErr))
+			}
+		}
 		return err
 	}
-	return os.WriteFile(stamp, []byte(expected), 0600)
+	return nil
 }
 func (m *Manager) verifyModel(ctx context.Context) error {
 	for _, f := range modelManifest.Files {

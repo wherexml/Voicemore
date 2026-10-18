@@ -12,7 +12,7 @@ python3 scripts/install-macos.py /absolute/candidate-workspace
 Output: an isolated candidate workspace under `~/Library/Caches/voicemore-release/`, containing the final stapled app, notarized DMG and verification evidence. This command prepares only; publishing requires the explicit release entry point.
 The disk image contains `Voicemore.app`, an `/Applications` shortcut, and a Finder icon layout. Drag the app onto that shortcut, eject the image, and launch from Applications.
 
-The verification script mounts the finished DMG read-only, copies the app to a temporary installation directory, checks its signature and arm64 architecture, checks product/minimum-system metadata and the bundled runtime hash, and writes repeatable evidence under `artifacts/dmg-verification/`. It then unmounts the image and removes only its temporary directories. It does not grant permissions, run the app, or access personal settings.
+The verification script mounts the finished DMG read-only, copies the app to a temporary installation directory, checks its signature and arm64 architecture, checks product/minimum-system metadata and the runtime payload hash (legacy bundles) or pinned on-demand manifest (new bundles), and writes repeatable evidence under `artifacts/dmg-verification/`. It then unmounts the image and removes only its temporary directories. It does not grant permissions, run the app, or access personal settings.
 
 For native end-to-end acceptance, launch the copied app on an Apple Silicon Mac, grant the three documented permissions, deploy the local model, dictate into TextEdit, check history and replay, quit and relaunch. Test the downloaded/quarantined asset on a separate Mac before claiming Gatekeeper acceptance. Stable releases require automatic signature, notarization, ticket, Gatekeeper and exact final DMG checks. Repeat native/cross-Mac acceptance for relevant runtime, permissions, installation or updater changes; it is not mandatory for every routine release.
 
@@ -44,4 +44,4 @@ This copies the base Python installation and installed packages without changing
 
 ## Client updates
 
-From 0.3.0, signed archives and a manifest support in-app updates. See [publishing and E2E acceptance](UPDATES.md). The runtime dependency remains pinned to its original v0.2.0 Release asset.
+From 0.3.0, signed archives and a manifest support in-app updates. See [publishing and E2E acceptance](UPDATES.md). Development uses the pinned original v0.2.0 runtime asset on demand. Official candidate builds produce a separately signed/notarized runtime asset and embed its immutable URL, size and hash; the publisher uploads and verifies it alongside the app before exposing the release. New DMGs and update archives exclude runtime payloads.

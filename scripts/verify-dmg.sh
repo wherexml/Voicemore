@@ -31,7 +31,21 @@ codesign --verify --deep --strict "$app" 2> "$evidence/signature.txt"
 [ "$(plutil -extract CFBundleShortVersionString raw "$app/Contents/Info.plist")" = "$(plutil -extract version raw mygo.json)" ]
 [ "$(plutil -extract LSMinimumSystemVersion raw "$app/Contents/Info.plist")" = 26.2 ]
 expected=$(tr -d '\r\n' < internal/localasr/assets/runtime.sha256)
-actual=$(shasum -a 256 "$app/Contents/Resources/local-asr/runtime.tar.gz" | awk '{print $1}')
+runtime="$app/Contents/Resources/local-asr/runtime.tar.gz"
+if [ -f "$app/Contents/Resources/local-asr/runtime.tar.bz2" ]; then
+  runtime="$app/Contents/Resources/local-asr/runtime.tar.bz2"
+  # A signed distribution copy pins its compact runtime, not the source gzip.
+  [ -n "$source_app" ] || { echo 'Compact runtime verification requires the source app argument.' >&2; exit 1; }
+  expected=$(shasum -a 256 "$source_app/Contents/Resources/local-asr/runtime.tar.bz2" | awk '{print $1}')
+fi
+if [ -f "$app/Contents/Resources/local-asr/runtime-manifest.json" ]; then
+  [ -n "$source_app" ] || { echo 'On-demand runtime verification requires the source app argument.' >&2; exit 1; }
+  cmp "$app/Contents/Resources/local-asr/runtime-manifest.json" "$source_app/Contents/Resources/local-asr/runtime-manifest.json"
+  [ ! -f "$app/Contents/Resources/local-asr/runtime.tar.gz" ]
+  [ ! -f "$app/Contents/Resources/local-asr/runtime.tar.bz2" ]
+else
+actual=$(shasum -a 256 "$runtime" | awk '{print $1}')
 [ "$expected" = "$actual" ]
+fi
 shasum -a 256 "$image" > "$evidence/SHA256SUMS.txt"
 printf '%s\n' 'PASS: DMG integrity, Applications shortcut, Finder layout and fixed-English background, copied app signature, arm64, product metadata, bundled runtime checksum.' | tee "$evidence/result.txt"

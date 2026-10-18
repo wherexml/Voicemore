@@ -122,7 +122,18 @@ def main():
     compiled = {n for n in names if n.endswith('.go') or n in ('go.mod', 'go.sum', 'mygo.json') or n.startswith(('internal/', 'resources/'))}
     if compiled != set(c['source_sha256']) - {'CHANGELOG.md'}:
         raise SystemExit('Committed source inventory differs from candidate.')
-    if sha(app / 'Contents/Resources/local-asr/runtime.tar.gz') != c['runtime_sha256']:
+    runtime_asset = None
+    if c.get('runtime_remote'):
+        runtime_asset = Path(c['runtime_asset'])
+        descriptor = read(app / 'Contents/Resources/local-asr/runtime-manifest.json')
+        if descriptor != c['runtime_manifest'] or sha(runtime_asset) != descriptor['sha256'] or runtime_asset.stat().st_size != descriptor['bytes']:
+            raise SystemExit('On-demand runtime differs from signed manifest.')
+        expected_url = f'https://github.com/{REPO}/releases/download/v{version}/{runtime_asset.name}'
+        if descriptor['url'] != expected_url:
+            raise SystemExit('On-demand runtime URL differs from release asset.')
+        if list((app / 'Contents/Resources/local-asr').glob('*.tar.*')):
+            raise SystemExit('Main app unexpectedly includes runtime payload.')
+    elif sha(app / 'Contents/Resources/local-asr' / c.get('runtime_archive', 'runtime.tar.gz')) != c['runtime_sha256']:
         raise SystemExit('Bundled runtime differs from signed candidate.')
     report = read(a.e2e) if a.e2e else None
     if a.e2e and not isinstance(report, dict):
@@ -175,8 +186,13 @@ def main():
     manifest = dict(version=version, notes=notes, date=datetime.now(timezone.utc).isoformat(), url=f'https://github.com/{REPO}/releases/download/{tag}/{archive.name}', size=archive.stat().st_size, signature=base64.b64encode(signature).decode())
     manifest_path = stage / 'update-darwin-arm64.json'
     manifest_path.write_text(json.dumps(manifest, indent=2) + '\n')
+    extra_assets = []
+    if runtime_asset is not None:
+        shipped_runtime = stage / runtime_asset.name
+        shutil.copy2(runtime_asset, shipped_runtime)
+        extra_assets.append(shipped_runtime)
     checksums = stage / 'SHA256SUMS.txt'
-    checksums.write_text(''.join(f'{sha(f)}  {f.name}\n' for f in (target, archive, manifest_path)))
+    checksums.write_text(''.join(f'{sha(f)}  {f.name}\n' for f in (target, archive, manifest_path, *extra_assets)))
     notes_file = work / 'release-notes.md'
     notes_file.write_text(notes + '\n\nApple Silicon / macOS 26.2+. Developer ID signed and Apple notarized, with stapled app and DMG tickets. Update archive authenticated with the existing Ed25519 key.\n\n首次安装下载 DMG，拖入 Applications。此版本已完成 Developer ID 正式签名与 Apple 公证。由开发签名旧版升级后，macOS 可能要求重新确认麦克风、辅助功能与输入监控权限。\n')
     head = source_commit
@@ -195,11 +211,11 @@ def main():
         run('git', 'push', 'origin', tag)
     else:
         run('git', 'push', 'origin', 'HEAD', tag)
-    run('gh', 'release', 'create', tag, '--repo', REPO, '--verify-tag', '--draft', '--title', 'Voicemore ' + version, '--notes-file', notes_file, target, archive, manifest_path, checksums)
+    run('gh', 'release', 'create', tag, '--repo', REPO, '--verify-tag', '--draft', '--title', 'Voicemore ' + version, '--notes-file', notes_file, target, archive, manifest_path, checksums, *extra_assets)
     # Verify GitHub stored the exact assets before exposing the stable update feed.
     with tempfile.TemporaryDirectory(prefix='voicemore-upload-check-') as temp:
         run('gh', 'release', 'download', tag, '--repo', REPO, '--dir', temp)
-        for f in (target, archive, manifest_path, checksums):
+        for f in (target, archive, manifest_path, checksums, *extra_assets):
             if sha(Path(temp) / f.name) != sha(f):
                 raise SystemExit('Uploaded asset differs; release stays draft.')
     run('gh', 'release', 'edit', tag, '--repo', REPO, '--draft=false', '--prerelease=false', '--latest')
