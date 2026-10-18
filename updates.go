@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -14,29 +13,22 @@ import (
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
-	"voiceinput/internal/config"
 	"voiceinput/internal/session"
 	"voiceinput/internal/updateclient"
 )
 
 // All state below belongs to the UI thread; workers post their results to it.
 type updateState struct {
-	available                        *updateclient.Update
-	checking, installing, restarting bool
-	status, detail                   string
-	downloaded, total                int64
-	cancel                           context.CancelFunc
-	notified                         string
-	statePath                        string
+	available                         *updateclient.Update
+	checking, downloading, restarting bool
+	committing                        bool
+	prepared                          *updateclient.Prepared
+	status, detail                    string
+	downloaded, total                 int64
+	cancel                            context.CancelFunc
 }
 
-func (a *app) startUpdates(dir string) {
-	a.updates.statePath = filepath.Join(dir, "update-notification.json")
-	var saved struct{ Version string }
-	if b, err := os.ReadFile(a.updates.statePath); err == nil {
-		_ = json.Unmarshal(b, &saved)
-	}
-	a.updates.notified = saved.Version
+func (a *app) startUpdates(_ string) {
 	mygo.App.OnNotificationClick(func(id string) {
 		if id == "voicemore-update" {
 			a.main.goTo("home")
@@ -47,6 +39,9 @@ func (a *app) startUpdates(dir string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	mygo.App.OnWillQuit(func(*mygo.QuitEvent) {
 		cancel()
+		if a.updates.prepared != nil {
+			a.updates.prepared.Close()
+		}
 		if a.updates.cancel != nil {
 			a.updates.cancel()
 		}
@@ -68,7 +63,7 @@ func (a *app) startUpdates(dir string) {
 
 func (a *app) checkUpdates() {
 	u := &a.updates
-	if a.quitting || u.checking || u.installing {
+	if a.quitting || u.checking || u.downloading || u.prepared != nil || u.committing {
 		return
 	}
 	if !mygo.Updater.Enabled() {
@@ -101,13 +96,7 @@ func (a *app) checkUpdates() {
 				if up != nil {
 					u.status = "updateAvailable"
 					a.tray.SetToolTip("Voicemore · " + T("updateFound", up.Version))
-					if u.notified != up.Version {
-						u.notified = up.Version
-						_ = config.WriteJSON(u.statePath, struct{ Version string }{up.Version})
-						// Home and tray remain available if the OS denies notifications.
-						n := mygo.NewNotification(mygo.NotificationOptions{ID: "voicemore-update", Title: "Voicemore", Body: T("updateFound", up.Version), Silent: true})
-						go func() { _ = n.Show() }()
-					}
+
 				}
 			}
 			a.main.refresh()
@@ -117,46 +106,88 @@ func (a *app) checkUpdates() {
 
 func (a *app) updateBusy() bool {
 	phase := a.ctrl.View().Phase
-	return (phase >= session.Preparing && phase <= session.Inserting) || a.localASR.Snapshot().Busy()
+	return (a.main != nil && a.main.starting) || (phase >= session.Preparing && phase <= session.Inserting) || a.localASR.Snapshot().Busy()
 }
 
 func (a *app) installUpdate() {
 	u := &a.updates
-	if u.available == nil || u.installing || u.checking {
+	if u.available == nil || u.downloading || u.checking || u.prepared != nil || u.committing {
 		return
 	}
-	if a.updateBusy() {
-		u.status = "updateBusy"
-		a.main.refresh()
-		return
-	}
-	u.installing, u.status, u.detail = true, "updateDownloading", ""
+	u.downloading, u.status, u.detail = true, "updateDownloading", ""
 	u.downloaded, u.total = 0, 0
-	// Avoid a new dictation while installation/relaunch is in progress.
-	a.bindTrigger()
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 	u.cancel = cancel
 	up := u.available
 	a.main.refresh()
 	go func() {
-		err := up.Install(ctx, func(done, total int64) {
-			mygo.RunOnMain(func() { u.downloaded, u.total = done, total; a.main.refresh() })
+		lastProgress := time.Time{}
+		prepared, err := up.Prepare(ctx, func(done, total int64) {
+			if done != total && time.Since(lastProgress) < 100*time.Millisecond {
+				return
+			}
+			lastProgress = time.Now()
+			mygo.RunOnMain(func() {
+				if a.quitting {
+					return
+				}
+				u.downloaded, u.total = done, total
+				a.main.refresh()
+			})
 		})
 		cancel()
 		mygo.RunOnMain(func() {
+			if a.quitting {
+				if prepared != nil {
+					prepared.Close()
+				}
+				return
+			}
 			u.cancel = nil
 			if err != nil {
-				u.installing = false
+				u.downloading = false
 				u.status, u.detail = "updateInstallFailed", err.Error()
 				if errors.Is(err, context.Canceled) {
 					u.status, u.detail = "updateCancelled", ""
 				}
+				a.main.refresh()
+				return
+			}
+			u.downloading = false
+			u.prepared, u.status = prepared, "updateReadyRestart"
+			a.main.updateOpen = true
+			a.main.refresh()
+			n := mygo.NewNotification(mygo.NotificationOptions{ID: "voicemore-update", Title: "Voicemore", Body: T("updateReadyRestart"), Silent: true})
+			go func() { _ = n.Show() }()
+		})
+	}()
+}
+
+func (a *app) commitUpdate() {
+	u := &a.updates
+	if u.prepared == nil || u.committing {
+		return
+	}
+	if a.updateBusy() {
+		return
+	}
+	u.committing, u.status = true, "updateRestarting"
+	a.bindTrigger()
+	a.main.refresh()
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+		err := u.prepared.Commit(ctx)
+		cancel()
+		mygo.RunOnMain(func() {
+			u.prepared.Close()
+			u.prepared = nil
+			if err != nil {
+				u.committing = false
+				u.status, u.detail = "updateInstallFailed", err.Error()
 				a.bindTrigger()
 				a.main.refresh()
 				return
 			}
-			u.status = "updateRestarting"
-			a.main.refresh()
 			a.restartAfterUpdate()
 		})
 	}()
@@ -193,7 +224,7 @@ exec /usr/bin/open -n "$bundle"
 		}
 	}
 	if err != nil {
-		a.updates.installing = false
+		a.updates.committing = false
 		a.updates.status, a.updates.detail = "updateRestartFailed", err.Error()
 		a.bindTrigger()
 		a.main.refresh()
@@ -207,25 +238,24 @@ exec /usr/bin/open -n "$bundle"
 func (m *mainWindow) updatePresentation() (string, string, string) {
 	u := &m.a.updates
 	switch {
+	case u.prepared != nil && !u.committing:
+		return T("updateRestartAction"), T("updateReadyRestart"), ""
 	case u.status == "updateRestarting":
 		return T("updateRestartShort"), T("updateRestartShort"), T("updateRestarting")
-	case u.installing && u.total > 0 && u.downloaded >= u.total:
+	case u.downloading && u.total > 0 && u.downloaded >= u.total:
 		return T("updateVerifyShort"), T("updateVerifyShort"), T("updateVerifyNote")
-	case u.installing:
+	case u.downloading:
 		label := T("updateDownloadShort")
 		if u.total > 0 {
 			label = fmt.Sprintf("%s %d%%", label, min(int64(99), 100*u.downloaded/u.total))
 		}
-		return label, label, T("updatePauseNote")
+		return label, label, ""
 	case u.checking:
 		return "", T("updateChecking"), ""
 	case u.status == "updateCheckFailed" || u.status == "updateInstallFailed" || u.status == "updateRestartFailed":
 		return T("updateAttention"), T("updateAttention"), T(u.status)
 	case u.available != nil:
-		detail := T("updateReadyNote")
-		if m.a.updateBusy() {
-			detail = T("updateBusy")
-		}
+		detail := ""
 		if u.status == "updateCancelled" {
 			detail = T("updateCancelled")
 		}
@@ -251,14 +281,11 @@ func (m *mainWindow) updateView(c *ui.Context) {
 	brand.AccentText = ui.Hex("#f7faff")
 	c.SetTheme(&brand)
 	defer c.SetTheme(t)
-	active := u.available != nil || u.installing || u.checking
+	active := u.available != nil || u.downloading || u.checking
 	attention := u.detail != ""
 	tooltip := title
 	if label != "" {
 		tooltip = label
-	}
-	if u.available != nil && !u.installing && !u.checking && m.a.updateBusy() {
-		tooltip = T("updateBusy")
 	}
 	anchor := ui.ButtonBase(c.Key("update-trigger")).Size(44, 44).Radius(22).
 		Justify(ui.Center).AlignItems(ui.Center).Label(tooltip)
@@ -267,16 +294,16 @@ func (m *mainWindow) updateView(c *ui.Context) {
 	}
 	anchor.Children(func() {
 		color := t.TextMuted
-		face := ui.Box(c).Size(36, 36).Radius(18).Justify(ui.Center).AlignItems(ui.Center)
+		face := ui.Box(c).Size(26, 26).Radius(13).Justify(ui.Center).AlignItems(ui.Center)
 		if active || attention {
 			face.Background(brand.Accent)
 			color = brand.AccentText
 		}
 		face.Children(func() {
 			switch {
-			case u.installing || u.checking:
+			case u.downloading || u.checking:
 				progress := -1.0
-				if u.installing && u.status == "updateDownloading" && u.total > 0 && u.downloaded < u.total {
+				if u.downloading && u.status == "updateDownloading" && u.total > 0 && u.downloaded < u.total {
 					progress = max(0.0, float64(u.downloaded)/float64(u.total))
 				}
 				angle := -math.Pi / 2
@@ -284,11 +311,11 @@ func (m *mainWindow) updateView(c *ui.Context) {
 					angle += float64(c.Now().UnixMilli()%1200) / 1200 * 2 * math.Pi
 					c.After(30 * time.Millisecond)
 				}
-				ui.Box(c).Size(24, 24).Draw(func(p *ui.Painter, r ui.Rect) { drawUpdateRing(p, r, progress, angle) })
-			case attention:
+				ui.Box(c).Size(18, 18).Draw(func(p *ui.Painter, r ui.Rect) { drawUpdateRing(p, r, progress, angle) })
+			case attention || u.prepared != nil:
 				actionIcon(c, railUpdate, 16, color)
 			case u.available != nil:
-				ui.Icon(c, icImport).FontSize(24).TextColor(color)
+				actionIcon(c, icImport, 16, color)
 			default:
 				actionIcon(c, railUpdate, 16, color)
 			}
@@ -303,7 +330,7 @@ func (m *mainWindow) updateView(c *ui.Context) {
 		})
 	}
 	if anchor.Clicked() {
-		if u.available != nil && !u.installing && !u.checking && !attention && !m.a.updateBusy() {
+		if u.available != nil && !u.downloading && !u.checking && !attention && u.prepared == nil && !u.committing {
 			m.updateOpen = false
 			m.a.installUpdate()
 		} else {
@@ -326,7 +353,7 @@ func (m *mainWindow) updateView(c *ui.Context) {
 			if note != "" {
 				ui.Text(c, note).FontSize(12).TextColor(t.TextMuted)
 			}
-			if u.installing && u.status != "updateRestarting" {
+			if u.downloading && u.status != "updateRestarting" {
 				progress := -1.0
 				if u.total > 0 {
 					progress = min(1.0, float64(u.downloaded)/float64(u.total))
@@ -338,20 +365,26 @@ func (m *mainWindow) updateView(c *ui.Context) {
 				ui.Text(c, T("updateErrorDetails")).FontSize(11).TextColor(t.TextMuted).Tooltip(u.detail)
 			}
 			switch {
+			case u.prepared != nil && !u.committing:
+				if ui.PrimaryButton(c, T("updateRestartAction")).Disabled(m.a.updateBusy()).Clicked() {
+					m.a.commitUpdate()
+				}
+			case u.committing:
+				ui.Text(c, T("updateRestartShort"))
 			case u.status == "updateRestartFailed":
 				if ui.PrimaryButton(c, T("updateRestartAction")).Clicked() {
-					u.installing, u.status, u.detail = true, "updateRestarting", ""
+					u.committing, u.status, u.detail = true, "updateRestarting", ""
 					m.a.bindTrigger()
 					m.a.restartAfterUpdate()
 				}
-			case u.installing:
+			case u.downloading:
 				if u.cancel != nil && (u.total <= 0 || u.downloaded < u.total) {
 					if ui.Button(c, T("updateCancel")).Clicked() {
 						u.cancel()
 					}
 				}
 			case u.available != nil && u.status != "updateCheckFailed":
-				if ui.PrimaryButton(c, T("updateInstall")).Disabled(u.checking || m.a.updateBusy()).Clicked() {
+				if ui.PrimaryButton(c, T("updateInstall")).Disabled(u.checking).Clicked() {
 					m.a.installUpdate()
 				}
 			default:
@@ -379,7 +412,7 @@ func drawUpdateRing(p *ui.Painter, r ui.Rect, progress, angle float64) {
 				path.LineTo(x, y)
 			}
 		}
-		p.StrokePath(&path, 2.5, color)
+		p.StrokePath(&path, 1.5, color)
 	}
 	arc(0, 2*math.Pi, ui.RGBA(247, 250, 255, 0.25))
 	sweep := 0.28 * 2 * math.Pi

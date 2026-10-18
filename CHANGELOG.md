@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.11
+
+- Keep dictation, shortcuts and settings available while updates download and verify in the background. Install only after the user chooses Restart now while idle.
+- Move the local ASR runtime out of the main installer and update archive. Download and verify it with the local model only when local recognition is requested; cloud recognition needs neither package.
+- Reuse compatible installed runtimes and verified downloads, preserve existing runtimes on failure, and include the pinned runtime asset in release verification.
+- Reduce updater icon sizes and progress-ring stroke weight.
+
+更新下载和校验期间保持正常使用，就绪后提示重启，由用户选择立即重启再安装。本地识别运行环境与模型统一按需下载，使用豆包等云端识别无需下载本地资源；精简主安装包，保留环境缓存复用与完整性校验，并缩小更新图标。
+
 ## 0.3.10
 
 - Show Voicemore Official as a dedicated built-in speech provider with the Voicemore mark and prefilled service address; retain existing sub2api settings and encrypted keys during upgrades.

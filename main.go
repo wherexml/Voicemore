@@ -217,7 +217,7 @@ func main() {
 	}
 	mygo.App.OnWindowAllClosed(func() {}) // closing the window leaves dictation running
 	mygo.App.OnBeforeQuit(func(e *mygo.QuitEvent) {
-		if a.updates.installing && !a.updates.restarting {
+		if a.updates.committing && !a.updates.restarting {
 			e.PreventDefault()
 			a.main.goTo("home")
 			a.main.show()
@@ -302,6 +302,10 @@ func (a *app) ready() {
 	}
 	executable, _ := os.Executable()
 	archive := filepath.Join(filepath.Dir(executable), "../Resources/local-asr/runtime.tar.gz")
+	compact := filepath.Join(filepath.Dir(executable), "../Resources/local-asr/runtime.tar.bz2")
+	if _, err := os.Stat(compact); err == nil {
+		archive = compact
+	}
 	a.localASR = localasr.New(filepath.Join(dir, "local-asr"), archive)
 	a.overlay = newOverlay(a)
 	a.sendPreview = newSendPreview(a)
@@ -530,7 +534,7 @@ func (a *app) bindTrigger() {
 		a.stopHotkey = nil
 	}
 	a.triggerErr, a.deviceButtonErr = "", ""
-	if a.updates.installing || a.shortcutsSuspended {
+	if a.updates.committing || a.shortcutsSuspended {
 		return
 	}
 	stops := []func(){}
@@ -652,7 +656,7 @@ func (a *app) bindTrigger() {
 				}
 				return
 			}
-			if a.shortcutsSuspended || a.updates.installing {
+			if a.shortcutsSuspended || a.updates.committing {
 				return
 			}
 			for _, b := range a.settings.Get().AllDeviceButtons() {
@@ -681,7 +685,7 @@ func (a *app) bindTrigger() {
 
 func (a *app) translationTrigger() {
 	mygo.RunOnMain(func() {
-		if a.shortcutsSuspended || a.updates.installing || (a.onboard != nil && a.onboard.visible()) {
+		if a.shortcutsSuspended || a.updates.committing || (a.onboard != nil && a.onboard.visible()) {
 			return
 		}
 		go a.ctrl.ToggleTranslation()
@@ -692,7 +696,7 @@ func (a *app) translationTrigger() {
 func (a *app) setMenu() {
 	a.tray.SetMenu(mygo.NewMenu([]*mygo.MenuItem{
 		{Label: T("trayToggle"), Click: func(*mygo.MenuItem, *mygo.Window) {
-			if !a.updates.installing {
+			if !a.updates.committing {
 				go a.ctrl.Toggle()
 			}
 		}},

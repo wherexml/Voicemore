@@ -92,7 +92,7 @@ def main():
         inventory = json.loads((work / 'source-sha256.json').read_text())
         for rel, checksum in inventory.items():
             # These two files are rewritten only inside the distribution copy.
-            if rel not in ('mygo.json', 'internal/localasr/assets/runtime.sha256') and digest(source / rel) != checksum:
+            if rel not in ('mygo.json', 'internal/localasr/assets/runtime.sha256', 'internal/localasr/assets/runtime-manifest.json') and digest(source / rel) != checksum:
                 raise SystemExit('Resume source changed: ' + rel)
     else:
         (work / 'source-sha256.json').write_text(json.dumps(inventory, indent=2))
@@ -152,7 +152,22 @@ def main():
         # Never generate an updater manifest from this not-yet-notarized candidate.
         env.pop('MYGO_UPDATER_PRIVATE_KEY', None)
         run('tar', '-czf', target, '-C', runtime_stage, 'runtime', env=env)
-    runtime_hash = digest(target)
+    # Keep the runtime outside the app; it is a separate, pinned release asset.
+    cache_archive = work / 'runtime-cache.tar.gz'
+    shutil.copy2(target, cache_archive)
+    cache_runtime_hash = digest(cache_archive)
+    compact = target.with_suffix('.bz2')
+    run('python3', ROOT / 'scripts/compress-runtime.py', target, compact)
+    target.unlink()
+    runtime_hash = digest(compact)
+    runtime_name = f'voicemore-asr-runtime-{runtime_hash}.tar.bz2'
+    target = work / runtime_name
+    compact.rename(target)
+    runtime_spec = dict(url=f'https://github.com/wherexml/Voicemore/releases/download/v{config["version"]}/{runtime_name}',
+                        bytes=target.stat().st_size, sha256=runtime_hash, format='bzip2', compatible_installed_sha256=[cache_runtime_hash])
+    descriptor = json.dumps(runtime_spec, indent=2) + '\n'
+    (source / 'internal/localasr/assets/runtime-manifest.json').write_text(descriptor)
+    (source / 'resources/local-asr/runtime-manifest.json').write_text(descriptor)
     (source / 'internal/localasr/assets/runtime.sha256').write_text(runtime_hash + '\n')
     config_path = source / 'mygo.json'
     config = json.loads(config_path.read_text())
@@ -176,7 +191,7 @@ def main():
     with (work / 'app-signature.txt').open('w') as log:
         run('codesign', '--verify', '--deep', '--strict', app, stdout=log, stderr=log)
         run('codesign', '-d', '-r-', '--verbose=4', app, stdout=log, stderr=log)
-    (work / 'candidate.json').write_text(json.dumps({'status': 'signed-not-notarized', 'app': str(app), 'runtime_sha256': runtime_hash, 'identity': IDENTITY, 'version': config['version'], 'source_sha256': inventory, 'runtime_cache_spec': spec, 'runtime_cache_hit': cached is not None}, indent=2))
+    (work / 'candidate.json').write_text(json.dumps({'status': 'signed-not-notarized', 'app': str(app), 'runtime_sha256': runtime_hash, 'runtime_archive': target.name, 'runtime_remote': True, 'runtime_asset': str(target), 'runtime_manifest': runtime_spec, 'cache_runtime_sha256': cache_runtime_hash, 'identity': IDENTITY, 'version': config['version'], 'source_sha256': inventory, 'runtime_cache_spec': spec, 'runtime_cache_hit': cached is not None}, indent=2))
     print(f'Signed candidate ready, NOT notarized or published: {app}', flush=True)
 
 if __name__ == '__main__':

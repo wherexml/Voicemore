@@ -93,7 +93,7 @@ func (o *onboardWindow) guideState() map[string]any {
 		mode = config.TriggerToggle
 	}
 	st := o.a.localASR.Snapshot()
-	model := map[string]any{"cloud": s.Onboarding.Cloud, "ready": o.speechReady(s) && s.Onboarding.Cloud == (s.ASRAssign.Provider != providers.Local), "name": localasr.Model, "phase": st.Phase, "status": localASRState(st), "installed": st.Installed, "busy": st.Busy(), "done": st.Done, "total": st.Total, "detail": st.Detail, "sizeGB": float64(localasr.ModelBytes())/1e9 + 0.65, "selected": s.ASRAssign.Provider == providers.Local && s.ASRManaged, "current": o.a.modelLabel(providers.KindASR, s)}
+	model := map[string]any{"cloud": s.Onboarding.Cloud, "ready": o.speechReady(s) && s.Onboarding.Cloud == (s.ASRAssign.Provider != providers.Local), "name": localasr.Model, "phase": st.Phase, "status": localASRState(st), "installed": st.Installed, "busy": st.Busy(), "done": st.Done, "total": st.Total, "detail": st.Detail, "sizeGB": float64(localasr.DownloadBytes()) / 1e9, "selected": s.ASRAssign.Provider == providers.Local && s.ASRManaged, "current": o.a.modelLabel(providers.KindASR, s)}
 	return map[string]any{"model": model, "language": langIndex.Load(), "step": s.Onboarding.Step, "perms": []bool{macos.MicrophoneStatus() == "authorized", macos.AccessibilityTrusted(false), macos.InputMonitoringGranted(false)}, "shortcut": key, "mode": mode, "keySeen": s.Onboarding.KeyDetected, "practiced": s.Onboarding.Practiced, "text": o.practice, "theme": theme, "speechReady": o.speechReady(s), "phase": phase, "pressed": o.pressed, "message": v.Message}
 }
 func (b *onboardingBridge) State(ctx context.Context) (map[string]any, error) {
@@ -242,7 +242,7 @@ func (o *onboardWindow) toggleGuidePractice() {
 		return
 	}
 	s := o.a.settings.Get()
-	if !permissionsGranted() || !o.speechReady(s) || o.a.updates.installing {
+	if !permissionsGranted() || !o.speechReady(s) || o.a.updates.committing {
 		return
 	}
 	v := o.a.ctrl.View()

@@ -129,7 +129,7 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 		if m.starting {
 			label = T("homeCountdown")
 		}
-		if homeControl(c.Key("dictate"), icMic, label, false, keyName(s.TriggerKey)).Height(32).Background(railText(t)).TextColor(cardColor(t)).Disabled(m.starting || m.a.updates.installing || (phase != session.Idle && !recording && phase != session.Done && phase != session.Failed)).Clicked() {
+		if homeControl(c.Key("dictate"), icMic, label, false, keyName(s.TriggerKey)).Height(32).Background(railText(t)).TextColor(cardColor(t)).Disabled(m.starting || m.a.updates.committing || (phase != session.Idle && !recording && phase != session.Done && phase != session.Failed)).Clicked() {
 			if recording {
 				go m.a.ctrl.Toggle()
 			} else {
@@ -140,7 +140,7 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 				time.AfterFunc(3*time.Second, func() {
 					m.win.Update(func() {
 						m.starting = false
-						if !m.a.quitting && !m.a.updates.installing && m.a.ctrl.View().Phase == session.Idle {
+						if !m.a.quitting && !m.a.updates.committing && m.a.ctrl.View().Phase == session.Idle {
 							go m.a.ctrl.Toggle()
 						}
 					})
