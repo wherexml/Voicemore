@@ -40,18 +40,20 @@ type prefsWindow struct {
 	cat                     string // one of the six settings categories
 	status                  func() string
 
-	dragWin       *mygo.Window
-	dragPane      string
-	dragActive    bool
-	dragging      bool
-	dragStarted   time.Time
-	dragSeen      time.Time
-	dragChecked   time.Time
-	dragGranted   time.Time
-	dragTracked   time.Time
-	dragError     bool
-	dragDirection int
-	dragBounds    mygo.Rectangle
+	dragWin        *mygo.Window
+	dragPane       string
+	dragActive     bool
+	dragging       bool
+	dragStarted    time.Time
+	dragSeen       time.Time
+	dragChecked    time.Time
+	dragGranted    time.Time
+	dragError      bool
+	dragDirection  int
+	dragBounds     mygo.Rectangle
+	dragGeneration uint64
+	dragSession    uint64
+	dragReleased   time.Time
 
 	bundlePath string // exact running bundle, never a backup or guessed install path
 	audioDays  float64
@@ -688,8 +690,7 @@ var fnActions = map[string]string{
 	"change the input source": "fnInput", "show Emoji & Symbols": "fnEmoji", "start Dictation": "fnDictation",
 }
 
-// dictation is the trigger and the one cleanup switch. Where cleanup goes
-// is the Text cleanup default's business, under Models.
+// dictation configures triggers and edit learning.
 func (p *prefsWindow) dictation(c *ui.Context) {
 	t := c.Theme()
 	s := p.a.settings.Get()
@@ -727,9 +728,6 @@ func (p *prefsWindow) dictation(c *ui.Context) {
 				})
 			}
 		})
-		setting(c, "cleanup", nil, T("sCleanDefault"), T("sCleanDefaultHint"), func() {
-			p.a.cleanupSwitch(c)
-		})
 		setting(c, "observe", nil, T("sObserve"), T("sObserveHint"), func() {
 			on := s.ObserveEdits
 			if ui.Switch(c.Key("sw"), &on).Label(T("sObserve")).Changed() {
@@ -743,25 +741,69 @@ func (p *prefsWindow) dictation(c *ui.Context) {
 func (p *prefsWindow) formatting(c *ui.Context) {
 	t := c.Theme()
 	s := p.a.settings.Get()
-	ui.Text(c, T("basicFormat")).FontSize(16).TextColor(t.Text)
-	card(c, "basic-format", func() {
-		for _, row := range []struct {
-			key string
-			on  bool
-			set func(*config.Settings, bool)
-		}{
-			{"formatPeriod", s.TextStyle.TrimPeriod, func(s *config.Settings, v bool) { s.TextStyle.TrimPeriod = v }},
-			{"formatCalm", s.TextStyle.CalmExclamations, func(s *config.Settings, v bool) { s.TextStyle.CalmExclamations = v }},
-			{"formatFillers", s.TextStyle.RemoveFillers, func(s *config.Settings, v bool) { s.TextStyle.RemoveFillers = v }},
-			{"formatAcronyms", s.TextStyle.JoinAcronyms, func(s *config.Settings, v bool) { s.TextStyle.JoinAcronyms = v }},
-			{"formatNumbers", s.TextStyle.ArabicNumbers, func(s *config.Settings, v bool) { s.TextStyle.ArabicNumbers = v }},
-		} {
-			setting(c, row.key, nil, T(row.key), T(row.key+"Hint"), func() {
-				on := row.on
-				if ui.Switch(c.Key("sw"), &on).Label(T(row.key)).Changed() {
-					p.change(func(s *config.Settings) { row.set(s, on) })
-				}
+	ui.Text(c, T("cleanupGroup")).FontSize(16).TextColor(t.Text)
+	card(c, "text-cleanup", func() {
+		setting(c, "cleanup", nil, T("sCleanDefault"), T("sCleanDefaultHint"), func() { p.a.cleanupSwitch(c) })
+		disabled := !s.CleanupDefault
+		group := ui.Column(c.Key("cleanup-options")).Gap(1).Dividers(1, settingsGroupLine(c))
+		if disabled {
+			group.TextColor(t.TextMuted)
+		}
+		group.Children(func() {
+			ui.Text(c, T("basicFormat")).FontSize(12).TextColor(t.TextMuted).Padding(11, 14)
+			for _, row := range []struct {
+				key string
+				on  bool
+				set func(*config.Settings, bool)
+			}{
+				{"formatPeriod", s.TextStyle.TrimPeriod, func(s *config.Settings, v bool) { s.TextStyle.TrimPeriod = v }},
+				{"formatCalm", s.TextStyle.CalmExclamations, func(s *config.Settings, v bool) { s.TextStyle.CalmExclamations = v }},
+				{"formatFillers", s.TextStyle.RemoveFillers, func(s *config.Settings, v bool) { s.TextStyle.RemoveFillers = v }},
+				{"formatAcronyms", s.TextStyle.JoinAcronyms, func(s *config.Settings, v bool) { s.TextStyle.JoinAcronyms = v }},
+				{"formatNumbers", s.TextStyle.ArabicNumbers, func(s *config.Settings, v bool) { s.TextStyle.ArabicNumbers = v }},
+			} {
+				setting(c, row.key, nil, T(row.key), T(row.key+"Hint"), func() {
+					on := row.on
+					if ui.Switch(c.Key("sw"), &on).Label(T(row.key)).Disabled(disabled).Changed() {
+						p.change(func(s *config.Settings) { row.set(s, on) })
+					}
+				})
+			}
+			p.polishRulesEditor(c, s, disabled)
+		})
+	})
+}
+
+// polishRulesEditor keeps the heading, disclosure and editor in one inset
+// section. A fixed viewport scrolls long rules without moving the page below it.
+func (p *prefsWindow) polishRulesEditor(c *ui.Context, s config.Settings, disabled bool) {
+	t := c.Theme()
+	ui.Column(c.Key("polish-rules")).Padding(14).Gap(12).Children(func() {
+		ui.Row(c.Key("heading")).AlignItems(ui.Center).Gap(12).Children(func() {
+			ui.Text(c, T("polishRules")).FontSize(13).FontWeight(500).Grow(1)
+			label, arrow := "polishExpand", icDown
+			if s.PolishRulesOpen {
+				label, arrow = "polishCollapse", icUp
+			}
+			toggle := ui.ButtonBase(c.Key("expand")).Label(T(label)).Expanded(s.PolishRulesOpen).
+				Height(28).Padding(0, 11).Gap(6).AlignItems(ui.Center).Radius(14).
+				Background(pick(t, "#ffffff", "#303030")).Border(1, settingsGroupLine(c)).Disabled(disabled).FocusRing(!disabled)
+			toggle.Children(func() {
+				ui.Text(c, T(label)).FontSize(12).TextColor(t.TextMuted)
+				ui.Icon(c, arrow).Size(12, 12).TextColor(t.TextMuted)
 			})
+			if toggle.Clicked() {
+				p.change(func(s *config.Settings) { s.PolishRulesOpen = !s.PolishRulesOpen })
+			}
+		})
+		if s.PolishRulesOpen {
+			rules := p.draft("polishRules", s.PolishRules)
+			editor := ui.TextArea(c.Key("rules"), rules).Label(T("polishRules")).FillWidth().Height(176).
+				Padding(12, 14).FontSize(13).FixedLineHeight(22).TextColor(t.Text).Radius(10).
+				Background(pick(t, "#ffffff", "#303030")).Border(1, settingsGroupLine(c)).Disabled(disabled).FocusRing(!disabled)
+			if editor.Changed() {
+				p.change(func(s *config.Settings) { s.PolishRules = *rules })
+			}
 		}
 	})
 }

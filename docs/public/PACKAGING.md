@@ -4,11 +4,12 @@
 
 ```sh
 ./scripts/fetch-asr-runtime.sh
-SIGNING_IDENTITY='Apple Development: geekmooc@gmail.com (5QLDC77G39)' ./scripts/build-macos.sh
-./scripts/verify-dmg.sh 'build/darwin-arm64/Voicemore 0.3.3 arm64.dmg'
+./scripts/build-macos.sh
+# Prints the completed notarized candidate workspace.
+python3 scripts/install-macos.py /absolute/candidate-workspace
 ```
 
-Output: `build/darwin-arm64/Voicemore 0.3.3 arm64.dmg` and `SHA256SUMS.txt`.
+Output: an isolated candidate workspace under `~/Library/Caches/voicemore-release/`, containing the final stapled app, notarized DMG and verification evidence. This command prepares only; publishing requires the explicit release entry point.
 The disk image contains `Voicemore.app`, an `/Applications` shortcut, and a Finder icon layout. Drag the app onto that shortcut, eject the image, and launch from Applications.
 
 The verification script mounts the finished DMG read-only, copies the app to a temporary installation directory, checks its signature and arm64 architecture, checks product/minimum-system metadata and the bundled runtime hash, and writes repeatable evidence under `artifacts/dmg-verification/`. It then unmounts the image and removes only its temporary directories. It does not grant permissions, run the app, or access personal settings.
@@ -17,7 +18,7 @@ For native end-to-end acceptance, launch the copied app on an Apple Silicon Mac,
 
 ## Signing
 
-Local builds pin the Apple Development identity specified in AGENTS.md. The certificate and private key must already be available locally; no signing credentials are included. Missing identities stop the build. Ad-hoc signing is prohibited. A successful signature check does not mean Gatekeeper will accept a public download.
+Daily production builds use the same approved Developer ID identity as official updates, defined in `internal/distribution/policy.json`. Debug builds use `python3 scripts/build-development.py`, a distinct `Voicemore Dev.app` identity and data directory, with no stable update feed. The certificate and private key must already be available locally; no signing credentials are included. Missing identities stop the build. Ad-hoc signing is prohibited. A successful signature check does not mean Gatekeeper will accept a public download.
 
 v0.3.3 remains an **unnotarized, development-signed preview**; its assets are not replaced. Starting with the v0.3.4 distribution workflow, stable releases require a usable Developer ID Application identity, hardened-runtime-compatible nested binaries, and a successful Apple notarization/stapling pass. The bundled Python runtime archive is opaque to ordinary app-bundle signing; its extracted executable/native modules must also be audited and signed for a future notarized release. Do not claim notarization based on an app-only signature.
 
@@ -38,7 +39,7 @@ This copies the base Python installation and installed packages without changing
 - 运行上述构建脚本得到 arm64 DMG，可拖到 Applications 安装。
 - 运行验收脚本，会挂载成品并复制应用，校验签名、架构、最低系统版本和运行环境哈希，并保存报告。
 - 当前版本需要 macOS 26.2+，已在 macOS 26.2 arm64 完成 v0.3.4 跨机验收，本地开发也在 macOS 27.0 arm64 验证。
-- 正式发布默认要求 Developer ID 签名、Apple 公证与票据校验；开发预览版仅能显式发布为 prerelease。首次下载后的系统放行不等于签名校验通过。
+- 正式发布默认要求 Developer ID 签名、Apple 公证与票据校验；开发调试包使用独立身份且不进入正式更新源。首次下载后的系统放行不等于签名校验通过。
 - 不把私人验收材料、密钥、配置、录音和模型权重加入 Git。大型运行环境以 Release 附件提供。
 
 ## Client updates

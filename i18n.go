@@ -10,6 +10,8 @@ import (
 	"voiceinput/internal/asr"
 	"voiceinput/internal/cleanup"
 	"voiceinput/internal/cloudasr"
+	"voiceinput/internal/config"
+	"voiceinput/internal/dict"
 	"voiceinput/internal/providers"
 )
 
@@ -33,6 +35,11 @@ func init() {
 	texts["homeCountdown"] = [3]string{"Starting in 3 seconds — switch to your input field", "3 秒後開始，請切換到輸入位置", "3 秒后开始，请切换到输入位置"}
 	texts["homeFinish"] = [3]string{"Finish & insert", "結束並寫入", "结束并写入"}
 
+	texts["cleanupGroup"] = [3]string{"Text cleanup", "文字整理", "文字整理"}
+	texts["polishRules"] = [3]string{"Polishing rules", "潤色規則", "润色规则"}
+	texts["polishExpand"] = [3]string{"Expand", "展開", "展开"}
+	texts["polishCollapse"] = [3]string{"Collapse", "收起", "收起"}
+	texts["managedCleanupRules"] = [3]string{"This cloud service manages its own formatting and rules", "此雲端服務自行管理格式與潤色規則", "此云服务自行管理格式与润色规则"}
 	texts["basicFormat"] = [3]string{"Basic formatting", "基礎格式", "基础格式"}
 	texts["formatPeriod"] = [3]string{"Omit the final period", "省略末尾句號", "省略末尾句号"}
 	texts["formatPeriodHint"] = [3]string{"Keep question marks and ellipses.", "保留問號與省略號。", "保留问号与省略号。"}
@@ -153,6 +160,14 @@ func explain(err error) string {
 		return T("eStatus", status.Status)
 	case errors.Is(err, cleanup.ErrNoText):
 		return T("eNoText")
+	case errors.Is(err, cleanup.ErrTruncated):
+		return T("eCleanupTruncated")
+	case errors.Is(err, cleanup.ErrResponseTooLarge):
+		return T("eCleanupTooLarge")
+	case errors.Is(err, config.ErrUnsafeShortcut):
+		return T("shortcutUnsafe")
+	case errors.Is(err, dict.ErrRuleContext):
+		return T("singleHanContext")
 	case errors.Is(err, asr.ErrNotASR):
 		return T("eNotASR")
 	}
@@ -461,7 +476,7 @@ var texts = map[string][3]string{
 	"customKey":         {"Custom shortcut: %s", "自訂快速鍵：%s", "自定义快捷键：%s"},
 	"fnConflict":        {"macOS is set to “%s” when the 🌐 key is pressed, so each dictation triggers it too. Choose “Do Nothing” in System Settings → Keyboard, or pick another trigger key. Voicemore never changes system settings.", "macOS 目前設定為按下 🌐 鍵時「%s」，每次聽寫也會觸發它。請在「系統設定 → 鍵盤」選擇「不執行任何動作」，或改用其他觸發鍵。Voicemore 不會更改系統設定。", "macOS 当前设置为按下 🌐 键时“%s”，每次听写也会触发它。请在“系统设置 → 键盘”中选择“不执行任何操作”，或改用其他触发键。Voicemore 不会修改系统设置。"},
 	"sCleanDefault":     {"Tidy up by default", "預設整理文字", "默认整理文字"},
-	"sCleanDefaultHint": {"Basic formatting and dictionary rules still apply when text cleanup is off", "關閉文字整理時，仍套用基礎格式與詞典規則", "关闭文字整理时，仍应用基础格式与词典规则"},
+	"sCleanDefaultHint": {"Off inserts the transcript exactly as recognized", "關閉時會原樣寫入辨識結果", "关闭时会原样写入识别结果"},
 	"sAudio":            {"Save audio", "保存錄音", "保存录音"},
 	"sAudioHint":        {"Off keeps text only, with no replay", "關閉後只保留文字，無法重播", "关闭后只保留文字，无法回放"},
 	"sDays":             {"Keep audio for (days)", "錄音保留天數", "录音保留天数"},
@@ -535,60 +550,66 @@ var texts = map[string][3]string{
 	"pageOf":     {"Page %d of %d", "第 %d / %d 頁", "第 %d / %d 页"},
 
 	// Models: defaults and providers.
-	"defaultModels":   {"Default models", "預設模型", "默认模型"},
-	"manage":          {"Manage", "管理", "管理"},
-	"notSet":          {"Not set", "未設定", "未设置"},
-	"unconfigured":    {"%s — not configured", "%s — 尚未設定", "%s — 尚未配置"},
-	"noEligible":      {"No model is available yet. Set up a provider below.", "目前沒有可用的模型。請先在下方設定供應商。", "目前没有可用的模型。请先在下方配置服务商。"},
-	"gAsrProv":        {"Speech recognition providers", "語音辨識供應商", "语音识别服务商"},
-	"gLlmProv":        {"Language model providers", "語言模型供應商", "语言模型服务商"},
-	"addProvider":     {"Add provider", "新增供應商", "添加服务商"},
-	"providerOf":      {"%s settings", "%s 設定", "%s 设置"},
-	"pAliyun":         {"Alibaba Cloud", "阿里雲", "阿里云"},
-	"pVolc":           {"Volcengine", "火山引擎", "火山引擎"},
-	"pDeepseek":       {"DeepSeek", "DeepSeek", "DeepSeek"},
-	"volcPreset":      {"Doubao streaming ASR", "豆包流式語音辨識", "豆包流式语音识别"},
-	"stOffLong":       {"Not enabled", "未啟用", "未启用"},
-	"stConfigured":    {"Configured", "已設定", "已配置"},
-	"stNeedsKey":      {"Needs credentials", "需要憑證", "需要凭证"},
-	"stNeedsSetup":    {"Needs setup", "需要設定", "需要设置"},
-	"stUnavailable":   {"Mode not supported", "不支援此接入方式", "不支持此接入方式"},
-	"configure":       {"Configure", "設定", "配置"},
-	"nModels":         {"%d models", "%d 個模型", "%d 个模型"},
-	"localTag":        {"Local", "本機", "本机"},
-	"customTag":       {"Custom", "自訂", "自定义"},
-	"enabled":         {"Enabled", "啟用", "启用"},
-	"appId":           {"App ID", "App ID", "App ID"},
-	"accessToken":     {"Access Token", "Access Token", "Access Token"},
-	"getKey":          {"Get a key", "取得金鑰", "获取密钥"},
-	"docs":            {"Documentation", "說明文件", "文档"},
-	"recommended":     {"Recommended", "推薦", "推荐"},
-	"custom":          {"Added by you", "自行新增", "自行添加"},
-	"setDefault":      {"Set as default", "設為預設", "设为默认"},
-	"isDefault":       {"Default", "預設", "默认"},
-	"volcMode":        {"Access mode", "接入方式", "接入方式"},
-	"vNew":            {"New", "新版", "新版"},
-	"vLegacy":         {"Legacy", "舊版", "旧版"},
-	"vAgent":          {"Agent Plan", "Agent Plan", "Agent Plan"},
-	"endpoint":        {"Endpoint", "端點", "端点"},
-	"sendsTo":         {"Requests go to %s", "請求將送往 %s", "请求将发送到 %s"},
-	"addModel":        {"Add model", "新增模型", "添加模型"},
-	"addModelId":      {"Add a model ID", "新增模型 ID", "添加模型 ID"},
-	"errEmptyModel":   {"Enter a model ID.", "請輸入模型 ID。", "请输入模型 ID。"},
-	"errDupModel":     {"This model is already listed.", "此模型已在清單中。", "此模型已在列表中。"},
-	"removeModel":     {"Remove %s", "移除 %s", "移除 %s"},
-	"refNote":         {"These are the models the provider's setup offers; whether the service serves them is not checked here.", "這些是供應商設定畫面提供的模型；此處不會檢查服務是否提供。", "这些是服务商设置界面提供的模型；此处不会检查服务是否提供。"},
-	"provName":        {"Name", "名稱", "名称"},
-	"editProvider":    {"Edit provider", "編輯供應商", "编辑服务商"},
-	"removeProvider":  {"Remove provider", "移除供應商", "移除服务商"},
-	"save":            {"Save", "儲存", "保存"},
-	"cancelBtn":       {"Cancel", "取消", "取消"},
-	"errName":         {"Enter a name.", "請輸入名稱。", "请输入名称。"},
-	"keyOptional":     {"API key (optional)", "API 金鑰（選填）", "API 密钥（选填）"},
-	"noModelsYet":     {"No models yet. Add at least one to use this provider.", "尚無模型。至少新增一個才能使用此供應商。", "尚无模型。至少添加一个才能使用此服务商。"},
-	"providerSaved":   {"%s saved", "已儲存 %s", "已保存 %s"},
-	"providerRemoved": {"%s removed", "已移除 %s", "已移除 %s"},
-	"assignCleared":   {"%s is no longer the default. Nothing was chosen in its place.", "%s 不再是預設，且未自動改選其他模型。", "%s 不再是默认，且未自动改选其他模型。"},
+	"defaultModels":                 {"Default models", "預設模型", "默认模型"},
+	"manage":                        {"Manage", "管理", "管理"},
+	"notSet":                        {"Not set", "未設定", "未设置"},
+	"unconfigured":                  {"%s — not configured", "%s — 尚未設定", "%s — 尚未配置"},
+	"noEligible":                    {"No model is available yet. Set up a provider below.", "目前沒有可用的模型。請先在下方設定供應商。", "目前没有可用的模型。请先在下方配置服务商。"},
+	"gAsrProv":                      {"Speech recognition providers", "語音辨識供應商", "语音识别服务商"},
+	"gLlmProv":                      {"Language model providers", "語言模型供應商", "语言模型服务商"},
+	"addProvider":                   {"Add provider", "新增供應商", "添加服务商"},
+	"providerOf":                    {"%s settings", "%s 設定", "%s 设置"},
+	"pAliyun":                       {"Alibaba Cloud", "阿里雲", "阿里云"},
+	"pVolc":                         {"Volcengine", "火山引擎", "火山引擎"},
+	"pDeepseek":                     {"DeepSeek", "DeepSeek", "DeepSeek"},
+	"pSub2API":                      {"sub2api", "sub2api", "sub2api"},
+	"sub2apiASR":                    {"ASR 2.0 · sub2api", "ASR 2.0 · sub2api", "ASR 2.0 · sub2api"},
+	"sub2apiCleanup":                {"DeepSeek · sub2api", "DeepSeek · sub2api", "DeepSeek · sub2api"},
+	"recoverVoiceResult":            {"Recover cloud result", "取回雲端結果", "取回云端结果"},
+	"sub2apiModel":                  {"ASR 2.0 + DeepSeek", "ASR 2.0 + DeepSeek", "ASR 2.0 + DeepSeek"},
+	"managedTranslationUnavailable": {"This sub2api voice service does not support translation.", "此 sub2api 語音服務尚不支援翻譯。", "此 sub2api 语音服务尚不支持翻译。"},
+	"volcPreset":                    {"Doubao streaming ASR", "豆包流式語音辨識", "豆包流式语音识别"},
+	"stOffLong":                     {"Not enabled", "未啟用", "未启用"},
+	"stConfigured":                  {"Configured", "已設定", "已配置"},
+	"stNeedsKey":                    {"Needs credentials", "需要憑證", "需要凭证"},
+	"stNeedsSetup":                  {"Needs setup", "需要設定", "需要设置"},
+	"stUnavailable":                 {"Mode not supported", "不支援此接入方式", "不支持此接入方式"},
+	"configure":                     {"Configure", "設定", "配置"},
+	"nModels":                       {"%d models", "%d 個模型", "%d 个模型"},
+	"localTag":                      {"Local", "本機", "本机"},
+	"customTag":                     {"Custom", "自訂", "自定义"},
+	"enabled":                       {"Enabled", "啟用", "启用"},
+	"appId":                         {"App ID", "App ID", "App ID"},
+	"accessToken":                   {"Access Token", "Access Token", "Access Token"},
+	"getKey":                        {"Get a key", "取得金鑰", "获取密钥"},
+	"docs":                          {"Documentation", "說明文件", "文档"},
+	"recommended":                   {"Recommended", "推薦", "推荐"},
+	"custom":                        {"Added by you", "自行新增", "自行添加"},
+	"setDefault":                    {"Set as default", "設為預設", "设为默认"},
+	"isDefault":                     {"Default", "預設", "默认"},
+	"volcMode":                      {"Access mode", "接入方式", "接入方式"},
+	"vNew":                          {"New", "新版", "新版"},
+	"vLegacy":                       {"Legacy", "舊版", "旧版"},
+	"vAgent":                        {"Agent Plan", "Agent Plan", "Agent Plan"},
+	"endpoint":                      {"Endpoint", "端點", "端点"},
+	"sendsTo":                       {"Requests go to %s", "請求將送往 %s", "请求将发送到 %s"},
+	"addModel":                      {"Add model", "新增模型", "添加模型"},
+	"addModelId":                    {"Add a model ID", "新增模型 ID", "添加模型 ID"},
+	"errEmptyModel":                 {"Enter a model ID.", "請輸入模型 ID。", "请输入模型 ID。"},
+	"errDupModel":                   {"This model is already listed.", "此模型已在清單中。", "此模型已在列表中。"},
+	"removeModel":                   {"Remove %s", "移除 %s", "移除 %s"},
+	"refNote":                       {"These are the models the provider's setup offers; whether the service serves them is not checked here.", "這些是供應商設定畫面提供的模型；此處不會檢查服務是否提供。", "这些是服务商设置界面提供的模型；此处不会检查服务是否提供。"},
+	"provName":                      {"Name", "名稱", "名称"},
+	"editProvider":                  {"Edit provider", "編輯供應商", "编辑服务商"},
+	"removeProvider":                {"Remove provider", "移除供應商", "移除服务商"},
+	"save":                          {"Save", "儲存", "保存"},
+	"cancelBtn":                     {"Cancel", "取消", "取消"},
+	"errName":                       {"Enter a name.", "請輸入名稱。", "请输入名称。"},
+	"keyOptional":                   {"API key (optional)", "API 金鑰（選填）", "API 密钥（选填）"},
+	"noModelsYet":                   {"No models yet. Add at least one to use this provider.", "尚無模型。至少新增一個才能使用此供應商。", "尚无模型。至少添加一个才能使用此服务商。"},
+	"providerSaved":                 {"%s saved", "已儲存 %s", "已保存 %s"},
+	"providerRemoved":               {"%s removed", "已移除 %s", "已移除 %s"},
+	"assignCleared":                 {"%s is no longer the default. Nothing was chosen in its place.", "%s 不再是預設，且未自動改選其他模型。", "%s 不再是默认，且未自动改选其他模型。"},
 	"asrUnavailable": {
 		"Speech recognition through %s is not available in this version: its protocol has no adapter yet. Credentials can be saved here, but it cannot be made the default or tested.",
 		"此版本尚不支援透過 %s 進行語音辨識：尚未實作其協定。可以在此儲存憑證，但無法設為預設，也無法測試。",

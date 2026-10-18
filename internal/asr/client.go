@@ -483,23 +483,32 @@ func (d localDialer) Dial(ctx context.Context, hotwords *string) (Stream, error)
 // the history's retranscription. It sends faster than real time, pausing
 // briefly between chunks.
 func Transcribe(ctx context.Context, d Dialer, hotwords *string, pcm []byte) (string, error) {
+	raw, _, err := TranscribeResult(ctx, d, hotwords, pcm)
+	return raw, err
+}
+
+// TranscribeResult also preserves an integrated service's paid result.
+func TranscribeResult(ctx context.Context, d Dialer, hotwords *string, pcm []byte) (string, *ProcessedResult, error) {
 	s, err := d.Dial(ctx, hotwords)
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	defer s.Close()
 	for len(pcm) > 0 {
 		n := min(len(pcm), ChunkBytes)
 		if err := s.Send(ctx, pcm[:n]); err != nil {
-			return s.Final(), err
+			return s.Final(), nil, err
 		}
 		pcm = pcm[n:]
 		select {
 		case <-ctx.Done():
-			return s.Final(), ctx.Err()
+			return s.Final(), nil, ctx.Err()
 		case <-time.After(10 * time.Millisecond):
 		}
 	}
 	err = s.Finish(ctx)
-	return s.Final(), err
+	if p, ok := s.(ProcessedStream); ok && err == nil {
+		return s.Final(), p.Processed(), nil
+	}
+	return s.Final(), nil, err
 }

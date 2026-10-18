@@ -1,8 +1,11 @@
 package session
 
 import (
+	"fmt"
+	"os"
 	"voiceinput/internal/config"
 	"voiceinput/internal/macos"
+	"voiceinput/internal/providers"
 	"voiceinput/internal/store"
 )
 
@@ -17,7 +20,7 @@ import (
 // settings the dictation started with or in the current ones, and reports
 // whether r is private. Once private, a run stays private.
 func (c *Controller) markPrivate(r *run, s config.Settings, bundle string) bool {
-	p := s.PrivateBundle(bundle) || c.Settings.Get().PrivateBundle(bundle)
+	p := c.Settings.LoadError() != nil || s.PrivateBundle(bundle) || c.Settings.Get().PrivateBundle(bundle)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if p {
@@ -53,8 +56,21 @@ func (c *Controller) note(r *run, fn func(rec *store.Record)) {
 // the first call does anything. It may wait for the main thread: callers
 // on the main thread run it in a goroutine.
 func (c *Controller) persist(r *run, s config.Settings, end *macos.Target) {
+	var problems []error
+	notifyHistory := false
 	r.saving.Lock()
-	defer r.saving.Unlock()
+	defer func() {
+		// UI callbacks can synchronously wait for the main thread, whose quit
+		// handler calls Cancel -> note. Publish the settled record and release
+		// its saving lock before any callback can wait for that thread.
+		r.saving.Unlock()
+		for _, err := range problems {
+			c.historyFailure(r, err)
+		}
+		if notifyHistory {
+			c.historyChanged()
+		}
+	}()
 	c.mu.Lock()
 	open := r.prepared && !r.recDone
 	c.mu.Unlock()
@@ -70,21 +86,34 @@ func (c *Controller) persist(r *run, s config.Settings, end *macos.Target) {
 	private := c.markPrivate(r, s, bundle)
 	c.mu.Lock()
 	r.recDone = true
-	r.recSaved = !private
 	rec, pcm := r.rec, r.pcm
 	c.mu.Unlock()
 	if private {
 		return
 	}
 	if s.SaveAudio && len(pcm) > 0 {
-		if werr := c.History.WriteWAV(r.id+".wav", pcm); werr == nil {
+		if werr := c.History.WriteWAV(r.id+".wav", pcm); config.JSONCommitted(werr) {
 			rec.AudioFile = r.id + ".wav"
+			if werr != nil {
+				problems = append(problems, werr)
+			}
 		} else {
 			rec.AudioRemoved = c.tr("detailAudio", werr.Error())
+			problems = append(problems, werr)
 		}
 	}
-	c.History.Add(rec)
-	c.historyChanged()
+	err := c.History.Add(rec)
+	c.mu.Lock()
+	r.recSaved = config.JSONCommitted(err)
+	r.rec = rec
+	c.mu.Unlock()
+	if err != nil {
+		if !config.JSONCommitted(err) && rec.AudioFile != "" {
+			_ = os.Remove(c.History.AudioPath(rec.AudioFile))
+		}
+		problems = append(problems, err)
+	}
+	notifyHistory = true
 }
 
 // keepCancelled keeps a dictation cancelled before its transcript, as the
@@ -94,11 +123,56 @@ func (c *Controller) keepCancelled(r *run, s config.Settings, pcm []byte) {
 		return
 	}
 	rec := store.Record{ID: r.id, StartedAt: r.started, DurationMs: pcmMs(pcm), Status: store.StatusCancelled, StatusDetail: c.tr("detailCancelled")}
-	if s.SaveAudio && c.History.WriteWAV(r.id+".wav", pcm) == nil {
-		rec.AudioFile = r.id + ".wav"
+	if providers.ManagedVoice(s) {
+		rec.VoiceTaskID = r.rec.VoiceTaskID
 	}
-	c.History.Add(rec)
+	if s.SaveAudio {
+		if err := c.History.WriteWAV(r.id+".wav", pcm); config.JSONCommitted(err) {
+			rec.AudioFile = r.id + ".wav"
+			if err != nil {
+				c.historyFailure(r, err)
+			}
+		} else {
+			c.historyFailure(r, err)
+		}
+	}
+	if err := c.History.Add(rec); err != nil {
+		if !config.JSONCommitted(err) && rec.AudioFile != "" {
+			_ = os.Remove(c.History.AudioPath(rec.AudioFile))
+		}
+		c.historyFailure(r, err)
+	}
 	c.historyChanged()
+}
+
+func (c *Controller) historyFailure(r *run, err error) {
+	c.mu.Lock()
+	r.saveErr = err
+	if c.cur == r && c.view.Phase == Done {
+		c.retainUnsaved(r)
+	}
+	c.mu.Unlock()
+	c.changed()
+	if c.OnPersistenceError != nil {
+		c.OnPersistenceError(err)
+	}
+}
+
+// retainUnsaved is called under c.mu. Text may have reached its destination
+// even if saving failed; the insertion outcome in r.rec remains unchanged.
+func (c *Controller) retainUnsaved(r *run) {
+	text := r.rec.InsertedText
+	if text == "" {
+		text = r.rec.CleanedText
+	}
+	if text == "" {
+		text = r.text
+	}
+	if text == "" {
+		text = r.rec.Transcript()
+	}
+	msg := c.tr("historySaveFailed", fmt.Sprint(r.saveErr))
+	c.view = View{Phase: Failed, Retained: text != "", Text: text, Message: msg, Notice: msg}
 }
 
 // focusedBundle is the Bundle ID of the frontmost app, or empty.

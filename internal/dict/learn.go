@@ -170,15 +170,16 @@ func (d *Dict) Propose(original, revised, source, recordID string) (int, string)
 	}
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	next := d.draft()
 	added := 0
 	for _, h := range repl {
 		wrong, right := join(h.from), join(h.to)
-		if d.propose(wrong, right, snippet(original, wrong), source, recordID) {
+		if d.propose(&next, wrong, right, snippet(original, wrong), source, recordID) {
 			added++
 		}
 	}
-	if err := d.save(); err != nil {
-		return added, "candidates could not be saved: " + err.Error()
+	if err := d.save(next); err != nil {
+		return 0, "candidates could not be saved: " + err.Error()
 	}
 	if added == 0 {
 		return 0, "the same correction is already known or was ignored"
@@ -186,20 +187,20 @@ func (d *Dict) Propose(original, revised, source, recordID string) (int, string)
 	return added, fmt.Sprintf("%d candidate(s) wait for confirmation in the dictionary", added)
 }
 
-func (d *Dict) propose(wrong, right, sentence, source, recordID string) bool {
-	for _, e := range d.d.Entries {
+func (d *Dict) propose(next *data, wrong, right, sentence, source, recordID string) bool {
+	for _, e := range next.Entries {
 		if e.Kind == KindRule && e.Wrong == wrong && e.Term == right {
 			return false
 		}
 	}
 	conflict := ""
-	for _, e := range d.d.Entries {
+	for _, e := range next.Entries {
 		if e.Kind == KindRule && e.Wrong == wrong && e.Term != right {
 			conflict = fmt.Sprintf("a rule already corrects %q to %q", wrong, e.Term)
 		}
 	}
-	for i := range d.d.Candidates {
-		c := &d.d.Candidates[i]
+	for i := range next.Candidates {
+		c := &next.Candidates[i]
 		if c.Wrong == wrong && c.Right == right {
 			// The same correction again: merged, and still ignored
 			// if the user ignored it.
@@ -210,7 +211,7 @@ func (d *Dict) propose(wrong, right, sentence, source, recordID string) bool {
 			conflict = fmt.Sprintf("another candidate corrects %q to %q", wrong, c.Right)
 		}
 	}
-	d.d.Candidates = append(d.d.Candidates, Candidate{
+	next.Candidates = append(next.Candidates, Candidate{
 		ID: d.newID(), Wrong: wrong, Right: right, Sentence: sentence,
 		Source: source, RecordID: recordID, Count: 1, Conflict: conflict, At: time.Now(),
 	})

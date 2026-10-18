@@ -71,7 +71,13 @@ func (p *prefsWindow) beginShortcut(kind string) {
 	p.shortcutPreview = ""
 	p.a.shortcutsSuspended = true
 	p.a.bindTrigger()
-	stop, err := macos.CaptureShortcut(p.win.NativeHandle(), func(value string) { p.shortcutPreview = keyName(value); p.refresh() }, func(value string) {
+	stop, err := macos.CaptureShortcut(p.win.NativeHandle(), func(value string) {
+		p.shortcutPreview = keyName(value)
+		if config.ValidateShortcut(value) != nil {
+			p.shortcutPreview = T("shortcutUnsafe")
+		}
+		p.refresh()
+	}, func(value string) {
 		if p.stopShortcutCapture != nil {
 			p.stopShortcutCapture()
 			p.stopShortcutCapture = nil
@@ -110,6 +116,11 @@ func (p *prefsWindow) cancelShortcut() {
 	p.refresh()
 }
 func (p *prefsWindow) saveShortcut(kind, value string) {
+	if err := config.ValidateShortcut(value); err != nil {
+		p.say("shortcutUnsafe")
+		p.a.bindTrigger()
+		return
+	}
 	old := p.a.settings.Get()
 	next := old
 	if (kind == "dictation" && sameShortcut(value, old.TranslationKey) && value != "") || (kind == "translation" && sameShortcut(value, old.TriggerKey)) {

@@ -53,6 +53,9 @@ var kindLabels = map[string]string{providers.KindASR: "mAsr", providers.KindClea
 
 // assign sets the default of a kind.
 func (p *prefsWindow) assign(kind, provider, model string) {
+	if kind == providers.KindCleanup && providers.ManagedVoice(p.a.settings.Get()) {
+		return
+	}
 	if provider == providers.Local {
 		model = ""
 	}
@@ -470,7 +473,7 @@ func (p *prefsWindow) defaultControl(c *ui.Context, key, kind, provider, model s
 		ui.Text(c, T("isDefault")).FontSize(11).TextColor(t.Accent).SingleLine()
 		return
 	}
-	if ui.Button(c.Key(key), T("setDefault")).Disabled(!can).Clicked() {
+	if ui.Button(c.Key(key), T("setDefault")).Disabled(!can || (kind == providers.KindCleanup && providers.ManagedVoice(s))).Clicked() {
 		p.assign(kind, provider, model)
 	}
 }
@@ -479,6 +482,9 @@ func (p *prefsWindow) defaultControl(c *ui.Context, key, kind, provider, model s
 func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 	t := c.Theme()
 	id, kind := p.dlg.id, p.dlg.kind
+	if id == providers.Sub2API {
+		kind = providers.KindASR
+	}
 	e, _ := providers.Lookup(id)
 	k := p.conn(id)
 	on := providers.Enabled(id, s)
@@ -496,6 +502,15 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 		}
 	})
 	modeOK, _ := providers.ModeUsable(id, s)
+	if id == providers.Sub2API {
+		endpoint := p.draft("sub2api.endpoint", providers.Sub2APIBase(s))
+		labelled(c, "endpoint", T("endpoint"), "", func() {
+			if groupTextInput(c.Key("in"), endpoint, true).Label(T("endpoint")).Grow(1).Changed() {
+				k.invalidate()
+				p.change(func(s *config.Settings) { s.Providers.Sub2APIEndpoint = strings.TrimSpace(*endpoint) })
+			}
+		})
+	}
 	if id == providers.Volc {
 		// Volcengine is set up with an API key and a billing plan, and
 		// nothing else: the access-mode choice, the legacy App ID and token

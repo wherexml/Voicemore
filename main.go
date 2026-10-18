@@ -174,15 +174,13 @@ func (a *app) loadKey() {
 			problem = T("errKeyMigrate", "read-back failed")
 		}
 		stored = legacy
-		fallthrough
-	case legacy != "":
-		if problem == "" {
-			// The encrypted credential store has a key: the plaintext copy can go.
-			s := a.settings.Get()
-			s.CleanupAPIKey = ""
-			if err := a.settings.Set(s); err != nil {
-				problem = T("notSaved", err.Error())
-			}
+	}
+	if problem == "" && stored != "" {
+		// Verify even an existing credential before removing any legacy copy.
+		if back, err := a.vault.Get(cleanupKeyAccount); err != nil || back != stored {
+			problem = T("errKeyMigrate", "read-back failed")
+		} else if err := a.settings.ClearLegacyCleanupKey(back); err != nil {
+			problem = T("notSaved", err.Error())
 		}
 	}
 	a.keyMu.Lock()
@@ -258,15 +256,14 @@ func (a *app) ready() {
 	}
 	a.settings, err = config.Open(dir)
 	note("fileSettings", err)
+	if a.settings.LoadError() != nil {
+		setLang(langFor(mygo.App.Locale()))
+		mygo.Dialog.Error("Voicemore", T("settingsUnreadable", err.Error()))
+		mygo.App.Quit()
+		return
+	}
 	if err == nil {
 		note("fileSettings", a.initializeAutoSendApplications())
-	}
-	// A saved preference is not proof that a service is available on this Mac.
-	wantedCleanup := a.settings.Get().CleanupDefault
-	if wantedCleanup {
-		s := a.settings.Get()
-		s.CleanupDefault = false
-		note("fileSettings", a.settings.Set(s))
 	}
 	a.vault, err = secrets.Open(dir)
 	note("fileSecrets", err)
@@ -330,6 +327,14 @@ func (a *app) ready() {
 		a.main.refresh()
 		a.onboard.refresh()
 	}
+	a.ctrl.OnPersistenceError = func(err error) {
+		mygo.RunOnMain(func() {
+			if !a.quitting {
+				a.main.say("historySaveFailed", err.Error())
+				a.main.show()
+			}
+		})
+	}
 	a.setMenu()
 	// Without the Dock icon the menu bar item is the way in.
 	if !a.settings.Get().ShowInDock {
@@ -373,9 +378,7 @@ func (a *app) ready() {
 	}
 	log.Printf("ready: data=%s", dir)
 	a.bindTrigger()
-	if wantedCleanup {
-		a.setCleanup(true)
-	}
+	a.ensureCleanupReady()
 	if len(loadErrs) > 0 || a.triggerErr != "" {
 		// Something needs the user: say it in the window.
 		a.main.loadErrs = loadErrs
@@ -408,9 +411,17 @@ func (a *app) setLanguage(i int) error {
 
 // ensureCleanupReady checks in the background, including after model edits.
 func (a *app) ensureCleanupReady() {
+	if providers.ManagedVoice(a.settings.Get()) {
+		if a.cleanupChecking {
+			a.cleanupCheck++
+		}
+		a.cleanupReady = providers.Check(providers.KindASR, a.settings.Get(), a.secret) == nil
+		a.cleanupChecking = false
+		return
+	}
 	opts, err := providers.CleanupOptions(a.settings.Get(), a.secret)
 	if err != nil {
-		if a.cleanupReady || a.cleanupChecking || a.settings.Get().CleanupDefault {
+		if a.cleanupReady || a.cleanupChecking {
 			a.cleanupCheck++
 			a.cleanupChecking = false
 			a.cleanupUnavailable()
@@ -424,16 +435,16 @@ func (a *app) ensureCleanupReady() {
 }
 
 func (a *app) setCleanup(on bool) {
-	if on {
-		a.checkCleanup(true)
-		return
-	}
 	a.cleanupCheck++
 	a.cleanupChecking = false
-	a.saveCleanup(false)
+	a.saveCleanup(on)
 }
 
 func (a *app) checkCleanup(enable bool) {
+	if providers.ManagedVoice(a.settings.Get()) {
+		a.ensureCleanupReady()
+		return
+	}
 	a.cleanupCheck++
 	request := a.cleanupCheck
 	a.cleanupChecking = false
@@ -476,7 +487,8 @@ func (a *app) checkCleanup(enable bool) {
 
 func (a *app) cleanupUnavailable() {
 	a.cleanupReady = false
-	a.saveCleanup(false)
+	a.setMenu()
+	a.refreshAll()
 }
 
 func (a *app) saveCleanup(on bool) {
@@ -530,6 +542,10 @@ func (a *app) bindTrigger() {
 	s := a.settings.Get()
 	register := func(key string, translation bool) {
 		if key == "" || (a.prefs != nil && (a.prefs.deviceWizard || a.prefs.deviceTest)) {
+			return
+		}
+		if err := config.ValidateShortcut(key); err != nil {
+			a.triggerErr = T("shortcutUnsafe")
 			return
 		}
 		var stop func()
@@ -680,7 +696,7 @@ func (a *app) setMenu() {
 				go a.ctrl.Toggle()
 			}
 		}},
-		{Label: T("trayCleanup"), Type: mygo.MenuItemCheckbox, Disabled: !a.cleanupReady && !a.ctrl.CleanupNext(), Checked: a.ctrl.CleanupNext(), Click: func(*mygo.MenuItem, *mygo.Window) {
+		{Label: T("trayCleanup"), Type: mygo.MenuItemCheckbox, Checked: a.ctrl.CleanupNext(), Click: func(*mygo.MenuItem, *mygo.Window) {
 			a.setCleanup(!a.ctrl.CleanupNext())
 		}},
 		mygo.Separator(),

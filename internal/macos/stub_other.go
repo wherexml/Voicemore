@@ -10,6 +10,13 @@ var ErrNoMicrophone = errors.New("no microphone was found")
 
 func InputDeviceMissing() bool { return false }
 
+func PrimaryMouseDown() bool { return false }
+
+func SetAppFileDrag(uintptr, string, float64, float64, float64, float64, func(), func(bool)) error {
+	return errUnsupported
+}
+func HideAppFileDrag(uintptr) {}
+
 type Target struct{ AppName, BundleID string }
 
 func CaptureTarget() *Target                                  { return &Target{} }

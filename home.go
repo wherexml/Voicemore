@@ -40,6 +40,12 @@ func (a *app) modelLabel(kind string, s config.Settings) string {
 	err := providers.Check(kind, s, a.secret)
 	switch err {
 	case nil:
+		if providers.ManagedVoice(s) {
+			if kind == providers.KindASR {
+				return T("sub2apiASR")
+			}
+			return T("sub2apiCleanup")
+		}
 		return providers.ModelName(kind, s)
 	case providers.ErrNotSet:
 		return T("notSet")
@@ -204,13 +210,13 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 				case "manage":
 					p.open("models")
 				case "off":
-					p.change(func(s *config.Settings) { s.CleanupDefault = false })
+					m.a.setCleanup(false)
 				default:
 					for _, o := range eligible {
 						if o.Provider+"|"+o.Model == value {
 							p.assign(kind, o.Provider, o.Model)
 							if kind == providers.KindCleanup {
-								p.change(func(s *config.Settings) { s.CleanupDefault = true })
+								m.a.setCleanup(true)
 							}
 							break
 						}
@@ -279,7 +285,7 @@ func keycap(c *ui.Context, key string, height, font float32) {
 	})
 }
 
-// A non-disabled wrapper preserves hover help around a disabled switch.
+// Keep service availability in hover help without locking the saved preference.
 func (a *app) cleanupSwitch(c *ui.Context) {
 	a.ensureCleanupReady()
 	c.After(15 * time.Second)
@@ -292,7 +298,7 @@ func (a *app) cleanupSwitch(c *ui.Context) {
 		hint = T("cleanupChecking")
 	}
 	ui.Box(c.Key("cleanupHint")).Tooltip(hint).Children(func() {
-		if ui.Switch(c.Key("sw"), &on).Label(T("cleanup")).Disabled(!a.cleanupReady && !on).Changed() {
+		if ui.Switch(c.Key("sw"), &on).Label(T("sCleanDefault")).Changed() {
 			a.setCleanup(on)
 		}
 	})

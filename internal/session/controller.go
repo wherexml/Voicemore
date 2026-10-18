@@ -77,10 +77,11 @@ type Controller struct {
 
 	// OnChange is called, from any goroutine, when the view changed, and
 	// OnHistory when a record did. CopyText puts text on the clipboard.
-	OnChange    func()
-	OnHistory   func()
-	CopyText    func(string)
-	SendPreview func(context.Context, string, *macos.Target, time.Duration, func(string)) bool
+	OnChange           func()
+	OnHistory          func()
+	OnPersistenceError func(error)
+	CopyText           func(string)
+	SendPreview        func(context.Context, string, *macos.Target, time.Duration, func(string)) bool
 
 	// Tr gives the messages in the user's language and Explain the errors
 	// of lower layers; without them both are English. CleanupKey returns
@@ -129,6 +130,7 @@ type run struct {
 	translation     string
 	viaHold         bool
 	cleanup         bool
+	processed       *asr.ProcessedResult
 	// holdCopied keeps "copied to the clipboard" up until it is dismissed,
 	// as the V2 capsule has it; the classic one hides it after a while.
 	// Read from the settings when the dictation starts.
@@ -145,9 +147,10 @@ type run struct {
 	// it, once the apps the run touched are known (privacy.go). Until then
 	// note changes it here, afterwards in the history.
 	rec      store.Record
-	prepared bool // finish built rec
-	recDone  bool // persist decided: written, or dropped as private
-	recSaved bool // rec is in the history
+	prepared bool  // finish built rec
+	recDone  bool  // persist decided: written, or dropped as private
+	recSaved bool  // rec is in the history
+	saveErr  error // a persistence failure retains text without changing insertion outcome
 	// private is sticky: the app at the start, or the one the text went
 	// to, is a private app. Such a run is never written to the history, as
 	// text or audio, and never observed for dictionary learning.
@@ -312,6 +315,13 @@ func (c *Controller) startWithSink(viaHold bool, sink func(string)) {
 	c.startConfigured(viaHold, sink, "")
 }
 func (c *Controller) startConfigured(viaHold bool, sink func(string), language string) {
+	if err := c.Settings.LoadError(); err != nil {
+		c.mu.Lock()
+		c.view = View{Phase: Failed, Message: c.tr("settingsUnreadable", err.Error())}
+		c.mu.Unlock()
+		c.changed()
+		return
+	}
 	s := c.Settings.Get()
 	c.mu.Lock()
 	if c.cur != nil || c.retranscribing {
@@ -330,6 +340,15 @@ func (c *Controller) startConfigured(viaHold bool, sink func(string), language s
 		r.cleanup = s.CleanupDefault
 	}
 	r.translation = language
+	if providers.ManagedVoice(s) {
+		if language != "" {
+			stop()
+			c.view = View{Phase: Failed, Message: c.tr("managedTranslationUnavailable")}
+			c.mu.Unlock()
+			c.changed()
+			return
+		}
+	}
 	if language != "" {
 		r.cleanup = true
 	}
@@ -481,7 +500,9 @@ func (c *Controller) CopyFailed() {
 // speech recognition never does.
 func (c *Controller) cleanupOptions(s config.Settings) (cleanup.Options, error) {
 	if c.ResolveCleanup != nil {
-		return c.ResolveCleanup(s)
+		o, err := c.ResolveCleanup(s)
+		o.PolishRules = s.PolishRules
+		return o, err
 	}
 	key := s.CleanupAPIKey // a legacy plaintext key, until it is migrated
 	if c.CleanupKey != nil {
@@ -489,7 +510,7 @@ func (c *Controller) cleanupOptions(s config.Settings) (cleanup.Options, error) 
 			key = k
 		}
 	}
-	return cleanup.Options{BaseURL: s.CleanupURL, Model: s.CleanupModel, APIKey: key}, nil
+	return cleanup.Options{BaseURL: s.CleanupURL, Model: s.CleanupModel, APIKey: key, PolishRules: s.PolishRules}, nil
 }
 
 // dialer is the speech service the default model is on.
@@ -529,9 +550,6 @@ func (c *Controller) samples(r *run, pcm []byte) {
 	if !c.active(r) || r.confirmed {
 		c.mu.Unlock()
 		return
-	}
-	if c.view.Phase == Preparing {
-		c.view.Phase = Recording // actual PCM, independent of ASR connection speed
 	}
 	r.pcm = append(r.pcm, pcm...)
 	r.readyOnce.Do(func() { close(r.ready) })
@@ -599,6 +617,9 @@ func (c *Controller) record(r *run, s config.Settings) {
 	r.target = macos.CaptureTarget()
 	c.markPrivate(r, s, r.target.BundleID)
 	r.rec = store.Record{ID: r.id, StartedAt: r.started, TargetApp: r.target.AppName, TargetBundleID: r.target.BundleID, ASRModel: providers.ModelName(providers.KindASR, s), TranslationLanguage: r.translation, CleanupRequested: r.cleanup, Status: store.StatusFailed}
+	if providers.ManagedVoice(s) {
+		r.rec.VoiceTaskID = "voicemore-" + strings.ReplaceAll(r.id, ".", "-")
+	}
 
 	switch macos.MicrophoneStatus() {
 	case "denied", "restricted":
@@ -685,6 +706,13 @@ func (c *Controller) record(r *run, s config.Settings) {
 			return
 		}
 	}
+	c.mu.Lock()
+	if c.active(r) && !r.confirmed {
+		c.view.Phase = Recording // live PCM and the complete start cue are ready
+		r.rec.Timing.StartToListeningMs = time.Since(r.started).Milliseconds()
+	}
+	c.mu.Unlock()
+	c.changed()
 
 	var hotwords *string
 	{
@@ -713,6 +741,9 @@ func (c *Controller) record(r *run, s config.Settings) {
 		cancel()
 		c.finish(r, s, "", errors.New(c.explain(err)))
 		return
+	}
+	if scoped, ok := service.(interface{ WithTaskID(string) asr.Dialer }); ok {
+		service = scoped.WithTaskID(r.rec.VoiceTaskID)
 	}
 	if !service.Hotwords() && hotwords != nil {
 		// Only adapters without term-hint support omit the dictionary.
@@ -799,6 +830,9 @@ func (c *Controller) record(r *run, s config.Settings) {
 		cancel()
 	}
 	text := sess.Final()
+	if p, ok := sess.(asr.ProcessedStream); ok && err == nil {
+		r.processed = p.Processed()
+	}
 	switch {
 	case lost:
 		// Nothing is inserted from a recording that broke off. The words
@@ -871,7 +905,17 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 	c.stopCapture(r, capture)
 
 	raw = strings.TrimSpace(raw)
-	text, applied := c.formatTranscript(raw, s)
+	formatSettings := s
+	formatSettings.CleanupDefault = r.cleanup
+	text, applied := c.formatTranscript(raw, formatSettings)
+	if r.processed != nil {
+		// Preserve the billed cleaned receipt. With cleanup off, deliver the
+		// raw ASR field instead; never apply local changes to either field.
+		raw, text, applied = r.processed.RawText, r.processed.Text, nil
+		if !r.cleanup {
+			text = r.processed.RawText
+		}
+	}
 	c.mu.Lock()
 	if !c.active(r) {
 		c.mu.Unlock()
@@ -881,12 +925,24 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 	r.text = text
 	r.rec.DurationMs = pcmMs(pcm)
 	r.rec.RawText, r.rec.AppliedRules = raw, applied
-	if text != raw {
+	if r.processed != nil {
+		p := r.processed
+		r.rec.CleanedText, r.rec.CleanupModel = p.Text, "deepseek-flash"
+		r.rec.Timing.CleanupMs = p.Timings.Cleanup
+		r.rec.VoiceTaskID = p.ID
+		r.rec.VoiceBilling = voiceBilling(p)
+	} else if text != raw {
 		r.rec.Corrected, r.rec.CorrectedText = true, text
 	}
 	r.rec.Timing.FirstPartialMs = r.firstMs
 	if !r.stopAt.IsZero() {
 		r.rec.Timing.StopToFinalMs = r.finalAt.Sub(r.stopAt).Milliseconds()
+		if r.processed != nil {
+			r.rec.Timing.StopToResultMs = r.rec.Timing.StopToFinalMs
+			if !r.processed.ASRFinalAt.IsZero() {
+				r.rec.Timing.StopToFinalMs = max(0, r.processed.ASRFinalAt.Sub(r.stopAt).Milliseconds())
+			}
+		}
 	}
 	switch {
 	case err != nil:
@@ -908,6 +964,8 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 	case text == "":
 		c.done(r, c.tr("noSpeech"))
 		c.persist(r, s, nil)
+	case r.processed != nil:
+		c.insert(r, s, text)
 	case r.cleanup:
 		c.clean(r, s)
 	default:
@@ -916,7 +974,13 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 }
 
 func (c *Controller) update(r *run, fn func(rec *store.Record)) {
-	c.History.Update(r.id, fn)
+	ok, err := c.History.Update(r.id, fn)
+	if err == nil && !ok {
+		err = errors.New(c.tr("recordGone"))
+	}
+	if err != nil {
+		c.historyFailure(r, err)
+	}
 	c.historyChanged()
 }
 
@@ -1120,6 +1184,8 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 		rec.TargetBundleID = res.Target.BundleID
 		rec.Status, rec.StatusDetail, rec.InsertedText = store.StatusInserted, detail, editedText
 		rec.Timing.FinalToInsertMs = time.Since(r.finalAt).Milliseconds()
+		rec.Timing.PasteConfirmedMs = res.PasteConfirmedMs
+		rec.Timing.ClipboardRestoreMs = res.ClipboardRestoreMs
 	})
 	editMu.Unlock()
 	c.persist(r, s, res.Target)
@@ -1137,6 +1203,12 @@ func (c *Controller) done(r *run, message string) {
 		return
 	}
 	c.view = View{Phase: Done, Message: message}
+	if r.saveErr != nil && message != c.tr("copiedFallback") {
+		c.retainUnsaved(r)
+		c.mu.Unlock()
+		c.changed()
+		return
+	}
 	c.mu.Unlock()
 	c.changed()
 	if r.holdCopied && message == c.tr("copiedFallback") {
@@ -1148,7 +1220,7 @@ func (c *Controller) done(r *run, message string) {
 	}
 	time.AfterFunc(wait, func() {
 		c.mu.Lock()
-		same := c.cur == r
+		same := c.cur == r && c.view.Phase == Done
 		c.mu.Unlock()
 		if same {
 			c.Dismiss()
@@ -1252,7 +1324,7 @@ func (c *Controller) Retranscribe(id string) error {
 	if providers.Assigned(providers.KindASR, s).Provider == providers.Local {
 		note += "; " + c.tr("noteLanguage", c.tr("asrLang_"+config.LocalASRLanguage(s.ASRLanguage)))
 	}
-	raw, err := asr.Transcribe(ctx, service, hotwords, pcm)
+	raw, processed, err := asr.TranscribeResult(ctx, service, hotwords, pcm)
 	if errors.Is(err, asr.ErrLanguage) {
 		return errors.New(c.tr("asrLanguageOld"))
 	}
@@ -1260,17 +1332,30 @@ func (c *Controller) Retranscribe(id string) error {
 		return errors.New(c.tr("asrUnreachable", service.Label(), c.explain(err)))
 	}
 	text, applied := c.formatTranscript(strings.TrimSpace(raw), s)
+	if processed != nil {
+		text, raw, applied = processed.Text, processed.RawText, nil
+		if !s.CleanupDefault {
+			text = processed.RawText
+		}
+	}
 	if len(applied) > 0 {
 		note += "; " + c.tr("noteRules", strings.Join(applied, ", "))
 	}
 	if err != nil {
 		note += "; " + c.tr("noteIncomplete", err.Error())
 	}
-	c.History.Update(id, func(rec *store.Record) {
-		rec.Versions = append(rec.Versions, store.Version{ID: store.NewID(), Kind: store.KindRetranscribe, Text: text, BasedOn: raw, Note: note, At: time.Now()})
+	ok, saveErr := c.History.Update(id, func(rec *store.Record) {
+		v := store.Version{ID: store.NewID(), Kind: store.KindRetranscribe, Text: text, BasedOn: raw, Note: note, At: time.Now()}
+		if processed != nil {
+			v.VoiceTaskID, v.VoiceBilling, v.Model = processed.ID, voiceBilling(processed), processed.Model
+		}
+		rec.Versions = append(rec.Versions, v)
 	})
+	if saveErr == nil && !ok {
+		saveErr = errors.New(c.tr("recordGone"))
+	}
 	c.historyChanged()
-	return err
+	return errors.Join(err, saveErr)
 }
 
 // Recleanup tidies a text of a record again and adds the result as a new
@@ -1288,15 +1373,21 @@ func (c *Controller) Recleanup(id, base string) error {
 		return errors.New(c.cleanupFailure(err))
 	}
 	cleaned, _ = textstyle.Apply(cleaned, s.TextStyle, c.Dict.Hotwords())
-	c.History.Update(id, func(rec *store.Record) {
+	ok, err := c.History.Update(id, func(rec *store.Record) {
 		rec.Versions = append(rec.Versions, store.Version{ID: store.NewID(), Kind: store.KindRecleanup, Text: cleaned, BasedOn: base, Model: opts.Model, At: time.Now()})
 	})
+	if err == nil && !ok {
+		err = errors.New(c.tr("recordGone"))
+	}
 	c.historyChanged()
-	return nil
+	return err
 }
 
 // formatTranscript is shared by live dictation and history retranscription.
 func (c *Controller) formatTranscript(raw string, s config.Settings) (string, []string) {
+	if !s.CleanupDefault {
+		return raw, nil
+	}
 	text, rules := c.Dict.Apply(raw)
 	text, styleRules := textstyle.Apply(text, s.TextStyle, c.Dict.Hotwords())
 	return text, append(rules, styleRules...)
