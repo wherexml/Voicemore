@@ -5,13 +5,17 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"voiceinput/internal/textstyle"
 )
+
+const DefaultPolishRules = `让文本清楚自然，不明显改写；保留我的语气，不改成公文或客服话术。
+保留技术词、模型名、产品名、变量、路径、命令和大小写。
+修顺碎句，按语意断句和必要换行；合并口吃和重复表达。
+遇到“不对”“不是”“我的意思是”等自我修正，以后面的说法为准。`
 
 const (
 	TriggerToggle = "toggle"
@@ -62,6 +66,7 @@ type Providers struct {
 	VolcResource     string           `json:"volcResource,omitempty"` // the resource ID; empty is the hourly one
 	AliyunBase       string           `json:"aliyunBase,omitempty"`   // wss://…/api-ws/v1; empty is the default
 	DeepSeekEndpoint string           `json:"deepseekEndpoint,omitempty"`
+	Sub2APIEndpoint  string           `json:"sub2apiEndpoint,omitempty"`
 	DeepSeekModels   []string         `json:"deepseekModels,omitempty"` // model IDs the user added
 	Custom           []CustomProvider `json:"custom,omitempty"`
 }
@@ -142,9 +147,11 @@ type Settings struct {
 	// Cleanup is off by default. CleanupURL is the base URL of an
 	// OpenAI-compatible API ("…/v1"); requests go to its /chat/completions
 	// and /models.
-	CleanupDefault bool   `json:"cleanupDefault"`
-	CleanupURL     string `json:"cleanupUrl"`
-	CleanupModel   string `json:"cleanupModel"`
+	PolishRules     string `json:"polishRules"`
+	PolishRulesOpen bool   `json:"polishRulesOpen"`
+	CleanupDefault  bool   `json:"cleanupDefault"`
+	CleanupURL      string `json:"cleanupUrl"`
+	CleanupModel    string `json:"cleanupModel"`
 	// CleanupAPIKey is the legacy plaintext key. New keys are never
 	// written here: they go to the app's encrypted local credential store item, and this field is
 	// emptied once a key found here has been stored there.
@@ -218,6 +225,8 @@ func Defaults() Settings {
 		DJIButtonAction:         "dictation",
 		TriggerMode:             TriggerToggle,
 		CleanupDefault:          false,
+		PolishRules:             DefaultPolishRules,
+		PolishRulesOpen:         true,
 		CleanupTimeoutSec:       30,
 		SaveAudio:               true,
 		AudioRetentionDays:      30,
@@ -235,29 +244,38 @@ func Defaults() Settings {
 
 // Store guards the settings and their file.
 type Store struct {
-	mu   sync.Mutex
-	path string
-	s    Settings
+	mu      sync.Mutex
+	path    string
+	s       Settings
+	loadErr error
 }
 
 func Open(dir string) (*Store, error) {
 	st := &Store{path: filepath.Join(dir, "settings.json"), s: Defaults()}
-	b, err := os.ReadFile(st.path)
-	if errors.Is(err, os.ErrNotExist) {
+	err := loadSettingsJSON(st.path, func(b []byte) error {
+		if err := ObjectJSON(b); err != nil {
+			return err
+		}
+		next := Defaults()
+		next.SchemaVersion = 0 // a file without the field is of the first version
+		if err := json.Unmarshal(b, &next); err != nil {
+			return err
+		}
+		st.s = migrate(next)
+		return nil
+	})
+	if err == os.ErrNotExist {
 		return st, nil
 	}
-	if err != nil {
-		return st, err
+	if err != nil && !JSONRecovered(err) {
+		st.loadErr = err
 	}
-	// Unknown or missing fields keep their defaults.
-	st.s.SchemaVersion = 0 // a file without the field is of the first version
-	if err := json.Unmarshal(b, &st.s); err != nil {
-		st.s = Defaults()
-		return st, err
-	}
-	st.s = migrate(st.s)
-	return st, nil
+	return st, err
 }
+
+// LoadError blocks use of privacy settings after any failed primary load.
+// A previous settings backup is never implicitly trusted for private apps.
+func (st *Store) LoadError() error { return st.loadErr }
 
 // migrate brings settings of an earlier version up to date, in memory; the
 // file is rewritten when the settings are next saved.
@@ -320,19 +338,19 @@ func (st *Store) Set(s Settings) error {
 	s.AutoSend = s.AutoSend.Clone()
 	s.PrivateApps = append([]PrivateApp(nil), s.PrivateApps...)
 	s.DeviceButtons = append([]DeviceButtonBinding(nil), s.DeviceButtons...)
-	st.s = s
-	return WriteJSON(st.path, s)
-}
-
-// WriteJSON replaces a file atomically, so a crash never leaves half of it.
-func WriteJSON(path string, v any) error {
-	b, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
+	s.Providers = s.Providers.Clone()
+	if st.loadErr != nil {
+		return st.loadErr
+	}
+	if err := ValidateShortcut(s.TriggerKey); err != nil && s.TriggerKey != st.s.TriggerKey {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+	if err := ValidateShortcut(s.TranslationKey); err != nil && s.TranslationKey != st.s.TranslationKey {
 		return err
 	}
-	return os.Rename(tmp, path)
+	err := WriteJSON(st.path, s)
+	if JSONCommitted(err) {
+		st.s = s
+	}
+	return err
 }

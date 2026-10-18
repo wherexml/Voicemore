@@ -27,7 +27,7 @@ Finder 自身不支持把图片背景上的文件名改为白色，也不支持�
 
 脚本只打包已有、签名验证通过的应用；不修改应用的 FinderInfo 或任何已封装资源，不改签名和权限。新输出路径必须不存在，临时磁盘与目录由打包工具清理。Python 依赖固定在 `scripts/dmg-requirements.txt`，隔离安装到忽略的 `build/dmg-tools/`。
 
-本地 `build-macos.sh` 跳过 mygo 默认 DMG，调用统一布局入口并使用本机固定开发证书签名 DMG。正式 `finalize-distribution.py` 也调用此入口，之后仍必须执行 Developer ID 签名、公证、装订和验收；本地视觉预览不代表正式分发通过。
+`build-macos.sh` 与正式发布共用 `finalize-distribution.py`，调用统一布局入口后执行固定 Developer ID 签名、公证、装订和验收。独立开发调试构建不生成正式 DMG；本地视觉预览不代表正式分发通过。
 
 ## 验收
 

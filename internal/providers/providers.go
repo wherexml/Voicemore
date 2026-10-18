@@ -37,6 +37,7 @@ const (
 	Aliyun   = "aliyun"
 	Volc     = "volc"
 	DeepSeek = "deepseek"
+	Sub2API  = "sub2api"
 
 	DeepSeekEndpoint = "https://api.deepseek.com/v1"
 
@@ -75,12 +76,15 @@ type Entry struct {
 }
 
 var Catalog = []Entry{
+	{ID: Sub2API, Kind: KindASR, Name: "pSub2API", Logo: "volcengine",
+		KeyURL: cloudasr.Sub2APIEndpoint + "/keys", DocsURL: cloudasr.Sub2APIEndpoint,
+		Models: []Model{{ID: cloudasr.Sub2APIModel, Label: "sub2apiModel", Recommended: true}}},
 	{ID: Aliyun, Kind: KindASR, Name: "pAliyun", Logo: "alibabacloud",
 		KeyURL: "https://bailian.console.aliyun.com/", DocsURL: "https://help.aliyun.com/zh/model-studio/",
 		Models: []Model{{ID: "fun-asr-realtime", Recommended: true}, {ID: "qwen3-asr-flash-realtime"}}},
 	{ID: Volc, Kind: KindASR, Name: "pVolc", Logo: "volcengine",
 		KeyURL: "https://console.volcengine.com/", DocsURL: "https://www.volcengine.com/docs/",
-		Models: []Model{{ID: "doubao-streaming-asr-2.0", Label: "volcPreset"}}},
+		Models: []Model{{ID: "doubao-streaming-asr-2.0", Label: "volcPreset"}, {ID: "doubao-seed-asr-2-0"}}},
 	{ID: DeepSeek, Kind: KindCleanup, Name: "pDeepseek", Logo: "deepseek",
 		KeyURL: "https://platform.deepseek.com/", DocsURL: "https://api-docs.deepseek.com/",
 		Models: []Model{{ID: "deepseek-flash", Recommended: true}, {ID: "deepseek-v4-pro"}}},
@@ -97,14 +101,9 @@ func Lookup(id string) (Entry, bool) {
 }
 
 // ModeUsable says the app implements a catalog provider's current access
-// mode, and otherwise gives the text key of why not. Volcengine's
-// documents describe the new console's key and the old console's App ID
-// and token; no document was found for an "Agent Plan" key on the
-// streaming recognition API, so that mode is not offered.
+// mode, and otherwise gives the text key of why not. Agent Plan uses the
+// documented /plan/sauc endpoint and its dedicated key.
 func ModeUsable(id string, s config.Settings) (bool, string) {
-	if id == Volc && VolcMode(s) == VolcAgent {
-		return false, "whyAgentPlan"
-	}
 	return true, ""
 }
 
@@ -138,6 +137,14 @@ func VolcResource(s config.Settings) string {
 // Secrets returns the stored credential of an account, or "".
 type Secrets func(account string) string
 
+func ManagedVoice(s config.Settings) bool { return s.ASRAssign.Provider == Sub2API }
+func Sub2APIBase(s config.Settings) string {
+	if b := strings.TrimSpace(s.Providers.Sub2APIEndpoint); b != "" {
+		return b
+	}
+	return cloudasr.Sub2APIEndpoint
+}
+
 // VolcMode is the Volcengine access mode of the settings.
 func VolcMode(s config.Settings) string {
 	switch s.Providers.VolcMode {
@@ -170,6 +177,7 @@ func CustomAccount(id string) string { return "provider.custom." + id + ".apiKey
 // Accounts lists every encrypted local credential store account the settings can refer to.
 func Accounts(s config.Settings) []string {
 	out := []string{Account(Aliyun, s, "apiKey"), Account(DeepSeek, s, "apiKey"),
+		Account(Sub2API, s, "apiKey"),
 		"provider.volc.new.apiKey", "provider.volc.legacy.appId", "provider.volc.legacy.token", "provider.volc.agent.apiKey"}
 	for _, c := range s.Providers.Custom {
 		out = append(out, CustomAccount(c.ID))
@@ -224,6 +232,8 @@ func Configured(id string, s config.Settings, sec Secrets) bool {
 		return ValidURL(Endpoint(s))
 	case id == Aliyun:
 		return ValidSocketURL(AliyunBase(s))
+	case id == Sub2API:
+		return (cloudasr.Sub2API{Base: Sub2APIBase(s)}).Check(nil) == nil
 	}
 	return true
 }
@@ -302,6 +312,12 @@ type Option struct {
 // Eligible lists the models the default of a kind can be: those of
 // providers that are set up and that the app can actually use.
 func Eligible(kind string, s config.Settings, sec Secrets) []Option {
+	if kind == KindCleanup && ManagedVoice(s) {
+		if Check(KindASR, s, sec) == nil {
+			return []Option{{Sub2API, cloudasr.Sub2APIModel}}
+		}
+		return nil
+	}
 	var out []Option
 	if LocalReady(kind, s) {
 		out = append(out, Option{Local, LocalModel(kind, s)})
@@ -329,6 +345,9 @@ func Eligible(kind string, s config.Settings, sec Secrets) []Option {
 func Assigned(kind string, s config.Settings) config.Assignment {
 	if kind == KindASR {
 		return s.ASRAssign
+	}
+	if ManagedVoice(s) {
+		return config.Assignment{Provider: Sub2API, Model: cloudasr.Sub2APIModel}
 	}
 	return s.CleanupAssign
 }
@@ -380,6 +399,8 @@ func ASR(s config.Settings, sec Secrets) (asr.Dialer, error) {
 // Dialer is the speech service of a provider and model, as configured.
 func Dialer(provider, model string, s config.Settings, sec Secrets) asr.Dialer {
 	switch provider {
+	case Sub2API:
+		return cloudasr.Sub2API{Base: Sub2APIBase(s), APIKey: sec(Account(Sub2API, s, "apiKey")), TextOptions: &cloudasr.VoiceTextOptions{Version: 1, Format: s.TextStyle, PolishRules: s.PolishRules}}
 	case Local:
 		// Only the local service takes the speech language; custom
 		// services and the cloud keep their own routing and defaults.
@@ -387,7 +408,10 @@ func Dialer(provider, model string, s config.Settings, sec Secrets) asr.Dialer {
 	case Aliyun:
 		return cloudasr.Aliyun{Base: AliyunBase(s), APIKey: sec(Account(Aliyun, s, "apiKey")), Model: model}
 	case Volc:
-		v := cloudasr.Volc{Resource: VolcResource(s)}
+		v := cloudasr.Volc{Resource: VolcResource(s), AgentPlan: VolcMode(s) == VolcAgent}
+		if model == "doubao-seed-asr-2-0" || v.AgentPlan {
+			v.Resource = cloudasr.VolcHourly
+		}
 		if VolcMode(s) == VolcLegacy {
 			v.AppID, v.AccessToken = sec(Account(Volc, s, "appId")), sec(Account(Volc, s, "token"))
 		} else {
@@ -405,6 +429,9 @@ const LocalKeyAccount = "cleanup-api-key"
 
 // CleanupOptions is where text cleanup goes for the default model.
 func CleanupOptions(s config.Settings, sec Secrets) (cleanup.Options, error) {
+	if ManagedVoice(s) {
+		return cleanup.Options{}, errors.New("sub2api voice includes cleanup in the audio task; standalone cleanup is unavailable")
+	}
 	if err := Check(KindCleanup, s, sec); err != nil {
 		return cleanup.Options{}, err
 	}

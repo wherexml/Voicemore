@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.3.10
+
+- Preserve privacy when settings are damaged: require repair instead of trusting an older private-app list. Clear recovered history snapshots and orphan recordings, report deletion failures, and sanitize legacy API keys from settings backups after encrypted read-back.
+- Save settings, history and dictionary atomically with recovery and visible persistence errors; avoid a save/quit deadlock and retain successfully inserted text when history cannot be saved.
+- Reject typing shortcuts that could swallow normal input, constrain single-character corrections to unambiguous source phrases, and retain originals when cleanup output is truncated or exceeds its response limit.
+- Add a persistent text-cleanup master switch, individual format preferences and editable polishing rules, with a fixed-height native rule editor.
+- Add the configurable sub2api combined speech/cleanup service, per-record billing receipts, result retrieval and server-confirmed text preferences. Reduce queued-audio and verified native paste delays while preserving clipboard fallback protection.
+- Improve native permission-card dragging, microphone start-state timing, and cloud speech-provider routing.
+
+设置损坏时停止听写，避免旧备份撤销私密应用保护；清空历史同时删除恢复副本与孤立录音，删除失败明确提示；旧 API Key 经加密读回确认后净化所有配置快照。设置、历史和词典采用原子持久化并报告失败，修复保存通知与退出取消的死锁。限制危险快捷键和含糊单字替换，整理截断时保留原文。文字整理新增总开关、格式联动与持久化润色规则；接入可配置的 sub2api 组合语音服务、计费回执与原任务取回，改善录音积压和原生粘贴延迟，并修复权限卡片拖动及录音启动状态。
+
+Known limitations / 已知限制：sub2api still performs server cleanup and billing when the client chooses raw ASR delivery; it does not support translation or term hints. Latency observations are individual measurements, not a performance guarantee. 客户端关闭整理仅选择原始 ASR 正文，组合服务仍按既有协议执行整理并计费；不支持翻译或热词。单次延迟样本不代表整体性能。官网方案不属于本次客户端发布。
+
 ## 0.3.9
 
 - Add device button bindings for standard HID mouse auxiliary buttons, external keyboard keys and supported media keys; assign multiple buttons on the same device to dictation or translation.

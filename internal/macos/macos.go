@@ -108,6 +108,9 @@ type InsertResult struct {
 	// ClipboardRestored is false when the user copied something new in
 	// the meantime, which was left alone.
 	ClipboardRestored bool
+	// Nonzero only after exact full-value and UTF-16 caret readback.
+	PasteConfirmedMs   int64
+	ClipboardRestoreMs int64
 }
 
 // Application identifies a selectable running desktop client.

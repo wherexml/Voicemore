@@ -1,6 +1,6 @@
 # Signed client updates / 客户端签名更新
 
-Voicemore uses MyGo's native updater with a pinned Ed25519 public key. The production arm64 feed is:
+Voicemore uses its own staged installer with a pinned Ed25519 public key and the shared macOS signing policy in `internal/distribution/policy.json`. The production arm64 feed is:
 
 `https://github.com/wherexml/Voicemore/releases/latest/download/update-darwin-arm64.json`
 
@@ -10,46 +10,38 @@ The app checks after launch and hourly. The bottom-left rail above Settings show
 
 Run `./scripts/publish-release.sh --publish` for the automatic signed/notarized release workflow; omit `--publish` to prepare only. Reuse unchanged signed runtimes and select native regression tests by change scope. Full commands and required evidence are in [DISTRIBUTION.md](DISTRIBUTION.md). Both the DMG and update archive come from the final stapled app. No stable release is allowed without Apple notarization.
 
-## Publish a development preview
+## Signing continuity and development isolation
 
-Stable distribution requires the Developer ID and notarization workflow. See [distribution requirements](DISTRIBUTION.md). The following command intentionally publishes a prerelease, which existing clients do not receive through the stable feed.
+Normal production builds, local repair installs and public updates use the same Developer ID team (`T695TT4HT9`) and bundle ID (`dev.steve.voice-input`). Use `./scripts/build-macos.sh` to prepare a notarized candidate, then `python3 scripts/install-macos.py /absolute/candidate-workspace` after quitting the installed app. The installer verifies both final artifacts and identity continuity. A certificate renewal in the same approved team is accepted only if the old designated requirement also accepts it; the runtime does not pin a leaf certificate fingerprint.
 
-1. Change `version` in `mygo.json` and add a matching `## x.y.z` section in `CHANGELOG.md`.
-2. Complete acceptance, commit all changes, and make sure the working tree is clean.
-3. Provide the original update signing key through `MYGO_UPDATER_PRIVATE_KEY`, or a private file via `VOICEMORE_UPDATE_KEY_FILE` (default `~/.config/voicemore/update-keys/mygo-update.key`). Never commit it, print it, regenerate it for each release, or replace the pinned public key casually.
-4. Run:
+Development builds use `python3 scripts/build-development.py`: a separate **Voicemore Dev.app**, bundle ID, data directory and output directory, with no stable feed. The old development-preview publishing and production-data fixture are retired. Do not replace the regular app with a development-signed build.
 
-   ```sh
-   SIGNING_IDENTITY='Apple Development: geekmooc@gmail.com (5QLDC77G39)' ./scripts/publish-release.sh --development-preview
-   ```
+A legacy development-signed app using the production bundle ID cannot silently transfer its TCC grants to the official team. That existing mismatch needs an explicitly managed transition and may require one final permission confirmation. A code change to these guards does not retrofit already installed old binaries. Do not reset permissions or replace a currently working app merely to validate the pipeline.
 
-The script builds the DMG and signed archive, verifies packaging, pushes the matching commit/tag, uploads a **draft prerelease** with all assets, then publishes it with **latest=false**. If an upload fails, the draft stays invisible to update checks. Existing releases are not overwritten. GitHub **prereleases and drafts do not become this feed's latest release**. Publishing a DMG alone is insufficient.
+## Before replacement
 
-Required assets: `Voicemore-x.y.z-arm64.dmg`, `voicemore-x.y.z-darwin-arm64.tar.gz`, `update-darwin-arm64.json`, `SHA256SUMS.txt`.
+1. Require HTTPS (loopback HTTP is supported for local acceptance fixtures), a bounded manifest/archive and a strictly newer three-component stable version.
+2. Download into a unique staging directory next to the app. Verify the exact size and Ed25519 signature over SHA-256 using the original pinned key.
+3. Extract through a confined filesystem root, rejecting traversal, external links, hardlinks, duplicate entries and excessive expansion. Defer symlinks until file extraction finishes.
+4. Check manifest/bundle version agreement, the approved bundle ID and Developer ID requirement, the actual installed app's designated requirement and Gatekeeper acceptance of the candidate.
+5. Recheck cancellation and that the target has not changed. Rename the old bundle to a unique retained backup, then install the staged candidate. Restore the old bundle if replacement fails. Relaunch through LaunchServices after the original process exits.
 
-The private signing key stays outside Git and is required for all future updates. Keep a secure backup. Archive authentication is separate from macOS signing/notarization: stable distribution additionally requires Developer ID signing, Apple notarization and stapled tickets.
+Download, validation and cancellation failures preserve the installed bundle. Successful upgrades retain a hidden `.Voicemore.app.update-*.previous.app` backup next to it; they never replace app data. Installation requires a writable directory, and never requests an administrator password or changes directory permissions. Dictation/model work blocks installation, and hotkeys pause during installation.
 
-## Repeat the native E2E acceptance
+Archive authentication is independent of macOS signing/notarization; both must pass. Keep the existing private signing key outside Git and do not print or regenerate it. The stable publisher creates its archive only from the final stapled app, re-extracts it and verifies identity and ticket before signing the manifest. Required assets remain the DMG, tar.gz, manifest and checksums.
 
-Build a signed release first, then:
+## Repeatable native installer acceptance
 
 ```sh
-SIGNING_IDENTITY='Your macOS signing identity' ./scripts/prepare-update-fixture.sh
-python3 scripts/update-fixture.py
+python3 scripts/accept-update-identity.py \
+  --old /absolute/0.3.7/Voicemore.app \
+  --archive /absolute/voicemore-0.3.8-darwin-arm64.tar.gz \
+  --development /absolute/development/Voicemore.app \
+  --out /absolute/private-evidence
 ```
 
-Quit normal Voicemore before launching `artifacts/updater-e2e/Voicemore.app`. This is a local acceptance client with version 0.2.9 and a loopback feed on port **48139**, never a public release. It uses the existing data directory; do not run it concurrently with the regular app.
+The tagged acceptance executable uses disposable copies of real signed bundles and a loopback feed on port **48149**. Its transport fixtures use a temporary in-memory Ed25519 key; real app signatures and notarization are unchanged. It never launches the user's app, reads update private keys, touches TCC or user data, or publishes. `results.json` records the expected failure boundary, before/after executable hashes and the real successful upgrade with a retained original bundle. Generated fixture inputs are discarded after a successful run; the upgraded bundle, backup and JSON evidence remain.
 
-- Default `corrupt` mode: discover the update and click install. Signature verification must fail; compare the installed executable with `before.sha256` and confirm the client remains usable.
-- Start a download and cancel: app stays on 0.2.9 and the update can be retried.
-- Write `valid` to `artifacts/updater-e2e/mode`, then retry. The signed real release must replace the fixture and restart; the update panel must show the new version. Compare bundle version/executable with the built release and confirm existing data is preserved.
-- `unavailable` / `malformed` modes exercise feed errors before an update is discovered.
-- Verify a current production build checks the public feed and reports up to date.
+Run a focused native launch/permission check on the actual installed update when installation is explicitly requested. A successful installer fixture proves signature continuity and replacement behavior, not physical Fn behavior or TCC grant preservation in a live process.
 
-Save AX snapshots, screenshots, before/after hashes and process/bundle versions under `artifacts/`; these private acceptance records are excluded from Git. The fixture server can be stopped with Ctrl-C after acceptance.
-
-## 中文
-
-当前发布脚本默认执行正式签名和 Apple 公证流程；正式通道必须通过公证、票据与最终安装包自动校验；跨 Mac 原生验收按改动范围增补，不再每次强制重复，见 DISTRIBUTION.md。只有显式的 `--development-preview` 才允许开发签名，并限制为 prerelease、不设为 latest。GitHub draft/prerelease 不参与当前更新通道。
-
-0.2.0 没有更新功能，需手动安装一次 0.3.0。此后左下角设置上方的更新入口可一键更新并自动重启。更新包经过独立签名验证；下载取消、验签失败不会替换原应用。录音或模型部署时暂不可开始更新；安装时暂停快捷键听写。安装目录不可写时提示移动到可写位置，不索取管理员密码或修改目录权限。
+0.2.0 lacks automatic updates and requires a manual first upgrade. Drafts and prereleases are excluded from the stable/latest feed.

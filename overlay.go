@@ -336,9 +336,7 @@ func (o *overlay) viewClassic(c *ui.Context) {
 			draw := func(p *ui.Painter, r ui.Rect) { o.drawDots(c, p, r) }
 			switch v.Phase {
 			case session.Preparing:
-				ui.Column(c).Grow(1).Height(capsuleH).Justify(ui.Center).AlignItems(ui.Center).Children(func() {
-					ui.Text(c, T("stPreparing")).FillWidth().FontSize(10).TextColor(dim).TextAlign(ui.Center).MaxLines(1)
-				})
+				ui.Box(c.Key("preparing-dots")).Grow(1).Height(capsuleH).Draw(draw)
 			case session.Done, session.Failed:
 				// A mark, not a control: what there is to read or to do
 				// is in the box above.

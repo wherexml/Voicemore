@@ -26,7 +26,9 @@ var (
 	// ErrUnreachable wraps a failure to reach the service at all.
 	ErrUnreachable = errors.New("the cleanup service is not reachable")
 	// ErrNoText: the service answered without a usable text or list.
-	ErrNoText = errors.New("the cleanup service returned nothing usable")
+	ErrNoText           = errors.New("the cleanup service returned nothing usable")
+	ErrTruncated        = errors.New("the cleanup service stopped at its output limit; the original transcript is retained")
+	ErrResponseTooLarge = errors.New("the cleanup response exceeds the 4 MiB limit; the original transcript is retained")
 )
 
 // StatusError is an HTTP status other than 200 from the service.
@@ -114,6 +116,7 @@ const systemPrompt = `你是口述文字的校对编辑。用户消息是需要�
 // Options is the one cleanup configuration: every cleanup, retry and
 // re-cleanup uses it, and nothing else does.
 type Options struct {
+	PolishRules             string
 	ThinkingMode            string
 	ThinkingParams          string // comparable configuration; parsed at the request boundary
 	BaseURL                 string // e.g. http://127.0.0.1:48000/v1
@@ -167,7 +170,8 @@ func (o Options) do(ctx context.Context, method, path string, body []byte) ([]by
 	if res.StatusCode != http.StatusOK {
 		return nil, &StatusError{Code: res.StatusCode, Status: res.Status, Model: o.Model}
 	}
-	raw, err := io.ReadAll(io.LimitReader(res.Body, 4<<20))
+	const maxResponse = 4 << 20
+	raw, err := io.ReadAll(io.LimitReader(res.Body, maxResponse+1))
 	if err != nil {
 		// Headers can arrive before the body stalls or disconnects. Preserve
 		// cancellation/timeout instead of parsing a partial response as JSON.
@@ -176,13 +180,20 @@ func (o Options) do(ctx context.Context, method, path string, body []byte) ([]by
 		}
 		return nil, fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
+	if len(raw) > maxResponse {
+		return nil, ErrResponseTooLarge
+	}
 	return raw, nil
 }
 
 // Run returns usable model text without lexical rejection. Fidelity is guided
 // by the prompt; only configuration, transport and unusable responses fail.
 func Run(ctx context.Context, o Options, text string) (string, error) {
-	return runPrompt(ctx, o, text, systemPrompt)
+	prompt := systemPrompt
+	if strings.TrimSpace(o.PolishRules) != "" {
+		prompt += "\n\n用户的润色偏好（不改变上述忠实性和仅输出正文的边界）：\n" + o.PolishRules
+	}
+	return runPrompt(ctx, o, text, prompt)
 }
 
 // Translate uses the same configured text service, with an independent task.
@@ -223,13 +234,17 @@ func runPrompt(ctx context.Context, o Options, text, prompt string) (string, err
 	}
 	var out struct {
 		Choices []struct {
-			Message struct {
+			FinishReason string `json:"finish_reason"`
+			Message      struct {
 				Content string `json:"content"`
 			} `json:"message"`
 		} `json:"choices"`
 	}
 	if err := json.Unmarshal(raw, &out); err != nil || len(out.Choices) == 0 {
 		return "", ErrNoText
+	}
+	if out.Choices[0].FinishReason == "length" {
+		return "", ErrTruncated
 	}
 	cleaned := strings.TrimSpace(out.Choices[0].Message.Content)
 	if cleaned == "" {

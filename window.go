@@ -125,7 +125,7 @@ func (m *mainWindow) say(key string, args ...any) {
 // report shows an error, or the outcome when there is none.
 func (m *mainWindow) report(err error, key string, args ...any) {
 	if err != nil {
-		m.say("failed", err.Error())
+		m.status = func() string { return T("failed", explain(err)) }
 	} else {
 		m.say(key, args...)
 	}

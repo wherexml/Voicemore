@@ -25,12 +25,12 @@ Visual acceptance: build and launch the locally signed app, inspect the idle ico
 
 ## Repeatable native E2E
 
-1. Build the app, then run `scripts/prepare-update-fixture.sh` with `SIGNING_IDENTITY`. Quit the regular app, run `python3 scripts/update-fixture.py`, and launch `artifacts/updater-e2e/Voicemore.app`.
-2. Within ten seconds the rail shows an available update. Click it to start downloading and check that the Home body contains no version/status section. Capture the rail and open progress panel.
-3. The default `corrupt` mode rejects the signed archive after download. Capture progress, then failure; compare the executable with `before.sha256` to confirm it remains unchanged.
-4. Retry and cancel before completion. Confirm the available-update state returns and dictation is usable again. Escape dismisses the panel. Navigate History and Dictionary: the rail update entry remains available.
-5. Write `current` to `artifacts/updater-e2e/mode`, relaunch the fixture, and confirm the rail stays icon-only after automatic checking. Open the panel to see the up-to-date text. Write `unavailable`, click Check for Updates, and confirm a retryable failure.
-6. For the full authenticated install/relaunch acceptance, switch to `valid` and follow [UPDATES.md](UPDATES.md). Preserve screenshots and accessibility observations under `artifacts/update-ui/` locally; screenshots may contain personal dictation history and should not be uploaded to the public repository.
+1. Run the disposable signed-app installer acceptance from [UPDATES.md](UPDATES.md#repeatable-native-installer-acceptance). The former production-data fixture is retired. For UI/native launch acceptance use an explicitly authorized isolated build and record the actual feed and bundle identity; never replace the regular app with a differently signed fixture.
+2. With an explicitly configured isolated native acceptance client, show an available version and click the rail to start downloading. Check that the Home body has no version/status section; capture the rail and progress panel.
+3. Serve a corrupt archive: verification must fail and the installed executable hash must remain unchanged. Retry and cancel before completion; confirm dictation becomes usable again and Escape dismisses the panel.
+4. Serve a current version, an unavailable feed and malformed metadata in separate runs. Confirm icon-only current state and retryable failure states. Navigate History and Dictionary: the rail entry remains available.
+5. For an authorized real install/relaunch check, use a compatible officially signed candidate and preserve the original bundle. Verify the relaunched version and actual permission status. A development-only identity cannot receive the stable feed.
+6. Keep screenshots, feed inputs, bundle metadata, executable hashes and unverified cases under `artifacts/update-ui/`; do not upload personal history to the repository. The automatic installer harness does not imply UI/relaunch or physical Fn acceptance.
 
 ## Interaction boundaries
 

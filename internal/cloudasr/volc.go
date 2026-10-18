@@ -42,6 +42,8 @@ import (
 
 const volcURL = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
 
+const volcAgentURL = "wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async"
+
 // Resource IDs of Doubao streaming ASR 2.0, by how the account is billed.
 const (
 	VolcHourly        = "volc.seedasr.sauc.duration"
@@ -71,9 +73,15 @@ type Volc struct {
 	// console's pair. One or the other is set.
 	APIKey, AppID, AccessToken string
 	Resource                   string
+	AgentPlan                  bool
 }
 
-func (v Volc) Label() string               { return volcURL }
+func (v Volc) Label() string {
+	if v.AgentPlan {
+		return volcAgentURL
+	}
+	return volcURL
+}
 func (v Volc) Hotwords() bool              { return true }
 func (v Volc) Check(context.Context) error { return nil }
 
@@ -93,7 +101,10 @@ func (v Volc) Dial(ctx context.Context, hotwords *string) (asr.Stream, error) {
 		h.Set("X-Api-App-Key", v.AppID)
 		h.Set("X-Api-Access-Key", v.AccessToken)
 	}
-	conn, res, err := websocket.Dial(ctx, volcURL, &websocket.DialOptions{HTTPHeader: h})
+	if v.AgentPlan {
+		h.Set("X-Api-Resource-Id", VolcHourly)
+	}
+	conn, res, err := websocket.Dial(ctx, v.Label(), &websocket.DialOptions{HTTPHeader: h})
 	if err != nil {
 		return nil, dialError(err, res)
 	}

@@ -16,12 +16,14 @@ python3 -m http.server 38127 --bind 127.0.0.1 --directory mock
 | 词典 | `auto-send.html#dictionary` |
 | 通用 | `auto-send.html#settings/general` |
 | 听写 · 设备按键 · 翻译 | `auto-send.html#settings/dictation` |
-| 文字与粘贴 · 自动发送 · 远程桌面 | `auto-send.html#settings/output` |
+| 文字与粘贴 · 文字整理 · 自动发送 · 远程桌面 | `auto-send.html#settings/output` |
 | 模型 | `auto-send.html#settings/models` |
 | 权限 | `auto-send.html#settings/perms` |
 | 识别语言 · 私密应用 | `language-privacy.html` |
 | 开始使用 | `onboarding-v6.html` |
 | 模型选择 | `onboarding-model-v2.html` |
+| 官网 · 模型与服务 | `website/index.html#models`（蓝色方案，简繁英） |
+| 官网 · 文案 V2 | `website-v2/index.html`（独立文案方案，简繁英） |
 | 连续胶囊状态 | `capsule-states-v2.html?tidy=1&autoSend=1` |
 
 旧稿导航：`mock/archive/index.html`；本次归档：`mock/archive/2026-10-17/`。早期备份留在 `mock/archive/`，隔夜快照留在 `mock/archive/overnight-20261016/`，均由归档导航收录。独立设备按键稿已归档，当前入口为听写设置。
@@ -37,3 +39,31 @@ python3 -m http.server 38127 --bind 127.0.0.1 --directory mock
 复验：从导航打开每个模块，点击“返回导航”，确认回到 `mock/index.html`；设置切换后入口仍可用；归档及深层隔夜方案返回同一入口。证据：`artifacts/mock-navigation/return-navigation/`。
 
 胶囊入口已同步原生连续动效基线：480 ms 伸缩、状态文字错峰进出与发送控件展开。预选整理和自动发送便于完整重播；应用实际验收见[胶囊规格](./CAPSULE.md)。
+
+## 听写翻译布局（2026-10-17）
+
+听写设置的“翻译快捷键”和“目标语言”合并在顶部卡片，紧接“触发键”；移除用于 mock 演示的翻译示例和体验按钮。触发键与翻译快捷键点击后直接录入，松键保存，支持单独修饰键与组合键；Escape、Tab、点击其他位置或窗口失焦取消。两项快捷键相同时提示占用且保留原值；翻译快捷键可清除。首页触发键入口共用录入控件。复验组合键、左右修饰键、取消、重复冲突、清除和刷新保留；脚本、结果与截图：`artifacts/shortcut-recorder/`。这是浏览器 mock，Fn 等系统保留键能否交付及全局注册须另做原生验收。
+
+## 润色规则 Mock（2026-10-17）
+
+“文字与粘贴”顶部合并为一个“文字整理”分组，顶部为从“听写”移入的“默认整理文字”开关，其后为基础格式五个开关和可展开编辑的润色规则。默认规则删除与格式开关重复的口头词要求，保留语气、术语、碎句、口吃、重复与自我修正。内容和展开状态在刷新、切换分类后保留；上一版未修改的默认规则自动更新，自定义内容保持原样。仅为交互预览，尚未接入原生整理或模型调用。
+
+验收：编辑含换行、中文及 HTML 字符的规则，收起并展开，切换分类返回，刷新后确认内容和状态保留；用 Tab、Enter、Space 检查展开按钮，复核浅色和深色显示。同时检查总开关开启时五个格式开关独立保存、总开关关闭时下方控件全部禁用、重新开启恢复原值，以及旧默认规则迁移与自定义内容保留。可重跑脚本、结果和截图：`artifacts/text-cleanup-group/`。
+
+“默认整理文字”已从听写设置移至文字整理分组顶部，沿用同一开关状态；首页整理入口同步指向“文字与粘贴”。“默认整理文字”作为整组总开关：关闭时，基础格式五个开关、润色规则展开按钮及编辑框统一置灰禁用，保留既有值；再次开启恢复可操作。自动发送保持独立。移动复验、截图与脚本：`artifacts/text-cleanup-toggle/`。
+
+总开关联动验收：关闭后检查所有下属控件不可点击、不可编辑且 Tab 跳过；刷新后仍禁用；开启后保留并恢复原配置。证据及可重跑脚本：`artifacts/text-cleanup-disabled/`。
+
+## 官网模型与服务（2026-10-17）
+
+统一导航新增官网入口，`mock/website` 软链接至本机 `website/approved`，沿用当前蓝色方案。`#models` 三张卡分别为本机识别、使用你自己的模型、Voicemore Cloud；官方模型服务展示开箱即用、订阅或按量付费，并标记即将推出。简繁英同步，复用共享返回入口。此处仅为官网 mock，官方服务尚未上线，不提供购买入口。
+
+验收：从导航进入官网，点击卡片链接并切换三种语言，核对锚点保留；检查浅深色、窄屏与键盘，再返回统一导航。可重复脚本、截图和结果：`artifacts/website-model-choices/`。
+
+## 官网文案 V2（2026-10-17）
+
+`website/v2` 是蓝色官网的独立文案版本，`mock/website-v2` 软链接至该目录。原版 `website/approved` 保留，统一导航可分别打开两个版本。文案包含简繁英标题、功能、模型服务、隐私、FAQ、下载与元数据；沿用原演示与产品边界，官方云服务标记即将推出，展示订阅或按量付费。主要修改对照见 `website/v2/COPY-V2.md`。本地浏览器验收脚本与证据保存在 `artifacts/website-copy-v2/`。
+
+官网 V2 的“更多能力”首卡改为远程桌面：为远程桌面优化，远程也能像本地一样使用。三语言同步，配套远程窗口出字预览；离屏暂停、减少动态效果展示完整文字。仅为预设 browser mock，不建立远端连接；真实远程验收仍见[远程输入规格](REMOTE-INPUT.md)。复验截图与可重跑脚本：`artifacts/website-remote-card/`。
+
+润色规则输入框细节（2026-10-18）：固定 176 px 高度，13 px 字号、22 px 行高、10 px 圆角，长文内部滚动且禁用手工拖拽扩高；原生对应规格见[整理模块](../../internal/cleanup/README.md#润色规则编辑区细节2026-10-18)。

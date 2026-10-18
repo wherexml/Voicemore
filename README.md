@@ -96,11 +96,11 @@ git clone https://github.com/wherexml/Voicemore.git
 cd Voicemore
 # Downloads the versioned runtime asset and checks its SHA-256.
 ./scripts/fetch-asr-runtime.sh
-# Local build with the fixed Apple Development identity:
-SIGNING_IDENTITY='Apple Development: geekmooc@gmail.com (5QLDC77G39)' ./scripts/build-macos.sh
+# Isolated development build with the fixed Apple Development identity:
+python3 scripts/build-development.py
 ```
 
-Local builds require the fixed Apple Development identity specified in AGENTS.md; the script refuses other identities and never falls back to ad-hoc signing. Public distribution additionally needs Developer ID signing and Apple notarization. No signing credentials are included in this repository. See [packaging and verification](docs/public/PACKAGING.md).
+Development builds use a separate Voicemore Dev identity, data directory and output, without the production update feed. Daily production installs and official releases share `./scripts/build-macos.sh`, the approved Developer ID and Apple notarization pipeline; it prepares a candidate without publishing. Missing credentials stop the build, with no ad-hoc fallback. No signing credentials are included in this repository. See [packaging and verification](docs/public/PACKAGING.md).
 
 The runtime archive is a Release asset rather than a Git blob. Python dependencies and model revision/checksums live in `internal/localasr/assets/`. Model weights are fetched during setup. The archive retains third-party runtime licenses; [dependency notices](resources/licenses/README.md) cover bundled source dependencies and artwork.
 

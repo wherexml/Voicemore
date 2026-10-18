@@ -104,10 +104,7 @@ func (o *overlay) v2Kind() int {
 	case session.Preparing:
 		return v2Preparing
 	case session.Recording:
-		if o.v2.heard || v.Final != "" || v.Pending != "" {
-			return v2Listening
-		}
-		return v2Quiet
+		return v2Listening
 	case session.Finalizing:
 		return v2Transcribing
 	case session.Cleaning:
@@ -751,7 +748,7 @@ func init() {
 		"sCapsuleHint":   {"Classic is the earlier black capsule. A change applies from the next dictation.", "經典為原先的黑色膠囊；變更自下一次聽寫起生效。", "经典为原先的黑色胶囊；更改从下一次听写起生效。"},
 		"capV2":          {"Indigo", "靛藍", "靛蓝"},
 		"capClassic":     {"Classic", "經典", "经典"},
-		"v2Preparing":    {"Preparing", "準備中", "准备中"},
+		"v2Preparing":    {"", "", ""},
 		"v2Listening":    {"Listening", "正在聆聽", "正在聆听"},
 		"v2Quiet":        {"Waiting for speech", "等待說話", "等待说话"},
 		"v2Transcribing": {"Transcribing", "正在轉錄", "正在转录"},

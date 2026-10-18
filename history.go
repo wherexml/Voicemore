@@ -10,6 +10,7 @@ import (
 	"github.com/egoist/mygo/audio"
 	"github.com/egoist/mygo/ui"
 
+	"voiceinput/internal/providers"
 	"voiceinput/internal/store"
 )
 
@@ -268,13 +269,18 @@ func (m *mainWindow) detailView(c *ui.Context, r store.Record) {
 		ui.Button(c.Key("more"), "").Label(T("more")).Tooltip(T("more")).Padding(4, 6).
 			Children(func() { ui.Icon(c, icMore).FontSize(14) }).
 			Menu(func(menu *ui.Menu) {
+				if r.VoiceTaskID != "" && r.VoiceBilling == nil {
+					if menu.Item(T("recoverVoiceResult")).Disabled(working).Chosen() {
+						m.do("retranscribing", func() error { return m.a.ctrl.RecoverVoiceResult(id) }, "saved")
+					}
+				}
 				if menu.Item(T("retranscribe")).Disabled(!r.HasAudio() || working).Chosen() {
 					m.do("retranscribing", func() error { return m.a.ctrl.Retranscribe(id) }, "versionAdded")
 					m.detailsPeek = id // the new version shows, without changing the saved preference
 				}
 				// Re-cleanup uses the cleanup model of the settings, as
 				// the dictation's own cleanup does.
-				if menu.Item(T("reclean")).Disabled(base == "" || working).Chosen() {
+				if menu.Item(T("reclean")).Disabled(base == "" || working || providers.ManagedVoice(m.a.settings.Get())).Chosen() {
 					m.do("recleaning", func() error { return m.a.ctrl.Recleanup(id, base) }, "versionAdded")
 					m.detailsPeek = id
 				}

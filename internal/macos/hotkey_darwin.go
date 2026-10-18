@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"voiceinput/internal/config"
 
 	"github.com/ebitengine/purego"
 )
@@ -272,6 +273,9 @@ func StartTranslationHotkey(key string, onUp func(bool)) (func(), error) {
 	return startHotkey(&translationHotkey, key, nil, onUp, nil)
 }
 func startHotkey(h *hotkeyListener, key string, onDown func(), onUp func(bool), onCancel func()) (func(), error) {
+	if err := config.ValidateShortcut(key); err != nil {
+		return nil, err
+	}
 	if err := load(); err != nil {
 		return nil, err
 	}

@@ -31,6 +31,8 @@ var (
 	axCopyAttributeValue          func(element, attribute uintptr, value *uintptr) int32
 	axIsAttributeSettable         func(element, attribute uintptr, settable *bool) int32
 	axSetAttributeValue           func(element, attribute, value uintptr) int32
+	axValueGetType                func(value uintptr) uint32
+	axValueGetValue               func(value uintptr, typ uint32, result unsafe.Pointer) bool
 
 	cgEventTapCreate            func(tap, place, options uint32, mask uint64, callback, user uintptr) uintptr
 	cgEventTapEnable            func(tap uintptr, enable bool)
@@ -84,6 +86,8 @@ func load() error {
 		purego.RegisterLibFunc(&axCopyAttributeValue, as, "AXUIElementCopyAttributeValue")
 		purego.RegisterLibFunc(&axIsAttributeSettable, as, "AXUIElementIsAttributeSettable")
 		purego.RegisterLibFunc(&axSetAttributeValue, as, "AXUIElementSetAttributeValue")
+		purego.RegisterLibFunc(&axValueGetType, as, "AXValueGetType")
+		purego.RegisterLibFunc(&axValueGetValue, as, "AXValueGetValue")
 
 		purego.RegisterLibFunc(&cgEventTapCreate, cg, "CGEventTapCreate")
 		purego.RegisterLibFunc(&cgEventTapEnable, cg, "CGEventTapEnable")

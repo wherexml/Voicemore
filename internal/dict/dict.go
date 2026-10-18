@@ -36,6 +36,8 @@ type Entry struct {
 	Wrong string `json:"wrong,omitempty"`
 	// Context limits a rule to transcripts containing one of these words,
 	// so that Cloud→Claude does not rewrite a real "cloud".
+	// A single Han rule instead needs an original phrase with one precise
+	// occurrence; only that occurrence can be rewritten (single_han.go).
 	Context   []string  `json:"context,omitempty"`
 	Source    string    `json:"source"`
 	CreatedAt time.Time `json:"createdAt"`
@@ -61,25 +63,64 @@ type data struct {
 }
 
 type Dict struct {
-	mu   sync.Mutex
-	path string
-	d    data
-	seq  int
+	mu      sync.Mutex
+	path    string
+	d       data
+	seq     int
+	loadErr error
 }
 
 func Open(dir string) (*Dict, error) {
 	d := &Dict{path: filepath.Join(dir, "dictionary.json")}
-	b, err := os.ReadFile(d.path)
-	if errors.Is(err, os.ErrNotExist) {
+	err := config.LoadJSON(d.path, func(b []byte) error {
+		if err := config.ObjectJSON(b); err != nil {
+			return err
+		}
+		var next data
+		if err := json.Unmarshal(b, &next); err != nil {
+			return err
+		}
+		d.d = next
+		return nil
+	})
+	if err == os.ErrNotExist {
 		return d, nil
 	}
-	if err != nil {
-		return d, err
+	if err != nil && !config.JSONRecovered(err) {
+		d.loadErr = err
 	}
-	return d, json.Unmarshal(b, &d.d)
+	return d, err
 }
 
-func (d *Dict) save() error { return config.WriteJSON(d.path, d.d) }
+func (d *Dict) save(next data) error {
+	if d.loadErr != nil {
+		return d.loadErr
+	}
+	err := config.WriteJSON(d.path, next)
+	if config.JSONCommitted(err) {
+		d.d = next
+	}
+	return err
+}
+
+func (d *Dict) savePruned(next data) error {
+	if d.loadErr != nil {
+		return d.loadErr
+	}
+	err := config.WriteJSONPruned(d.path, next)
+	if config.JSONCommitted(err) {
+		d.d = next
+	}
+	return err
+}
+
+func (d *Dict) draft() data {
+	next := data{Entries: slices.Clone(d.d.Entries), Candidates: slices.Clone(d.d.Candidates)}
+	for i := range next.Entries {
+		next.Entries[i].Context = slices.Clone(next.Entries[i].Context)
+	}
+	return next
+}
 
 func (d *Dict) newID() string {
 	d.seq++
@@ -93,6 +134,7 @@ func (d *Dict) Entries(query string) []Entry {
 	var out []Entry
 	for _, e := range d.d.Entries {
 		if q == "" || strings.Contains(strings.ToLower(e.Term), q) || strings.Contains(strings.ToLower(e.Wrong), q) {
+			e.Context = slices.Clone(e.Context)
 			out = append(out, e)
 		}
 	}
@@ -117,10 +159,14 @@ func (d *Dict) Pending() []Candidate {
 func (d *Dict) Add(e Entry) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	return d.add(e)
+	next := d.draft()
+	if err := d.add(&next, e); err != nil {
+		return err
+	}
+	return d.save(next)
 }
 
-func (d *Dict) add(e Entry) error {
+func (d *Dict) add(next *data, e Entry) error {
 	e.Term, e.Wrong = strings.TrimSpace(e.Term), strings.TrimSpace(e.Wrong)
 	if e.Term == "" {
 		return errors.New("the term is empty")
@@ -130,8 +176,19 @@ func (d *Dict) add(e Entry) error {
 	}
 	if e.Kind != KindRule {
 		e.Kind, e.Wrong, e.Context = KindTerm, "", nil
+	} else if singleHan(e.Wrong) {
+		contexts := []string{}
+		for _, context := range e.Context {
+			if context = strings.TrimSpace(context); singleHanContext(context, e.Wrong) {
+				contexts = append(contexts, context)
+			}
+		}
+		if len(contexts) == 0 {
+			return ErrRuleContext
+		}
+		e.Context = contexts
 	}
-	for _, x := range d.d.Entries {
+	for _, x := range next.Entries {
 		if x.Kind == e.Kind && x.Term == e.Term && x.Wrong == e.Wrong {
 			return fmt.Errorf("%q is already in the dictionary", e.Term)
 		}
@@ -140,15 +197,17 @@ func (d *Dict) add(e Entry) error {
 		}
 	}
 	e.ID, e.CreatedAt = d.newID(), time.Now()
-	d.d.Entries = append(d.d.Entries, e)
-	return d.save()
+	e.Context = slices.Clone(e.Context)
+	next.Entries = append(next.Entries, e)
+	return nil
 }
 
 func (d *Dict) Delete(id string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	d.d.Entries = slices.DeleteFunc(d.d.Entries, func(e Entry) bool { return e.ID == id })
-	return d.save()
+	next := d.draft()
+	next.Entries = slices.DeleteFunc(next.Entries, func(e Entry) bool { return e.ID == id })
+	return d.savePruned(next)
 }
 
 // Accept turns a candidate into an entry of the kind the user chose, with
@@ -161,11 +220,15 @@ func (d *Dict) Accept(id, kind, wrong, right string, context []string) error {
 		return errors.New("the candidate is gone")
 	}
 	c := d.d.Candidates[i]
-	if err := d.add(Entry{Kind: kind, Term: right, Wrong: wrong, Context: context, Source: c.Source + " " + c.RecordID}); err != nil {
+	if kind == KindRule && singleHan(strings.TrimSpace(wrong)) && len(context) == 0 {
+		context = []string{c.Sentence}
+	}
+	next := d.draft()
+	if err := d.add(&next, Entry{Kind: kind, Term: right, Wrong: wrong, Context: context, Source: c.Source + " " + c.RecordID}); err != nil {
 		return err
 	}
-	d.d.Candidates = slices.Delete(d.d.Candidates, i, i+1)
-	return d.save()
+	next.Candidates = slices.Delete(next.Candidates, i, i+1)
+	return d.save(next)
 }
 
 // Ignore keeps a candidate out of the list; the same correction seen again
@@ -173,12 +236,13 @@ func (d *Dict) Accept(id, kind, wrong, right string, context []string) error {
 func (d *Dict) Ignore(id string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	for i := range d.d.Candidates {
-		if d.d.Candidates[i].ID == id {
-			d.d.Candidates[i].Ignored = true
+	next := d.draft()
+	for i := range next.Candidates {
+		if next.Candidates[i].ID == id {
+			next.Candidates[i].Ignored = true
 		}
 	}
-	return d.save()
+	return d.save(next)
 }
 
 // Hotwords returns every term, in order and without duplicates: the term
@@ -222,10 +286,17 @@ func (d *Dict) Apply(text string) (string, []string) {
 	defer d.mu.Unlock()
 	var applied []string
 	for _, e := range d.d.Entries {
-		if e.Kind != KindRule || !hasContext(text, e.Context) {
+		if e.Kind != KindRule || e.Wrong == "" || !hasContext(text, e.Context) {
 			continue
 		}
-		if out, n := replaceWhole(text, e.Wrong, e.Term); n > 0 {
+		var out string
+		var n int
+		if singleHan(e.Wrong) {
+			out, n = replaceSingleHan(text, e)
+		} else {
+			out, n = replaceWhole(text, e.Wrong, e.Term)
+		}
+		if n > 0 {
 			text = out
 			applied = append(applied, e.Wrong+" → "+e.Term)
 		}
@@ -310,7 +381,7 @@ func (d *Dict) Import(path string) (added, total int, err error) {
 	text = strings.ReplaceAll(text, "\r", "\n")
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	previous := slices.Clone(d.d.Entries)
+	next := d.draft()
 	seen := make(map[string]bool)
 	for _, e := range d.d.Entries {
 		seen[e.Term] = true
@@ -325,14 +396,13 @@ func (d *Dict) Import(path string) (added, total int, err error) {
 			continue
 		}
 		seen[term] = true
-		d.d.Entries = append(d.d.Entries, Entry{ID: d.newID(), Kind: KindTerm, Term: term, Source: "import " + filepath.Base(path), CreatedAt: time.Now()})
+		next.Entries = append(next.Entries, Entry{ID: d.newID(), Kind: KindTerm, Term: term, Source: "import " + filepath.Base(path), CreatedAt: time.Now()})
 		added++
 	}
 	if added == 0 {
 		return 0, total, nil
 	}
-	if err := d.save(); err != nil {
-		d.d.Entries = previous
+	if err := d.save(next); err != nil {
 		return 0, total, err
 	}
 	return added, total, nil

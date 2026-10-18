@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/egoist/mygo"
-	"github.com/egoist/mygo/transfer"
 	"github.com/egoist/mygo/ui"
 	"voiceinput/internal/macos"
 )
@@ -22,6 +21,7 @@ func (p *prefsWindow) showPermissionDrag(pane string) {
 	if pane != "Privacy_Accessibility" && pane != "Privacy_ListenEvent" {
 		return
 	}
+	p.hidePermissionDrag()
 	macos.OpenPrivacySettings(pane)
 	p.dragPane, p.dragActive, p.dragging, p.dragError = pane, true, false, false
 	p.dragStarted, p.dragSeen, p.dragChecked, p.dragGranted = time.Now(), time.Time{}, time.Time{}, time.Time{}
@@ -39,34 +39,75 @@ func (p *prefsWindow) showPermissionDrag(pane string) {
 	// Do not show an unanchored card while System Settings is still opening.
 	p.trackPermissionWindow()
 	p.dragWin.Invalidate()
-	// A hidden view does not receive After callbacks. Poll until its first frame
-	// is available, then the visible view takes over tracking.
-	go func(start time.Time) {
+	// Native dragging runs in AppKit's tracking loop. Do not rely on the
+	// source view drawing frames to observe release, cancellation or closure.
+	generation := p.dragGeneration
+	go func() {
 		ticker := time.NewTicker(200 * time.Millisecond)
 		defer ticker.Stop()
 		for range ticker.C {
 			done := false
 			macos.OnMain(func() {
-				if !p.dragActive || p.dragStarted != start || p.dragWin.IsVisible() {
+				if !p.dragActive || p.dragGeneration != generation || p.a.quitting {
 					done = true
 					return
 				}
-				p.trackPermissionWindow()
-				done = !p.dragActive || p.dragWin.IsVisible()
+				p.pollPermissionDrag()
+				done = !p.dragActive
 			})
 			if done {
 				return
 			}
 		}
-	}(p.dragStarted)
+	}()
 }
 
 func (p *prefsWindow) hidePermissionDrag() {
+	// Fence callbacks before hiding the old native source.
+	p.dragGeneration++
+	p.dragSession++
 	p.dragActive, p.dragging = false, false
+	p.dragReleased = time.Time{}
 	if p.dragWin != nil {
+		macos.HideAppFileDrag(p.dragWin.NativeHandle())
 		p.dragWin.SetIgnoreMouseEvents(false)
 		p.dragWin.Hide()
 	}
+}
+
+func (p *prefsWindow) pollPermissionDrag() {
+	now := time.Now()
+	if p.dragging {
+		if macos.PrimaryMouseDown() {
+			p.dragReleased = time.Time{}
+		} else if p.dragReleased.IsZero() {
+			p.dragReleased = now
+		} else if now.Sub(p.dragReleased) >= 500*time.Millisecond {
+			// A lost completion must not strand a faded, unclickable card.
+			p.dragSession++
+			macos.HideAppFileDrag(p.dragWin.NativeHandle())
+			p.dragging, p.dragError = false, true
+			p.dragReleased = time.Time{}
+			p.dragChecked = time.Time{}
+		}
+	}
+	p.trackPermissionWindow()
+	if !p.dragActive {
+		return
+	}
+	if now.Sub(p.dragChecked) >= time.Second && !p.dragging {
+		p.dragChecked = now
+		granted := p.dragPane == "Privacy_Accessibility" && macos.AccessibilityTrusted(false) || p.dragPane == "Privacy_ListenEvent" && macos.InputMonitoringGranted(false)
+		if granted && p.dragGranted.IsZero() {
+			p.dragGranted = now
+			p.a.refreshAll()
+		}
+	}
+	if !p.dragGranted.IsZero() && now.Sub(p.dragGranted) > 900*time.Millisecond {
+		p.hidePermissionDrag()
+		return
+	}
+	p.dragWin.Invalidate()
 }
 
 // Keep geometry work bounded to 5 Hz. A missing frame is tolerated briefly
@@ -119,25 +160,6 @@ func (p *prefsWindow) permissionDragView(c *ui.Context) {
 		return
 	}
 	now := time.Now()
-	if now.Sub(p.dragTracked) >= 200*time.Millisecond && !p.dragging {
-		p.dragTracked = now
-		p.trackPermissionWindow()
-		if !p.dragActive {
-			return
-		}
-	}
-	if now.Sub(p.dragChecked) >= time.Second && !p.dragging {
-		p.dragChecked = now
-		granted := p.dragPane == "Privacy_Accessibility" && macos.AccessibilityTrusted(false) || p.dragPane == "Privacy_ListenEvent" && macos.InputMonitoringGranted(false)
-		if granted && p.dragGranted.IsZero() {
-			p.dragGranted = now
-			p.a.refreshAll()
-		}
-	}
-	if !p.dragGranted.IsZero() && now.Sub(p.dragGranted) > 900*time.Millisecond {
-		p.hidePermissionDrag()
-		return
-	}
 	c.After(50 * time.Millisecond)
 	t := c.Theme()
 	pulse := float32(.85)
@@ -163,6 +185,7 @@ func (p *prefsWindow) permissionDragView(c *ui.Context) {
 			}
 		}).Children(func() {
 			if !p.dragGranted.IsZero() {
+				macos.HideAppFileDrag(p.dragWin.NativeHandle())
 				ui.Icon(c, icCheck).FontSize(24).TextColor(t.Success)
 				ui.Text(c, T("permDragGranted")).Grow(1).FontSize(13).FontWeight(600)
 			} else {
@@ -198,35 +221,41 @@ func (p *prefsWindow) permissionDragView(c *ui.Context) {
 				if p.dragDirection != 0 {
 					hint = "permDragSide"
 				}
-				data, err := transfer.FileData(p.bundlePath)
-				if p.bundlePath == "" || err != nil {
+				if p.bundlePath == "" {
 					hint = "permDragUnavailable"
 				} else if p.dragError {
 					hint = "permDragFailed"
 				}
 				ui.Text(c, T(hint)).Grow(1).MinWidth(0).FontSize(13).FontWeight(600)
-				if p.bundlePath != "" && err == nil {
+				if p.bundlePath != "" {
+					generation, session := p.dragGeneration, p.dragSession+1
 					ui.Row(c.Key("permission-app")).Shrink(0).Gap(10).Padding(7).Radius(10).Background(cardColor(t)).Border(1, t.Border).AlignItems(ui.Center).Label(T("permDragApp")).
-						DragDataFrom(func() transfer.Data {
-							p.dragging, p.dragError = true, false
-							p.dragWin.SetIgnoreMouseEvents(true)
-							p.dragWin.Invalidate()
-							return data
-						}, transfer.DragOptions{Operations: transfer.Copy, Done: func(r transfer.Result) {
-							p.dragging = false
-							p.dragWin.SetIgnoreMouseEvents(false)
-							// The helper's job is finished once a destination accepts the
-							// app. TCC may not report the grant until the app restarts;
-							// dismissing guidance must not wait for that or imply a grant.
-							if r.Err == nil && !r.Canceled && r.Operation == transfer.Copy {
-								p.hidePermissionDrag()
-								p.a.refreshAll()
-								return
+						Draw(func(_ *ui.Painter, r ui.Rect) {
+							err := macos.SetAppFileDrag(p.dragWin.NativeHandle(), p.bundlePath, float64(r.X), float64(r.Y), float64(r.W), float64(r.H), func() {
+								p.dragSession = session
+								p.dragging, p.dragError = true, false
+								p.dragReleased = time.Time{}
+								p.dragWin.Invalidate()
+							}, func(copied bool) {
+								p.dragWin.Update(func() {
+									if !p.dragActive || generation != p.dragGeneration || session != p.dragSession {
+										return
+									}
+									p.dragging = false
+									p.dragReleased = time.Time{}
+									if copied {
+										p.hidePermissionDrag()
+										p.a.refreshAll()
+										return
+									}
+									p.dragChecked = time.Time{}
+									p.dragWin.Invalidate()
+								})
+							})
+							if err != nil {
+								p.dragError = true
 							}
-							p.dragError = r.Err != nil
-							p.dragChecked = time.Time{}
-							p.dragWin.Invalidate()
-						}}).Children(func() {
+						}).Children(func() {
 						ui.Box(c).Size(30, 30).Draw(drawAppMark)
 						ui.Text(c, "Voicemore").FontSize(13).FontWeight(600).SingleLine()
 						ui.Icon(c, permissionGrip).FontSize(16).TextColor(t.TextMuted)

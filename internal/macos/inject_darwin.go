@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode/utf16"
+	"unsafe"
 
 	"github.com/ebitengine/purego/objc"
 )
@@ -137,6 +139,56 @@ func axAttribute(el uintptr, name string) uintptr {
 		return 0
 	}
 	return value
+}
+
+type pasteRange struct{ location, length int64 }
+
+// Called on the main thread. AX ranges use UTF-16, including surrogate pairs.
+func selectedPasteRange(el uintptr) (pasteRange, bool) {
+	v := axAttribute(el, "AXSelectedTextRange")
+	if v == 0 {
+		return pasteRange{}, false
+	}
+	defer cfRelease(v)
+	var r pasteRange
+	ok := axValueGetType(v) == 4 && axValueGetValue(v, 4, unsafe.Pointer(&r))
+	return r, ok
+}
+
+func pasteValue(el uintptr) (string, bool) {
+	v := axAttribute(el, "AXValue")
+	if v == 0 {
+		return "", false
+	}
+	defer cfRelease(v)
+	if !objc.Send[bool](objc.ID(v), sel("isKindOfClass:"), class("NSString")) {
+		return "", false
+	}
+	s := goString(objc.ID(v))
+	return s, len(s) <= 65536
+}
+
+func expectedPaste(el uintptr, text string) (string, int64, bool) {
+	before, ok := pasteValue(el)
+	if !ok {
+		return "", 0, false
+	}
+	r, ok := selectedPasteRange(el)
+	u, inserted := utf16.Encode([]rune(before)), utf16.Encode([]rune(text))
+	if !ok || r.location < 0 || r.length < 0 || r.location > int64(len(u)) || r.length > int64(len(u))-r.location {
+		return "", 0, false
+	}
+	end := r.location + r.length
+	// Reject a range cutting a surrogate pair rather than changing its text.
+	boundary := func(i int64) bool {
+		return i == 0 || i == int64(len(u)) || !(u[i-1] >= 0xd800 && u[i-1] <= 0xdbff && u[i] >= 0xdc00 && u[i] <= 0xdfff)
+	}
+	if !boundary(r.location) || !boundary(end) {
+		return "", 0, false
+	}
+	next := append(append(append([]uint16(nil), u[:r.location]...), inserted...), u[end:]...)
+	expected := string(utf16.Decode(next))
+	return expected, r.location + int64(len(inserted)), expected != before
 }
 
 // pasteMenuEnabled supports custom editors (including Qt/WeChat) which do
@@ -314,6 +366,9 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 	var saved []clipboardItem
 	var change int
 	var cancelled error
+	var expected string
+	var caret int64
+	var verifyPaste bool
 	OnMain(func() {
 		if o.Context != nil && o.Context.Err() != nil {
 			cancelled = o.Context.Err()
@@ -331,6 +386,9 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 		canPaste = canPaste && frontmostPID() == current.pid
 		if canPaste {
 			saved = saveClipboard()
+			if res.FocusVerified && sendKey == "" && o.RestoreDelayMs <= 600 {
+				expected, caret, verifyPaste = expectedPaste(cur, text)
+			}
 		}
 		pb := pasteboard()
 		pb.Send(sel("clearContents"))
@@ -360,8 +418,37 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 	if o.OnPasted != nil && sendKey == "" {
 		o.OnPasted(current)
 	}
-	settleUntil := time.Now().Add(time.Duration(max(o.RestoreDelayMs, 200)) * time.Millisecond)
+	settleStart := time.Now()
+	settleUntil := settleStart.Add(time.Duration(max(o.RestoreDelayMs, 200)) * time.Millisecond)
 	for time.Now().Before(settleUntil) {
+		// Early restoration requires proof that this exact paste was consumed,
+		// not merely a substring match or a dispatched keyboard event.
+		if verifyPaste && time.Since(settleStart) >= 80*time.Millisecond {
+			confirmed := false
+			OnMain(func() {
+				if (o.Context != nil && o.Context.Err() != nil) || frontmostPID() != current.pid || objc.Send[int](pasteboard(), sel("changeCount")) != change {
+					verifyPaste = false
+					return
+				}
+				f := focusedElement(current.pid)
+				if f == 0 {
+					verifyPaste = false
+					return
+				}
+				defer cfRelease(f)
+				if !cfEqual(f, current.element) {
+					verifyPaste = false
+					return
+				}
+				value, ok := pasteValue(f)
+				rangeNow, rangeOK := selectedPasteRange(f)
+				confirmed = ok && rangeOK && value == expected && rangeNow.location == caret && rangeNow.length == 0
+			})
+			if confirmed {
+				res.PasteConfirmedMs = time.Since(settleStart).Milliseconds()
+				break
+			}
+		}
 		if sendKey != "" && res.SendSkipped == "" {
 			if o.Context != nil && o.Context.Err() != nil {
 				res.SendSkipped = "cancelled"
@@ -396,6 +483,7 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 		}
 		releaseClipboard(saved)
 	})
+	res.ClipboardRestoreMs = time.Since(settleStart).Milliseconds()
 	if sendKey != "" && res.SendSkipped == "" {
 		allowed := true
 		if o.BeforeSend != nil {
