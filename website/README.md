@@ -76,3 +76,21 @@ The public pages omit the mock-image and simulated-microphone notices. The demo 
 ## Background treatment (2026-10-17)
 
 Shared static atmospheric layers add overhead and side light, a soft horizon, local fine grain and a spotlight behind the product. Grain is restricted to the hero and closing panel; no fixed fullscreen overlay, continuous animation or new image request is introduced. Decorative layers ignore pointer events and are hidden in forced colors. Light/dark palettes share the same geometry. The original scroll narrative and Q edition are unchanged.
+
+## Local design variants and specification boundary (2026-10-18)
+
+The tracked root pages remain the original static site. Local `approved/` is
+the blue visual baseline; `v2/` is its independent three-language copy revision
+with the remote-desktop demo card; `q/` is the linen-and-watch concept.
+Candidate artwork lives in `assets/hero-concepts/`. Their presence does not
+select a new production homepage or prove deployment.
+
+When available, read local `spec/WEBSITE.md`, `spec/DESIGN.md` and
+`spec/ACCEPTANCE.md` for the variant map, frontend contracts, design tokens and
+repeatable review matrix. The entire `spec/` directory stays out of Git.
+The repository's public behavior specifications remain in `docs/public/`.
+Local preview routing is documented in
+[Mock navigation](../docs/public/MOCK-NAVIGATION.md); use the shared five-digit
+port. Draft sources and screenshots are not included in this documentation
+closeout. Website deployment and release-link updates require their own
+verification; this closeout does not publish either the website or an app.
