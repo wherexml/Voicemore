@@ -1,8 +1,8 @@
 # 云端语音识别
 
-## sub2api 组合服务
+## Voicemore Official（sub2api 组合服务）
 
-模型设置可选 sub2api 的 `doubao-asr-2.0-cleanup`。默认入口 `https://47.94.244.74:8443`，可配置 HTTPS origin；原生 WebSocket 握手携带专用 API Key 与稳定任务 ID。凭证使用本机 AES-256-GCM 存储，不写入设置、历史或日志。
+模型设置提供独立的 **Voicemore Official** 服务商卡片，新安装无须通过“添加服务商”手动创建。该卡片使用 Voicemore 标识，首页服务简称为 Official；选择其 `doubao-asr-2.0-cleanup`。持久化服务商 ID 仍为 `sub2api`，密钥账户仍为 `provider.sub2api.apiKey`，升级沿用既有启用状态、默认模型、密钥及自定义端点。新安装默认仍使用本地识别，不自动启用收费云服务；填写并保存自己的 Key 后，可显式启用并设为默认。默认入口 `https://47.94.244.74:8443`，可配置 HTTPS origin；原生 WebSocket 握手携带专用 API Key 与稳定任务 ID。凭证使用本机 AES-256-GCM 存储，不写入设置、历史或日志。
 
 使用 `/v1/voice/stream`，等待 accepted 后按实时节奏发送 16kHz mono PCM16；不把 ASR 全量快照拼接成重复句。每次录音最多180秒，完成后等待服务端 ASR 2.0、DeepSeek Flash 整理及计费事务全部成功。组合模型服务端始终执行整理；客户端总开关可选择交付原文，基础格式和润色规则随每次录音发送到服务端执行。该服务暂不支持翻译、热词和单独重新整理，相关操作不回退其他上游。
 

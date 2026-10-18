@@ -558,7 +558,9 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 		}
 		labelled(c, "secret-"+account, T(fieldLabels[f]), "", func() { p.secretField(c, account, T(fieldLabels[f]), k.invalidate, saved) })
 	}
-	ui.Text(c, T("mKeyHint")).FontSize(11.5).TextColor(faintText(t))
+	if id != providers.Sub2API {
+		ui.Text(c, T("mKeyHint")).FontSize(11.5).TextColor(faintText(t))
+	}
 
 	if id == providers.DeepSeek {
 		endpoint := p.draft("ds.endpoint", providers.Endpoint(s))
@@ -585,7 +587,11 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 
 	// The models. A default can only be one of a provider that can serve.
 	can := modeOK && on && providers.Configured(id, s, p.a.secret)
-	labelled(c, "models", T("gModels"), T("refNote"), func() {
+	modelNote := ""
+	if id != providers.Sub2API {
+		modelNote = T("refNote")
+	}
+	labelled(c, "models", T("gModels"), modelNote, func() {
 		ui.Column(c).Grow(1).Radius(10).Background(settingsGroupColor(t)).Border(1, settingsGroupLine(c)).Gap(1).Dividers(1, t.Border).Children(func() {
 			for _, m := range providers.Models(id, s) {
 				ui.Row(c.Key(m.ID)).Gap(8).Padding(8, 12).AlignItems(ui.Center).Children(func() {
