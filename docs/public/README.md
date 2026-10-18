@@ -1,6 +1,6 @@
 # 模块文档索引
 
-- [sub2api 组合语音、文字设置、最终文字计费与恢复验收](../../internal/cloudasr/README.md#sub2api-组合服务)
+- [Voicemore Official 组合语音、文字设置、最终文字计费与恢复验收](../../internal/cloudasr/README.md#voicemore-officialsub2api-组合服务)
 
 用户入口见 [中文 README](../../README.zh-CN.md) 与 [English README](../../README.md)。本目录保存可公开的行为规格；实现细节放在对应模块旁，按需继续阅读。
 

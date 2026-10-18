@@ -1,6 +1,6 @@
 # 配置模块规格
 
-sub2api 的非敏感地址为 `providers.sub2apiEndpoint`；专用 Key 使用加密账户 `provider.sub2api.apiKey`。只有显式选择该识别服务时使用组合整理，不迁移或覆盖已保存的独立整理供应商。见[云端 ASR](../cloudasr/README.md#sub2api-组合服务)。
+sub2api 的非敏感地址为 `providers.sub2apiEndpoint`；专用 Key 使用加密账户 `provider.sub2api.apiKey`。只有显式选择该识别服务时使用组合整理，不迁移或覆盖已保存的独立整理供应商。见[云端 ASR](../cloudasr/README.md#voicemore-officialsub2api-组合服务)。
 
 `Store` 负责读取和持久化 Settings；远程桌面的完整行为见[远程输入规格](../../docs/public/REMOTE-INPUT.md)。
 

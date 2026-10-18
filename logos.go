@@ -59,6 +59,10 @@ func simplifySVG(data []byte) []byte {
 // a catalog provider, or the neutral tile of a custom one.
 func logo(c *ui.Context, provider string, size float32) {
 	t := c.Theme()
+	if provider == providers.Sub2API {
+		ui.Box(c).Size(size, size).Draw(drawAppMark)
+		return
+	}
 	if provider == "builtin-asr" {
 		ui.Row(c).Size(size, size).Radius(size * 0.28).Justify(ui.Center).AlignItems(ui.Center).Background(fillColor(t)).Children(func() {
 			ui.Icon(c, icMic).FontSize(size * 0.65).TextColor(t.Accent)

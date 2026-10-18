@@ -1,6 +1,6 @@
 # 文字整理模块规格
 
-当识别模型为 sub2api 时，整理由同一云端任务完成，客户端不调用本模块或直连 DeepSeek。服务端仍执行整理；客户端总开关选择交付原始识别或整理正文，保留计费回执且不做第二次格式改写；见下文原生文字整理总开关。单独重新整理及翻译暂不支持。协议、计费回执和复验见[云端 ASR](../cloudasr/README.md#sub2api-组合服务)。
+当识别模型为 sub2api 时，整理由同一云端任务完成，客户端不调用本模块或直连 DeepSeek。服务端仍执行整理；客户端总开关选择交付原始识别或整理正文，保留计费回执且不做第二次格式改写；见下文原生文字整理总开关。单独重新整理及翻译暂不支持。协议、计费回执和复验见[云端 ASR](../cloudasr/README.md#voicemore-officialsub2api-组合服务)。
 
 文字整理默认关闭，使用独立于 ASR 的 OpenAI 兼容接口。`Run` 向 `/chat/completions` 发送固定 system 提示词与转写 user 消息，temperature 为 0、非流式；本地 oMLX 发送 `enable_thinking=false`；DeepSeek 默认发送 `thinking: {"type":"disabled"}`，避免云端默认思考增加整理延迟；自定义服务不自动附加这两种参数。连接检查仅列出 `/models`，不证明模型整理质量。
 

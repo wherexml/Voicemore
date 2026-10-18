@@ -37,7 +37,7 @@ const (
 	Aliyun   = "aliyun"
 	Volc     = "volc"
 	DeepSeek = "deepseek"
-	Sub2API  = "sub2api"
+	Sub2API  = "sub2api" // Voicemore Official; retain the persisted ID and credential account.
 
 	DeepSeekEndpoint = "https://api.deepseek.com/v1"
 
@@ -76,7 +76,7 @@ type Entry struct {
 }
 
 var Catalog = []Entry{
-	{ID: Sub2API, Kind: KindASR, Name: "pSub2API", Logo: "volcengine",
+	{ID: Sub2API, Kind: KindASR, Name: "pSub2API", Logo: "voicemore",
 		KeyURL: cloudasr.Sub2APIEndpoint + "/keys", DocsURL: cloudasr.Sub2APIEndpoint,
 		Models: []Model{{ID: cloudasr.Sub2APIModel, Label: "sub2apiModel", Recommended: true}}},
 	{ID: Aliyun, Kind: KindASR, Name: "pAliyun", Logo: "alibabacloud",
