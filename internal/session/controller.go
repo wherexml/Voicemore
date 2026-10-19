@@ -58,6 +58,7 @@ type View struct {
 	Text string
 	// CleanupFailed offers trying the cleanup again, or copying.
 	CleanupFailed bool
+	SilentAudio   bool // A nonempty captured PCM buffer contains only zero samples.
 	// Retained says the dictation ended without inserting but holds text
 	// to copy: the insertion failed, or the recording or the recognition
 	// broke off with words already heard. The phase is Failed; the overlay
@@ -573,7 +574,7 @@ func (c *Controller) fail(r *run, err error, text string) {
 	}
 	r.confirmed = true // freeze PCM before asynchronous hardware shutdown
 	capture := r.capture
-	c.view = View{Phase: Failed, Message: err.Error(), Text: text, Cleanup: r.cleanup}
+	c.view = View{Phase: Failed, Message: err.Error(), Text: text, Cleanup: r.cleanup, SilentAudio: silentPCM(r.pcm)}
 	if text != "" {
 		c.view.Retained, c.view.Notice = true, err.Error()
 	}
