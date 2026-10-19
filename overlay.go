@@ -65,6 +65,9 @@ type overlay struct {
 	// when it starts, so a change of style never lands mid-dictation.
 	classic      bool
 	width        int
+	errorID      uint64
+	errorView    session.View
+	errorHidden  bool
 	sendFinished bool // Suppress the terminal notice after a completed countdown.
 	v2           v2State
 }
@@ -91,60 +94,84 @@ func newOverlay(a *app) *overlay {
 // sync shows the controller's state, from any goroutine.
 func (o *overlay) sync() {
 	v := o.a.ctrl.View()
-	o.win.Update(func() {
-		if o.a.sendPreview != nil && o.a.sendPreview.visible {
-			if v.Phase == session.Preparing {
-				o.a.sendPreview.close()
-			} else {
-				return
-			}
-		}
-		if v.Phase == session.Preparing || v.Phase == session.Failed {
-			if o.a.sendPreview != nil {
-				o.a.sendPreview.exiting = false
-			}
-		}
-		if v.Phase == session.Preparing || v.Phase == session.Failed {
-			o.sendFinished = false
-		}
-		if o.sendFinished {
-			o.v = v
+	o.win.Update(func() { o.syncView(v) })
+}
+
+// syncView runs on the UI thread, including error notice lifetime management.
+func (o *overlay) syncView(v session.View) {
+	if v.Phase != session.Failed {
+		o.errorID++
+		o.errorView = session.View{}
+		o.errorHidden = false
+	} else if v != o.errorView {
+		o.errorID++
+		o.errorView = v
+		o.errorHidden = false
+		id := o.errorID
+		time.AfterFunc(3*time.Second, func() {
+			o.win.Update(func() {
+				if id != o.errorID || o.v.Phase != session.Failed || o.a.quitting {
+					return
+				}
+				o.errorHidden = true
+				o.hideAfterFade(nil)
+			})
+		})
+	} else if o.errorHidden {
+		return
+	}
+	if o.a.sendPreview != nil && o.a.sendPreview.visible {
+		if v.Phase == session.Preparing {
+			o.a.sendPreview.close()
+		} else {
 			return
 		}
-		was := o.v.Phase
-		if v.Phase == session.Idle {
-			if o.closing || !o.win.IsVisible() {
-				return
-			}
-			o.hideAfterFade(nil)
-			return
+	}
+	if v.Phase == session.Preparing || v.Phase == session.Failed {
+		if o.a.sendPreview != nil {
+			o.a.sendPreview.exiting = false
 		}
+	}
+	if v.Phase == session.Preparing || v.Phase == session.Failed {
+		o.sendFinished = false
+	}
+	if o.sendFinished {
 		o.v = v
-		if v.Phase == session.Preparing && was != session.Preparing {
-			o.expanded = false // each dictation starts with the preview closed
+		return
+	}
+	was := o.v.Phase
+	if v.Phase == session.Idle {
+		if o.closing || !o.win.IsVisible() {
+			return
 		}
-		if was == session.Idle || o.closing {
-			o.closing = false
-			o.fade(1)
-			o.levels = [session.Levels]float32{}
-			o.levelAt = time.Time{}
-			// Start at the pointer, then follow display and focus changes.
-			o.area = mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
-			o.pointerArea = o.area
-			o.activeWindow, o.activeFrame = macos.ActiveOverlayWindow()
-			o.followID++
-			o.follow(o.followID)
-			macos.ConfigureOverlay(o.win.NativeHandle())
-			o.height = 0
-			// A new dictation: the style chosen in Settings applies now.
-			o.classic = o.a.settings.Get().CapsuleStyle == config.CapsuleClassic
-			o.v2 = v2State{}
-		}
-		o.place()
-		if !o.win.IsVisible() {
-			o.win.ShowInactive()
-		}
-	})
+		o.hideAfterFade(nil)
+		return
+	}
+	o.v = v
+	if v.Phase == session.Preparing && was != session.Preparing {
+		o.expanded = false // each dictation starts with the preview closed
+	}
+	if was == session.Idle || o.closing {
+		o.closing = false
+		o.fade(1)
+		o.levels = [session.Levels]float32{}
+		o.levelAt = time.Time{}
+		// Start at the pointer, then follow display and focus changes.
+		o.area = mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
+		o.pointerArea = o.area
+		o.activeWindow, o.activeFrame = macos.ActiveOverlayWindow()
+		o.followID++
+		o.follow(o.followID)
+		macos.ConfigureOverlay(o.win.NativeHandle())
+		o.height = 0
+		// A new dictation: the style chosen in Settings applies now.
+		o.classic = o.a.settings.Get().CapsuleStyle == config.CapsuleClassic
+		o.v2 = v2State{}
+	}
+	o.place()
+	if !o.win.IsVisible() {
+		o.win.ShowInactive()
+	}
 }
 
 // A session-scoped timer also follows during silence, static results and reduced
