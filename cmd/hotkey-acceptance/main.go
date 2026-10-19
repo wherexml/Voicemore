@@ -17,6 +17,7 @@ func main() {
 		macos.OnMain = mygo.RunOnMain
 		go func() {
 			result := macos.AcceptHotkeyRecovery()
+			result = append(result, macos.AcceptFnInterception()...)
 			json.NewEncoder(os.Stdout).Encode(result)
 			bad := false
 			for _, item := range result {

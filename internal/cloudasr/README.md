@@ -57,3 +57,15 @@ WS start 可携带 `text_options: {version: 1, format: {trimPeriod, calmExclamat
 accepted 返回规范化选项 JSON 的 SHA-256 `text_options_digest`；客户端收到匹配确认才发送音频，旧服务不支持时明确失败，不静默忽略设置。规则最多16 KB UTF-8，非法版本或超长规则在创建任务前拒绝。选项参与幂等指纹，同一 ID/音频改变选项返回冲突；GET 始终返回原任务正文与账单，不受当前设置影响。不带选项的旧客户端继续原行为。总开关关闭仍选择原始 ASR 交付，保留既有组合服务计费语义。
 
 验收命令及固定音频、回执、账本核对位于本机 `artifacts/sub2api-text-settings/`。服务端源位于本机 sub2api 仓库 `extensions/voice`；其中 `textstyle` 同步自本仓库 `internal/textstyle`，更新格式算法时须同步并复验。
+
+### Provider credential editing (2026-10-19)
+
+Catalog provider credentials are editable and connection checks are available without first enabling the provider. Edits automatically persist to the existing encrypted local store; no separate Save key action is shown. Writes are serialized per account, retaining the latest edit or removal, with failed drafts retained and an explicit save error. Successful nonempty credential edits enable the provider; a manual switch change during a write takes precedence over automatic activation. Explicit enable or successful credential setup selects a sole supported model; providers with multiple models retain the default-selection controls. Opening an editor alone does not enable a service or change the assignment. Tests remain explicit and do not send audio.
+
+Native regression uses an isolated development app and synthetic credentials: start disabled, enter a key, close/reopen, confirm persistence and singleton selection, replace rapidly, clear, and toggle off during a save. Confirm the singleton has no Set as default button, a multiple-model provider retains selection, and connection tests are not gated on its switch. Save failures must leave the draft available. Keep screenshots and results under `artifacts/provider-key-autosave/`; never send fixture credentials to a real endpoint.
+
+### 请求与回答的角色边界（2026-10-19）
+
+云端整理须始终保留原说话者与接收者身份。转写即使只有请求、问句或缺少上下文，也只编辑该句，不能回答、索取材料、追问、承诺处理或生成操作步骤。原文自身含有索取材料或承诺时仍须保留，不按固定词句屏蔽输出。
+
+本机修订提示词与真实 DeepSeek Flash 对照见 `artifacts/cleanup/request-boundary-20261019/`：原句“帮我总结一个最终版本的给我。”应整理为“帮我总结一个最终版本给我”，不能变成索取素材的回答。六条样例各三轮，分别核对角色、请求意图、否定、数量、英文及去口吃；这属于开发集模型/API验证，不代表泛化保证或原生端到端验收。生产是否生效须另核对服务加载的提示词 SHA，不能以本机文件变更作为上线证据。

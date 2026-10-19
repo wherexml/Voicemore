@@ -105,6 +105,9 @@ func (p *prefsWindow) modelsView(c *ui.Context) {
 func (p *prefsWindow) defaultBlock(c *ui.Context, kind string, s config.Settings) {
 	t := c.Theme()
 	a := providers.Assigned(kind, s)
+	if a.Provider == providers.Local && !p.a.localModelConfigured(kind, s) {
+		a = config.Assignment{}
+	}
 	err := providers.Check(kind, s, p.a.secret)
 	label := p.a.modelLabel(kind, s)
 	ui.Column(c.Key("def-" + kind)).Grow(1).Basis(0).MinWidth(0).Gap(7).Children(func() {
@@ -112,7 +115,7 @@ func (p *prefsWindow) defaultBlock(c *ui.Context, kind string, s config.Settings
 
 		options := []selectOption{}
 		selected := ""
-		for _, o := range providers.Eligible(kind, s, p.a.secret) {
+		for _, o := range p.a.eligibleModels(kind, s) {
 			o := o
 			id := o.Provider + "|" + o.Model
 			if err == nil && o.Provider == a.Provider && (o.Provider == providers.Local || o.Model == a.Model) {
@@ -124,7 +127,7 @@ func (p *prefsWindow) defaultBlock(c *ui.Context, kind string, s config.Settings
 			}})
 		}
 		p.standardSelect(c, "model-"+kind, T(kindLabels[kind]), selected, label, 0, false, options, func(value string) {
-			for _, o := range providers.Eligible(kind, s, p.a.secret) {
+			for _, o := range p.a.eligibleModels(kind, s) {
 				if o.Provider+"|"+o.Model == value {
 					p.assign(kind, o.Provider, o.Model)
 					break
@@ -392,12 +395,57 @@ func labelled(c *ui.Context, key, label, note string, control func()) {
 	})
 }
 
-// secretField edits one credential. The stored value is never put in the
-// field: typing replaces it, Save stores what was typed in the app's
-// encrypted local store, and the cross removes the stored value. Nothing here
-// writes a credential to settings.json, to the history or to a log.
-// edited is called whenever the field's stored value is about to change;
-// saved, when not nil, only after "Save key" stored a key successfully.
+// secretWrite belongs to the UI thread. One writer per account prevents an
+// older save from overwriting a newer edit or a removal.
+type secretWrite struct {
+	value    string
+	revision uint64
+	running  bool
+	saved    func()
+}
+
+func (p *prefsWindow) saveSecret(account, value string, saved func()) {
+	if p.secretWrites == nil {
+		p.secretWrites = map[string]*secretWrite{}
+	}
+	w := p.secretWrites[account]
+	if w == nil {
+		w = &secretWrite{}
+		p.secretWrites[account] = w
+	}
+	w.value, w.saved = value, saved
+	w.revision++
+	p.writeSecret(account, w)
+}
+
+func (p *prefsWindow) writeSecret(account string, w *secretWrite) {
+	if w.running {
+		return
+	}
+	value, revision := w.value, w.revision
+	w.running = true
+	go func() {
+		err := p.a.setSecret(account, value)
+		mygo.RunOnMain(func() {
+			w.running = false
+			if revision != w.revision {
+				p.writeSecret(account, w)
+				return
+			}
+			if err != nil {
+				p.say("keyNotSaved", err.Error())
+			} else if value != "" && w.saved != nil {
+				w.saved()
+			}
+			w.value, w.saved = "", nil
+			p.win.Update(func() {})
+			p.a.main.refresh()
+		})
+	}()
+}
+
+// Credentials autosave to the encrypted local store. Keep the draft intact
+// during typing and on errors; never expose the stored value in a new field.
 func (p *prefsWindow) secretField(c *ui.Context, account, label string, edited, saved func()) {
 	stored := p.a.secret(account) != ""
 	draft := p.draft("secret:"+account, "")
@@ -409,7 +457,12 @@ func (p *prefsWindow) secretField(c *ui.Context, account, label string, edited, 
 	if !p.shown[account] {
 		in.Password()
 	}
-	in.Changed()
+	if in.Changed() {
+		if edited != nil {
+			edited()
+		}
+		p.saveSecret(account, *draft, saved)
+	}
 	svg, tip := icEye, T("showKey")
 	if p.shown[account] {
 		svg, tip = icEyeOff, T("hideKey")
@@ -417,31 +470,30 @@ func (p *prefsWindow) secretField(c *ui.Context, account, label string, edited, 
 	if iconButton(c.Key("show"), svg, tip).Clicked() {
 		p.shown[account] = !p.shown[account]
 	}
-	store := func(value, okKey string) {
+	if iconButton(c.Key("clear"), icClear, T("clearKey")).Disabled(!stored && *draft == "").Clicked() {
 		*draft, p.shown[account] = "", false
 		if edited != nil {
 			edited()
 		}
-		go func() { // keep durable file I/O off the UI thread
-			err := p.a.setSecret(account, value)
-			p.win.Update(func() {
-				if err != nil {
-					p.say("keyNotSaved", err.Error())
-				} else {
-					p.say(okKey)
-					if value != "" && saved != nil {
-						saved() // an explicit, successful Save: never a removal
-					}
-				}
-			})
-			p.a.main.refresh()
-		}()
+		p.saveSecret(account, "", nil)
 	}
-	if ui.Button(c.Key("save"), T("saveKey")).Disabled(*draft == "").Clicked() {
-		store(*draft, "keySaved")
+}
+
+// A single supported model needs no second selection after configuration.
+func (p *prefsWindow) selectOnlyModel(id, kind string) {
+	s := p.a.settings.Get()
+	if !providers.Enabled(id, s) || !providers.Configured(id, s, p.a.secret) {
+		return
 	}
-	if iconButton(c.Key("clear"), icClear, T("clearKey")).Disabled(!stored && *draft == "").Clicked() {
-		store("", "keyCleared")
+	models := providers.Models(id, s)
+	if len(models) == 1 {
+		current := providers.Assigned(kind, s)
+		if current.Provider == id && current.Model == models[0].ID {
+			return
+		}
+		if ok, _ := providers.ModelUsable(id, models[0].ID); ok {
+			p.assign(kind, id, models[0].ID)
+		}
 	}
 }
 
@@ -452,11 +504,8 @@ var fieldLabels = map[string]string{"apiKey": "mKey", "appId": "appId", "token":
 const volcKeyAccount = "provider.volc." + providers.VolcNew + ".apiKey"
 
 // volcUseKey moves settings still in the legacy access mode to the
-// API-key mode. It is called for one thing only: the user pressed "Save
-// key" in Volcengine's editor and the key was stored. That is so whether
-// or not the key differs from one already stored. Until then the legacy
-// credentials serve as before; opening the editor, typing, or removing a
-// key changes nothing.
+// API-key mode after an edited key has been saved successfully. Opening
+// the editor or removing a key does not migrate legacy credentials.
 func (p *prefsWindow) volcUseKey() {
 	if providers.VolcMode(p.a.settings.Get()) != providers.VolcNew {
 		p.change(func(s *config.Settings) { s.Providers.VolcMode = providers.VolcNew })
@@ -490,6 +539,16 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 	on := providers.Enabled(id, s)
 	p.dialogHead(c, id, T(e.Name), &on, func() {
 		cleared := false
+		// A manual switch change supersedes activation from an in-flight save.
+		for _, field := range providers.Fields(id, s) {
+			account := providers.Account(id, s, field)
+			if id == providers.Volc {
+				account = volcKeyAccount
+			}
+			if w := p.secretWrites[account]; w != nil {
+				w.saved = nil
+			}
+		}
 		p.change(func(s *config.Settings) {
 			s.Providers.Enabled[id] = on
 			if !on {
@@ -497,6 +556,9 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 			}
 		})
 		k.invalidate()
+		if on {
+			p.selectOnlyModel(id, kind)
+		}
 		if cleared {
 			p.say("assignCleared", T(e.Name))
 		}
@@ -515,7 +577,7 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 		// Volcengine is set up with an API key and a billing plan, and
 		// nothing else: the access-mode choice, the legacy App ID and token
 		// fields and Agent Plan are no longer shown. Credentials saved in
-		// the legacy mode keep serving until "Save key" is pressed here.
+		// the legacy mode keep serving until a new key is saved successfully here.
 		if providers.VolcMode(s) != providers.VolcNew {
 			ui.Text(c, T("volcLegacyNote")).FontSize(12).TextColor(t.Warning).Padding(10, 12).Radius(8).Background(noticeColor(t))
 		}
@@ -552,9 +614,12 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 		if id == providers.Volc {
 			account = volcKeyAccount
 		}
-		var saved func()
-		if id == providers.Volc {
-			saved = p.volcUseKey
+		saved := func() {
+			if id == providers.Volc {
+				p.volcUseKey()
+			}
+			p.change(func(s *config.Settings) { s.Providers.Enabled[id] = true })
+			p.selectOnlyModel(id, kind)
 		}
 		labelled(c, "secret-"+account, T(fieldLabels[f]), "", func() { p.secretField(c, account, T(fieldLabels[f]), k.invalidate, saved) })
 	}
@@ -586,7 +651,7 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 	})
 
 	// The models. A default can only be one of a provider that can serve.
-	can := modeOK && on && providers.Configured(id, s, p.a.secret)
+	can := modeOK && providers.Configured(id, s, p.a.secret)
 	modelNote := ""
 	if id != providers.Sub2API {
 		modelNote = T("refNote")
@@ -603,7 +668,9 @@ func (p *prefsWindow) cloudEditor(c *ui.Context, s config.Settings) {
 						ui.Text(c, T("custom")).FontSize(11).TextColor(t.TextMuted).SingleLine()
 					}
 					if ok, why := providers.ModelUsable(id, m.ID); ok {
-						p.defaultControl(c, "default", kind, id, m.ID, s, can)
+						if len(providers.Models(id, s)) > 1 {
+							p.defaultControl(c, "default", kind, id, m.ID, s, can && on)
+						}
 					} else {
 						// Listed, but not offered: the reason stands in place of the button.
 						ui.Text(c, T(why)).FontSize(11).TextColor(t.Warning).MaxWidth(220)
@@ -1156,4 +1223,20 @@ func (p *prefsWindow) customEditor(c *ui.Context, s config.Settings) {
 			}
 		}
 	})
+}
+
+// Local service defaults are placeholders, not evidence of an installed model.
+func (a *app) localModelConfigured(kind string, s config.Settings) bool {
+	if kind == providers.KindASR && (s.ASRManaged || s.ASRURL == config.DefaultASRURL) {
+		return a.localASR != nil && a.localASR.Snapshot().Installed
+	}
+	return providers.LocalReady(kind, s)
+}
+
+func (a *app) eligibleModels(kind string, s config.Settings) []providers.Option {
+	options := providers.Eligible(kind, s, a.secret)
+	if !a.localModelConfigured(kind, s) {
+		options = slices.DeleteFunc(options, func(o providers.Option) bool { return o.Provider == providers.Local })
+	}
+	return options
 }

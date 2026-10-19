@@ -102,8 +102,9 @@ type Onboarding struct {
 }
 
 type Settings struct {
-	TextStyle     textstyle.Options `json:"textStyle"`
-	SchemaVersion int               `json:"schemaVersion"`
+	FnOwnershipNoticeSeen bool              `json:"fnOwnershipNoticeSeen,omitempty"`
+	TextStyle             textstyle.Options `json:"textStyle"`
+	SchemaVersion         int               `json:"schemaVersion"`
 
 	// ASRAssign and CleanupAssign are the two default models. They are
 	// independent, and both start on the local services. Providers holds
@@ -283,11 +284,8 @@ func migrate(s Settings) Settings {
 	if s.SchemaVersion >= SchemaVersion {
 		return s
 	}
-	// Existing installs already claimed this receiver automatically. Preserve
-	// that binding, while new installs require explicit button setup.
-	if s.SchemaVersion < 6 {
-		s.DJIButtonEnabled = true
-	}
+	// A schema version is not evidence that a receiver was configured.
+	// Defaults keeps a missing DJI field disabled; preserve explicit true/false.
 
 	// Version 5 added the first-run guide. Settings saved by an earlier
 	// version belong to someone who already uses the app: the guide is not

@@ -174,9 +174,9 @@ func main() {
 	// Real native send events: assert payload existed before Enter and exactly one
 	// key reached the target. This also catches modifier mistakes and duplicates.
 	bundle := "dev.steve.voice-input.acceptance-fixture"
-	for n, scenario := range []string{"enter", "cmd-enter", "ctrl-enter", "inherit", "override", "off", "disabled", "cancel-send", "focus-send", "clipboard-send", "fallback-send", "remote-no-send", "remote-disabled", "empty-send", "unknown-key", "immediate", "delay-cancel", "delay-focus", "edit-text", "edit-conflict"} {
+	for n, scenario := range []string{"enter", "cmd-enter", "ctrl-enter", "inherit", "override", "unlisted", "off", "disabled", "cancel-send", "focus-send", "clipboard-send", "fallback-send", "remote-no-send", "remote-disabled", "empty-send", "unknown-key", "immediate", "delay-cancel", "delay-focus", "edit-text", "edit-conflict"} {
 		command(fmt.Sprintf("send-reset-%d", n))
-		auto := config.AutoSend{Enabled: true, Default: "enter"}
+		auto := config.AutoSend{Enabled: true, Default: "enter", Apps: []config.AutoSendApp{{BundleID: bundle, Shortcut: "inherit"}}}
 		want := "enter"
 		switch scenario {
 		case "cmd-enter", "ctrl-enter":
@@ -192,6 +192,9 @@ func main() {
 			want = "cmd-enter"
 		case "off":
 			auto.Apps = []config.AutoSendApp{{BundleID: bundle, Shortcut: "off"}}
+			want = ""
+		case "unlisted":
+			auto.Apps = nil
 			want = ""
 		case "disabled":
 			auto.Enabled = false

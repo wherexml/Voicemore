@@ -75,7 +75,7 @@ func (a *app) checkUpdates() {
 	u.status = "updateChecking"
 	a.main.refresh()
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 		defer cancel()
 		client, err := updateclient.Stable()
 		var up *updateclient.Update
@@ -89,7 +89,7 @@ func (a *app) checkUpdates() {
 			u.checking = false
 			if err != nil {
 				u.status = "updateCheckFailed"
-				u.detail = err.Error()
+				u.detail = updateclient.ErrorDetail(err)
 			} else {
 				u.available = up
 				u.status = "updateCurrent"
@@ -146,7 +146,7 @@ func (a *app) installUpdate() {
 			u.cancel = nil
 			if err != nil {
 				u.downloading = false
-				u.status, u.detail = "updateInstallFailed", err.Error()
+				u.status, u.detail = "updateInstallFailed", updateclient.ErrorDetail(err)
 				if errors.Is(err, context.Canceled) {
 					u.status, u.detail = "updateCancelled", ""
 				}
@@ -183,7 +183,7 @@ func (a *app) commitUpdate() {
 			u.prepared = nil
 			if err != nil {
 				u.committing = false
-				u.status, u.detail = "updateInstallFailed", err.Error()
+				u.status, u.detail = "updateInstallFailed", updateclient.ErrorDetail(err)
 				a.bindTrigger()
 				a.main.refresh()
 				return
@@ -225,7 +225,7 @@ exec /usr/bin/open -n "$bundle"
 	}
 	if err != nil {
 		a.updates.committing = false
-		a.updates.status, a.updates.detail = "updateRestartFailed", err.Error()
+		a.updates.status, a.updates.detail = "updateRestartFailed", updateclient.ErrorDetail(err)
 		a.bindTrigger()
 		a.main.refresh()
 		return

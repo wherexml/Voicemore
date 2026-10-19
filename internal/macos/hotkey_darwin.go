@@ -16,7 +16,7 @@ import (
 
 // The Fn key is no Carbon hot key, so MyGo's global shortcuts cannot
 // register it: a listen-only event tap watches the modifier keys instead.
-// It observes key events and never changes or swallows them.
+// A shared tail filter consumes standalone Fn after both head listeners observe it.
 
 const (
 	cgHIDEventTap            = 0
@@ -71,6 +71,9 @@ var hotkey, translationHotkey hotkeyListener
 // recovery from toggling a recording or starting one on an orphan release.
 func resetHotkeyGesture() { hotkey.reset() }
 func (h *hotkeyListener) reset() {
+	if fnFilter.users[h] {
+		resetFnFilter()
+	}
 	wasDown := h.down
 	h.down, h.combo, h.fnDown = false, false, false
 	if wasDown && h.onUp != nil {
@@ -330,6 +333,20 @@ func startHotkey(h *hotkeyListener, key string, onDown func(), onUp func(bool), 
 			err = errors.New("macOS could not create the keyboard listener run-loop source")
 			return
 		}
+		if location != cgHIDEventTap && (fnFilter.tap != 0 || strings.Contains(key, "Fn")) {
+			cfRelease(source)
+			cfRelease(tap)
+			err = errors.New("macOS did not allow HID-level Fn handling")
+			return
+		}
+		if key == KeyFn {
+			if filterErr := acquireFnFilter(h, location); filterErr != nil {
+				cfRelease(source)
+				cfRelease(tap)
+				err = filterErr
+				return
+			}
+		}
 		log.Printf("trigger: listening key=%s layer=%d (0=HID, 1=session)", key, location)
 		h.key, h.down, h.combo, h.onDown, h.onUp = k, false, false, onDown, onUp
 		h.chordModifiers, h.chordKey, h.fnDown = chord, terminal, false
@@ -355,6 +372,7 @@ func startHotkey(h *hotkeyListener, key string, onDown func(), onUp func(bool), 
 				h.watchdog.Stop()
 				h.watchdog = nil
 			}
+			releaseFnFilter(h)
 			cgEventTapEnable(h.tap, false)
 			cfRunLoopRemoveSource(cfRunLoopGetMain(), h.source, cfRunLoopCommonModes)
 			cfRelease(h.source)

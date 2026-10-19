@@ -151,7 +151,6 @@ func (p *prefsWindow) saveShortcut(kind, value string) {
 	} else {
 		p.status = nil
 	}
-	p.fnConflict = macos.FnKeyConflict()
 	p.a.refreshAll()
 }
 

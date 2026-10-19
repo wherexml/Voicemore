@@ -32,11 +32,27 @@ func main() {
 	}
 	defer os.RemoveAll(migrationDir)
 	fresh, e := config.Open(migrationDir)
-	rows = append(rows, map[string]any{"case": "new install starts with no device binding", "passed": e == nil && !fresh.Get().DJIButtonEnabled})
+	rows = append(rows, map[string]any{"case": "new install starts with no device binding", "passed": e == nil && len(fresh.Get().AllDeviceButtons()) == 0 && fresh.Get().InputDevice == "" && fresh.Get().InputDeviceName == "" && len(fresh.Get().RemoteInputs) == 0 && fresh.Get().SeedPath == "" && len(fresh.Get().Providers.Custom) == 0})
 	_ = config.WriteJSON(filepath.Join(migrationDir, "settings.json"), map[string]any{"schemaVersion": 5, "triggerKey": "Fn", "triggerMode": "hold"})
 	legacy, e := config.Open(migrationDir)
 	legacySettings := legacy.Get()
-	rows = append(rows, map[string]any{"case": "legacy install preserves existing DJI and keyboard binding", "passed": e == nil && legacySettings.DJIButtonEnabled && legacySettings.TriggerKey == "Fn" && legacySettings.TriggerMode == "hold"})
+	rows = append(rows, map[string]any{"case": "legacy missing DJI field does not invent hardware and preserves keyboard binding", "passed": e == nil && !legacySettings.DJIButtonEnabled && legacySettings.TriggerKey == "Fn" && legacySettings.TriggerMode == "hold"})
+	for _, version := range []int{0, 5, 6} {
+		for _, enabled := range []bool{false, true} {
+			dir, err := os.MkdirTemp("", "voicemore-device-migration-")
+			if err != nil {
+				panic(err)
+			}
+			input := map[string]any{"schemaVersion": version, "djiButtonEnabled": enabled, "triggerKey": "RightOption"}
+			writeErr := config.WriteJSON(filepath.Join(dir, "settings.json"), input)
+			store, openErr := config.Open(dir)
+			state := store.Get()
+			saveErr := store.Set(state)
+			again, reopenErr := config.Open(dir)
+			rows = append(rows, map[string]any{"case": fmt.Sprintf("schema %d explicit DJI %t survives migration and reopen", version, enabled), "passed": writeErr == nil && openErr == nil && saveErr == nil && reopenErr == nil && state.DJIButtonEnabled == enabled && again.Get().DJIButtonEnabled == enabled && again.Get().TriggerKey == "RightOption"})
+			os.RemoveAll(dir)
+		}
+	}
 	legacySettings.DJIButtonEnabled = false
 	legacySettings.TranslationKey = "Ctrl+Shift+K"
 	_ = legacy.Set(legacySettings)
