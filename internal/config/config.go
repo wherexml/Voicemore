@@ -262,6 +262,21 @@ func Open(dir string) (*Store, error) {
 		if err := json.Unmarshal(b, &next); err != nil {
 			return err
 		}
+		// Older writers omitted an intentionally empty list. Once the AI
+		// catalog migration has run, absence must not resurrect its presets.
+		if next.AutoSend.AICatalogVersion >= 1 {
+			var fields struct {
+				AutoSend struct {
+					Apps json.RawMessage `json:"apps"`
+				} `json:"autoSend"`
+			}
+			if err := json.Unmarshal(b, &fields); err != nil {
+				return err
+			}
+			if len(fields.AutoSend.Apps) == 0 {
+				next.AutoSend.Apps = nil
+			}
+		}
 		st.s = migrate(next)
 		return nil
 	})
