@@ -129,3 +129,9 @@ Escape、叉号、外部点击、目标焦点或正文变化均取消发送并�
 ## AI 范围回归（2026-10-19）
 
 运行 `VOICE_INPUT_ACCEPTANCE_AUTO_SEND_ONLY=1 scripts/verify-input.sh`，原生夹具显式加入规则后核对真实发送按键；`unlisted` 用例删除规则但保留总开关与默认 Enter，须保留输入正文且发送事件为零。结果写入本地 `artifacts/current-input/results.json`。该夹具不证明每个第三方应用的发送快捷键和输入区域兼容性；新应用须另做原生验收，不能只凭 Bundle ID 或官网信息宣称适配完成。
+
+## 空列表持久化（2026-10-19）
+
+删除全部应用后仍明确保存 `apps`，不因空数组省略字段而在重启时恢复默认项。对于已完成 AI 目录迁移（`aiCatalogVersion >= 1`）但旧写入器省略 `apps` 的文件，按空列表读取。首次升级补齐目录的既有规则不变；空列表表示没有允许自动发送的目标，总开关即使开启也不会发送。
+
+隔离复验：在仓库根目录执行 `go run ./cmd/config-state-acceptance artifacts/config-state-new-run`，输出目录须不存在；检查 `results.json`。使用真实配置保存、重开与启动迁移路径，不发送按键、不修改正式配置。

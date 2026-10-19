@@ -76,3 +76,9 @@ artifacts/asr-idle/acceptance \
 运行环境由应用内固定 URL、字节数与 SHA-256 约束；仅 HTTPS，重定向不得降级。临时下载失败或取消后删除，验证完成才缓存并解压。已安装匹配版本或解压内容相同的旧签名运行环境可离线复用；已校验缓存可离线重装。失败不删除现有运行环境。旧包内的 gzip/bzip2 环境仍可读取。
 
 可重复 HTTPS 下载验收：`go run -tags runtimeacceptance ./cmd/runtime-download-acceptance /absolute/new-evidence-directory /absolute/real-runtime.tar.bz2`。覆盖不下载、HTTP 错误、降级重定向、截断、损坏、取消、缓存与旧环境复用，以及真实运行环境下载、生产解压器和 ASR 依赖导入；输出 `results.json`。不代表真实麦克风识别或线上 Release 资源已发布。
+
+## 安装标记与实际文件（2026-10-19）
+
+启动时只有版本标记匹配且模型清单中的每个文件均存在、为普通文件、字节数匹配，才显示已安装。单独复制安装标记、丢失或截断模型文件时显示未安装，可重新部署；不自动删除残留文件。启动检查只读取文件元数据，真正加载前仍逐文件校验 SHA-256，不能将文件大小检查当作完整性证明。
+
+复验：`go run ./cmd/config-state-acceptance artifacts/config-state-new-run`，保留 `results.json`。夹具使用临时稀疏文件验证缺失、截断、目录替代及完整大小布局，不加载模型、不下载、不代表真实音频验收。

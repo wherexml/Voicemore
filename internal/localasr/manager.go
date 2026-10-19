@@ -99,12 +99,24 @@ func New(root, archive string, port ...int) *Manager {
 		m.Port = port[0]
 	}
 	m.state = State{Phase: "absent", Total: ModelBytes()}
-	if b, err := os.ReadFile(filepath.Join(root, "installed.json")); err == nil && strings.TrimSpace(string(b)) == modelManifest.Revision {
+	if b, err := os.ReadFile(filepath.Join(root, "installed.json")); err == nil && strings.TrimSpace(string(b)) == modelManifest.Revision && modelFilesPresent(root) {
 		m.state.Installed = true
 		m.state.Phase = "stopped"
 	}
 	return m
 }
+
+// Fast launch-time inventory; start still verifies every SHA256 before inference.
+func modelFilesPresent(root string) bool {
+	for _, entry := range modelManifest.Files {
+		info, err := os.Stat(filepath.Join(root, "model", entry.File))
+		if err != nil || !info.Mode().IsRegular() || info.Size() != entry.Bytes {
+			return false
+		}
+	}
+	return true
+}
+
 func (m *Manager) Address() string { return fmt.Sprintf("http://127.0.0.1:%d", m.Port) }
 func (m *Manager) Snapshot() State { m.mu.Lock(); defer m.mu.Unlock(); return m.state }
 func (m *Manager) update(fn func(*State)) {

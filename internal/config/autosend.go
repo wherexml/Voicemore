@@ -8,7 +8,7 @@ type AutoSend struct {
 	DelayMs                 *int          `json:"delayMs,omitempty"`
 	Enabled                 bool          `json:"enabled"`
 	Default                 string        `json:"default"`
-	Apps                    []AutoSendApp `json:"apps,omitempty"`
+	Apps                    []AutoSendApp `json:"apps"`
 }
 type AutoSendApp struct {
 	BundleID string `json:"bundleId"`
