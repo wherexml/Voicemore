@@ -16,6 +16,10 @@ import (
 )
 
 func (a *app) startSendPreviewAcceptance() {
+	if os.Getenv("VOICE_INPUT_ERROR_ACCEPTANCE") != "" {
+		a.startErrorAcceptance()
+		return
+	}
 	dir := os.Getenv("VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE")
 	if dir == "" {
 		return
