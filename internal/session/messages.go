@@ -96,3 +96,17 @@ func (c *Controller) cleanupFailure(err error) string {
 	}
 	return c.tr(key, c.explain(err))
 }
+
+// silentPCM uses exact digital silence, not an energy threshold: quiet speech
+// must never be labelled as a microphone failure. Empty capture is unknown.
+func silentPCM(pcm []byte) bool {
+	if len(pcm) == 0 {
+		return false
+	}
+	for _, b := range pcm {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}

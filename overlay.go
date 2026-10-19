@@ -120,6 +120,7 @@ func (o *overlay) syncView(v session.View) {
 	} else if o.errorHidden {
 		return
 	}
+	v = conciseFailure(v)
 	if o.a.sendPreview != nil && o.a.sendPreview.visible {
 		if v.Phase == session.Preparing {
 			o.a.sendPreview.close()

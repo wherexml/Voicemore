@@ -87,3 +87,5 @@
 - 本地前端与设计规格按 `spec/README.md` 按需阅读（仅本机存在，不入 Git）；公开模块入口仍见[文档索引](docs/public/README.md)。
 
 - 听写错误提示统一 3 秒后退场，保留正文与历史，旧计时器不得影响下一轮；见[胶囊错误提示规格](docs/public/CAPSULE.md#错误提示自动退出2026-10-19)。
+
+- Capsule errors use concise localized summaries; retain diagnostic codes and task IDs only in diagnostics. See docs/public/CAPSULE.md.
