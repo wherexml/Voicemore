@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.12
+
+- Preserve explicit device preferences during migration; do not invent a DJI receiver binding for older settings with no configured device.
+- Preserve an empty auto-send application list across restarts and check actual local model files before showing an installed state.
+- Improve model configuration, encrypted credential saving, AI application auto-send rules and Fn shortcut handling.
+- Retry transient update connection failures and keep signed download credentials out of displayed errors.
+- Dismiss concise dictation error summaries automatically while retaining history and diagnostics.
+
+Existing legacy DJI entries are preserved because their origin is ambiguous; remove unwanted entries in external device button settings.
+
 ## 0.3.11
 
 - Keep dictation, shortcuts and settings available while updates download and verify in the background. Install only after the user chooses Restart now while idle.
