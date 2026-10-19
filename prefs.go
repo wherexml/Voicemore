@@ -57,7 +57,6 @@ type prefsWindow struct {
 
 	bundlePath string // exact running bundle, never a backup or guessed install path
 	audioDays  float64
-	fnConflict string // what the system does on Fn
 	remoteApps []macos.Application
 	autoApps   []macos.Application
 	autoAppsAt time.Time
@@ -65,20 +64,21 @@ type prefsWindow struct {
 	micsAt     time.Time // when mics was read: microphones come and go
 
 	// Models (models.go).
-	pickOpen    map[string]*bool       // kind → its default picker is open
-	pickHandles map[string][]ui.Handle // kind → the picker's rows, for the arrow keys
-	pickFocus   map[string]bool        // kind → its picker just opened and takes the focus
-	dlgOpen     bool
-	addOpen     bool               // the "Add model" dialog, above the editor
-	addErr      string             // a text key
-	dlg         dialogRef          // what the open editor edits
-	drafts      map[string]*string // text fields being edited, by a key of their own
-	shown       map[string]bool    // secret field key → shown in clear
-	conns       map[string]*conn   // connection checks, by provider
-	models      []string           // the local cleanup service's list, once fetched
-	listOpen    bool
-	custom      map[string]*customDraft // custom provider editors' drafts
-	permsWere   bool                    // the permissions were all granted when last looked at
+	pickOpen     map[string]*bool       // kind → its default picker is open
+	pickHandles  map[string][]ui.Handle // kind → the picker's rows, for the arrow keys
+	pickFocus    map[string]bool        // kind → its picker just opened and takes the focus
+	dlgOpen      bool
+	addOpen      bool               // the "Add model" dialog, above the editor
+	addErr       string             // a text key
+	dlg          dialogRef          // what the open editor edits
+	drafts       map[string]*string // text fields being edited, by a key of their own
+	secretWrites map[string]*secretWrite
+	shown        map[string]bool  // secret field key → shown in clear
+	conns        map[string]*conn // connection checks, by provider
+	models       []string         // the local cleanup service's list, once fetched
+	listOpen     bool
+	custom       map[string]*customDraft // custom provider editors' drafts
+	permsWere    bool                    // the permissions were all granted when last looked at
 	// guideReturn follows a visit from the first-run guide: 1 once it has
 	// opened these settings, 2 once an editor has been open. When that
 	// editor closes, the settings close too and the guide is in front again.
@@ -110,7 +110,6 @@ func newPrefsWindow(a *app) *prefsWindow {
 		pickOpen: map[string]*bool{}, pickHandles: map[string][]ui.Handle{}, pickFocus: map[string]bool{},
 		drafts: map[string]*string{}, shown: map[string]bool{}, conns: map[string]*conn{}, custom: map[string]*customDraft{}}
 	p.audioDays = float64(a.settings.Get().AudioRetentionDays)
-	p.fnConflict = macos.FnKeyConflict()
 	p.bundlePath = runningAppBundle()
 	p.remoteApps = macos.RunningApplications()
 	p.win = mygo.NewWindow(mygo.WindowOptions{
@@ -686,21 +685,10 @@ func runningAppBundle() string {
 	return bundle
 }
 
-var fnActions = map[string]string{
-	"change the input source": "fnInput", "show Emoji & Symbols": "fnEmoji", "start Dictation": "fnDictation",
-}
-
 // dictation configures triggers and edit learning.
 func (p *prefsWindow) dictation(c *ui.Context) {
-	t := c.Theme()
 	s := p.a.settings.Get()
-	if s.TriggerKey == macos.KeyFn && p.fnConflict != "" {
-		what := p.fnConflict
-		if k, ok := fnActions[what]; ok {
-			what = T(k)
-		}
-		ui.Text(c, T("fnConflict", what)).FontSize(12).TextColor(t.Warning).Padding(10, 14).Radius(8).Background(noticeColor(t))
-	}
+
 	card(c, "dictation", func() {
 		setting(c, "key", nil, T("sKey"), T("sKeyHint"), func() { p.triggerKey(c, s) })
 		setting(c, "translation-key", nil, T("translationKey"), "", func() { p.shortcutControl(c, "translation", s.TranslationKey, false) })

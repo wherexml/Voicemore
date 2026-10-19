@@ -37,6 +37,9 @@ func keyName(key string) string {
 // modelLabel is the default model of a kind in words: its name when it can
 // serve, and otherwise why it cannot.
 func (a *app) modelLabel(kind string, s config.Settings) string {
+	if providers.Assigned(kind, s).Provider == providers.Local && !a.localModelConfigured(kind, s) {
+		return T("notSet")
+	}
 	err := providers.Check(kind, s, a.secret)
 	switch err {
 	case nil:
@@ -193,7 +196,7 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 				}
 			}
 			assigned := providers.Assigned(kind, s)
-			eligible := providers.Eligible(kind, s, m.a.secret)
+			eligible := m.a.eligibleModels(kind, s)
 			for _, o := range eligible {
 				id := o.Provider + "|" + o.Model
 				if providers.Check(kind, s, m.a.secret) == nil && o.Provider == assigned.Provider && (o.Provider == providers.Local || o.Model == assigned.Model) && (kind != providers.KindCleanup || s.CleanupDefault) {

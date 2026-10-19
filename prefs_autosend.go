@@ -61,7 +61,10 @@ func (p *prefsWindow) autoSend(c *ui.Context) {
 		}
 		ui.Row(c.Key("add")).Padding(12, 16).BorderWidth(1, 0, 0, 0).BorderColor(settingsGroupLine(c)).Children(func() {
 			if time.Since(p.autoAppsAt) > 2*time.Second {
-				p.autoApps = macos.RunningApplications()
+				p.autoApps = nil
+				for _, preset := range config.AIApplicationPresets() {
+					p.autoApps = append(p.autoApps, macos.Application{BundleID: preset.BundleID, Name: preset.AppName})
+				}
 				p.autoAppsAt = time.Now()
 			}
 			apps := p.autoApps
@@ -99,37 +102,25 @@ func (p *prefsWindow) autoSend(c *ui.Context) {
 	})
 }
 
-// Bind initial presets to actual application identities on this Mac. The
-// canonical ChatGPT bundle can differ from an app installed under that name.
-// This only runs once; explicit user rules are never remapped later.
+// Match only known Bundle IDs; localized or renamed apps never expand scope.
 func (a *app) initializeAutoSendApplications() error {
 	s := a.settings.Get()
-	if s.AutoSend.ApplicationsInitialized {
+	changed := s.AutoSend.MigrateAIApplications()
+	apps := macos.RunningApplications()
+	for i, rule := range s.AutoSend.Apps {
+		for _, candidate := range apps {
+			if candidate.BundleID == rule.BundleID && candidate.Name != rule.AppName {
+				s.AutoSend.Apps[i].AppName = candidate.Name
+				changed = true
+			}
+		}
+	}
+	if !s.AutoSend.ApplicationsInitialized {
+		s.AutoSend.ApplicationsInitialized = true
+		changed = true
+	}
+	if !changed {
 		return nil
 	}
-	apps := macos.RunningApplications()
-	for i, r := range s.AutoSend.Apps {
-		for _, candidate := range apps {
-			if candidate.BundleID == r.BundleID {
-				s.AutoSend.Apps[i].AppName = candidate.Name
-				break
-			}
-		}
-		matches := []macos.Application{}
-		found := false
-		for _, candidate := range apps {
-			if candidate.BundleID == r.BundleID {
-				found = true
-			}
-			if candidate.Name == r.AppName {
-				matches = append(matches, candidate)
-			}
-		}
-		if !found && len(matches) == 1 {
-			s.AutoSend.Apps[i].BundleID = matches[0].BundleID
-			s.AutoSend.Apps[i].AppName = matches[0].Name
-		}
-	}
-	s.AutoSend.ApplicationsInitialized = true
 	return a.settings.Set(s)
 }

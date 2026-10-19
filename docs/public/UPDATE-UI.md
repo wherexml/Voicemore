@@ -40,3 +40,9 @@ Direct download requires an available version, no check/download/commit in progr
 ## Background update regression (2026-10-18)
 
 The installer separates `Prepare` (download, authentication, extraction and verification) from `Prepared.Commit` (revalidation, bundle swap with rollback). Closing a prepared update discards its staging folder. The native installer harness also covers prepare/discard, cancelled commit and target replacement between prepare and commit; `--next-version` selects the fixture archive version. These fixtures do not establish physical Fn or live audio acceptance. Native regression must additionally exercise listening/cleanup/translation and settings during a throttled download, defer restart while busy, dismiss the ready reminder and explicitly restart when idle.
+
+## Update network failures (2026-10-19)
+
+Update GET requests retry timeouts and HTTP 408/429/502/503/504 at most three times, with cancellable one- and two-second delays. Each attempt starts from the original URL so expiring release redirects are refreshed. Check operations have a 45-second total deadline; TLS verification and HTTPS downgrade protection remain mandatory. Response-body or signature failures are not retried. Errors shown by the update panel omit URL query strings by displaying the server hostname and underlying request error. Check/download failures do not suspend dictation.
+
+Repeatable HTTPS acceptance: `go run -tags updateacceptance ./cmd/update-network-acceptance /absolute/path/to/Voicemore.app > artifacts/update-network/results.json`. Use an existing officially signed app; the harness only reads its identity/version and contacts local fixtures, without installation. It covers a real TLS handshake timeout followed by recovery, retry exhaustion, cancellation, HTTP failures, untrusted certificates, downgrade rejection and signed-link redaction. This does not establish the network route or native visual behavior on another Mac.

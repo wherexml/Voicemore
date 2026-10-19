@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"voiceinput/internal/distribution"
 )
@@ -111,19 +113,40 @@ func get(ctx context.Context, raw string) (*http.Response, error) {
 		}
 		return validURL(req.URL.String())
 	}}
-	req, err := http.NewRequestWithContext(ctx, "GET", raw, nil)
-	if err != nil {
-		return nil, err
+	// Retry the stable URL, not an expiring signed redirect URL. Only requests
+	// that fail before a successful response body are retried.
+	for attempt := 0; attempt < 3; attempt++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", raw, nil)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := client.Do(req)
+		retry := false
+		if err != nil {
+			var networkError net.Error
+			retry = errors.As(err, &networkError) && networkError.Timeout()
+		} else if resp.StatusCode == http.StatusOK {
+			return resp, nil
+		} else {
+			resp.Body.Close()
+			retry = resp.StatusCode == 408 || resp.StatusCode == 429 || resp.StatusCode == 502 || resp.StatusCode == 503 || resp.StatusCode == 504
+			err = fmt.Errorf("update HTTP %d", resp.StatusCode)
+		}
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		if !retry || attempt == 2 {
+			return nil, err
+		}
+		timer := time.NewTimer(time.Duration(attempt+1) * time.Second)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil, ctx.Err()
+		case <-timer.C:
+		}
 	}
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
-		return nil, fmt.Errorf("update HTTP %d", resp.StatusCode)
-	}
-	return resp, nil
+	return nil, fmt.Errorf("update request failed")
 }
 
 func (c Client) Check(ctx context.Context) (*Update, error) {
@@ -403,4 +426,28 @@ func extract(ctx context.Context, archive, dest string) error {
 	}
 
 	return nil
+}
+
+// ErrorDetail excludes temporary URL credentials from user-visible errors.
+func ErrorDetail(err error) string {
+	if err == nil {
+		return ""
+	}
+	var requestError *url.Error
+	if errors.As(err, &requestError) {
+		host := "update server"
+		if u, parseErr := url.Parse(requestError.URL); parseErr == nil && u.Hostname() != "" {
+			host = u.Hostname()
+		}
+		cause := requestError.Err
+		for {
+			nested, ok := cause.(*url.Error)
+			if !ok {
+				break
+			}
+			cause = nested.Err
+		}
+		return host + ": " + cause.Error()
+	}
+	return err.Error()
 }
