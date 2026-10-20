@@ -29,10 +29,11 @@ type Sub2API struct {
 	TextOptions          *VoiceTextOptions
 }
 type VoiceTextOptions struct {
-	Version     int               `json:"version"`
-	Format      textstyle.Options `json:"format"`
-	PolishRules string            `json:"polish_rules"`
-	Hotwords    []string          `json:"hotwords,omitempty"`
+	Version     int                    `json:"version"`
+	Format      textstyle.Options      `json:"format"`
+	PolishRules string                 `json:"polish_rules"`
+	Hotwords    []string               `json:"hotwords,omitempty"`
+	Corrections []textstyle.Correction `json:"corrections,omitempty"`
 }
 
 func (o *VoiceTextOptions) digest() string {
@@ -69,6 +70,21 @@ type voiceEvent struct {
 	Error             struct {
 		Code string `json:"code"`
 	} `json:"error"`
+}
+
+// WithCorrections snapshots only confirmed rules for this dictation.
+func (v Sub2API) WithCorrections(rules []textstyle.Correction) asr.Dialer {
+	o := VoiceTextOptions{Version: 1}
+	if v.TextOptions != nil {
+		o = *v.TextOptions
+	}
+	o.Corrections = make([]textstyle.Correction, len(rules))
+	for i, r := range rules {
+		o.Corrections[i] = r
+		o.Corrections[i].Context = append([]string(nil), r.Context...)
+	}
+	v.TextOptions = &o
+	return v
 }
 
 func (v Sub2API) Dial(ctx context.Context, hotwords *string) (asr.Stream, error) {

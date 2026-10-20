@@ -1,0 +1,3 @@
+# Unified patch context intentionally prefixes blank lines and Go tabs with
+# one space. Preserve it; validate the applied source through source-hashes.
+internal/cloudasr/service-patches/*.patch -whitespace
