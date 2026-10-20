@@ -76,3 +76,5 @@
 - Capsule errors use concise localized summaries; retain diagnostic codes and task IDs only in diagnostics. See docs/public/CAPSULE.md.
 
 - 真实语音基线、词表摘要、全零录音与学习质量的隔离验收见[语音质量规格](docs/public/VOICE-QUALITY.md)；先冻结基线，留出样本不参与调参，服务端配套更新后才能发布客户端。
+
+- 低音量识别增益、已确认规则的云端快照、编号真实换行及逐条质量/延迟发布门槛见[语音质量规格](docs/public/VOICE-QUALITY.md#第二轮质量与时延门槛)。未过门槛不得发布正式版。

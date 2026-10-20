@@ -1,15 +1,15 @@
 {
   "config.go": {
     "before": "3f36b7b5d93e92f753f124f81cac052ff91cd82a68eb59f9d55198004a608b19",
-    "after": "13935e2cdcfb1e183cbd45e54d7bc082134e1790c9959fd2065a5e65196847c9"
+    "after": "39b1aaf08c400de5163dbf73b639fc622edc1fa57feaeeb13c8d9058a1c6f197"
   },
   "options.go": {
     "before": "0d90ae3faf0cc908391a74d7e681d906dbaa40bd5d00465501af29e6ae61a222",
-    "after": "51083e19da43c656b04256315dd090f661e80ec3d1c4910330a7003d409d5a8b"
+    "after": "9d03b2f567abbd4db7d07e00120b602d3a2f2110445b5c79617577fc427e59d5"
   },
   "upstream.go": {
     "before": "92968e6f03ecf6d24fd7b6fab9fea8ff831791f7d9b19ef8b92ef7d30954dff2",
-    "after": "6fd05591c03d18a5d7c986d1e77d42bc3ca45601a3f3c72c48d0545205ddb319"
+    "after": "f65eb0f7aeca4f6f07495249a69732f4900c7c0ac5fd6afeb9539df1dfef2bc8"
   },
   "server.go": {
     "before": "c9946310b87cf9944ff3f5b5ba1e7d7bc2c5e341d8af17821502d399cfe3ccee",
@@ -21,6 +21,14 @@
   },
   "cleanup-prompt.txt": {
     "before": "01a9ef620066481eb34d3ad8c9d5477f126ccc1477486c27c783a6cfc7237e38",
-    "after": "0348b8f7bf846143e8ae7754f47c8eee8b58fb5e0a21e3f528cc4a13130c4e8b"
+    "after": "f11136623a5379c88a32791560730eb85a47f6b40ba2870e52e4bc606be2f325"
+  },
+  "audio_gain.go": {
+    "before": null,
+    "after": "f97f35ec5880437cfc14352d9f0a3f6c084cce8216bf69909ae2106a9610aede"
+  },
+  "textstyle/corrections.go": {
+    "before": null,
+    "after": "ca34b7c8d804dcd87d79f801c831494a806a3df34e10ee127e2561e7e9fa6946"
   }
 }

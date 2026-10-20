@@ -151,12 +151,14 @@ func main() {
 		endpoint = *base
 	}
 	var hotwords *string
+	var corrections []textstyle.Correction
 	if *terms {
 		d, err := dict.Open(root)
 		must(err)
 		p, _, err := d.HotwordParam()
 		must(err)
 		hotwords = &p
+		corrections = d.ConfirmedCorrections()
 	}
 	f, err := os.OpenFile(*output, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	must(err)
@@ -172,7 +174,7 @@ func main() {
 			panic("PCM hash mismatch: " + r.ID)
 		}
 		task := fmt.Sprintf("quality-%d-%s", time.Now().UnixNano(), strings.ReplaceAll(r.ID, ".", "-"))
-		api := cloudasr.Sub2API{Base: endpoint, APIKey: key, TaskID: task, TextOptions: &cloudasr.VoiceTextOptions{Version: 1, Format: options.TextStyle, PolishRules: options.PolishRules}}
+		api := cloudasr.Sub2API{Base: endpoint, APIKey: key, TaskID: task, TextOptions: &cloudasr.VoiceTextOptions{Version: 1, Format: options.TextStyle, PolishRules: options.PolishRules, Corrections: corrections}}
 		if *terms && !api.Hotwords() {
 			panic("adapter does not support requested hotwords")
 		}

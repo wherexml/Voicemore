@@ -17,6 +17,7 @@ import (
 	"unicode/utf8"
 
 	"voiceinput/internal/config"
+	"voiceinput/internal/textstyle"
 )
 
 const (
@@ -279,29 +280,22 @@ func (d *Dict) HotwordParam() (string, int, error) {
 	return p, len(words), nil
 }
 
-// Apply rewrites the transcript with the confirmed rules and lists those it
-// used. A rule matches whole words only, and only with its context.
-func (d *Dict) Apply(text string) (string, []string) {
+// ConfirmedCorrections returns an independent, minimal snapshot for one task.
+func (d *Dict) ConfirmedCorrections() []textstyle.Correction {
 	d.mu.Lock()
 	defer d.mu.Unlock()
-	var applied []string
+	var rules []textstyle.Correction
 	for _, e := range d.d.Entries {
-		if e.Kind != KindRule || e.Wrong == "" || !hasContext(text, e.Context) {
-			continue
-		}
-		var out string
-		var n int
-		if singleHan(e.Wrong) {
-			out, n = replaceSingleHan(text, e)
-		} else {
-			out, n = replaceWhole(text, e.Wrong, e.Term)
-		}
-		if n > 0 {
-			text = out
-			applied = append(applied, e.Wrong+" → "+e.Term)
+		if e.Kind == KindRule && e.Wrong != "" {
+			rules = append(rules, textstyle.Correction{Wrong: e.Wrong, Term: e.Term, Context: slices.Clone(e.Context)})
 		}
 	}
-	return text, applied
+	return rules
+}
+
+// Apply rewrites whole words with confirmed, context-scoped rules in order.
+func (d *Dict) Apply(text string) (string, []string) {
+	return textstyle.ApplyCorrections(text, d.ConfirmedCorrections())
 }
 
 func hasContext(text string, context []string) bool {

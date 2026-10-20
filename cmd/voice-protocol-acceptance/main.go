@@ -18,6 +18,7 @@ import (
 	"github.com/coder/websocket"
 	"voiceinput/internal/asr"
 	"voiceinput/internal/cloudasr"
+	"voiceinput/internal/textstyle"
 )
 
 func main() {
@@ -31,6 +32,7 @@ func main() {
 	var mu sync.Mutex
 	starts, bytesSent, gets := map[string]int{}, map[string]int{}, map[string]int{}
 	received := map[string][]string{}
+	receivedRules := map[string][]textstyle.Correction{}
 	receipt := func(id string) map[string]any {
 		return map[string]any{"id": id, "model": cloudasr.Sub2APIModel, "raw_text": "测试文字", "text": "测试文字", "usage_log_id": 1}
 	}
@@ -66,6 +68,7 @@ func main() {
 		json.Unmarshal(start.Options, &opt)
 		mu.Lock()
 		received[id] = opt.Hotwords
+		receivedRules[id] = opt.Corrections
 		mu.Unlock()
 		h := sha256.Sum256(start.Options)
 		digest := hex.EncodeToString(h[:])
@@ -99,6 +102,12 @@ func main() {
 	options := &cloudasr.VoiceTextOptions{Version: 1}
 	for _, id := range []string{"words", "legacy", "unsupported", "recover", "zero", "quiet"} {
 		api := cloudasr.Sub2API{Base: "http://127.0.0.1:58198", APIKey: "fixture-only", TaskID: id, TextOptions: options}
+		if id == "words" {
+			rules := []textstyle.Correction{{Wrong: "Helios", Term: "HeliosCode", Context: []string{"editor"}}}
+			api = api.WithCorrections(rules).(cloudasr.Sub2API)
+			rules[0].Term = "mutated"
+			rules[0].Context[0] = "mutated"
+		}
 		var terms *string
 		if id != "legacy" {
 			terms = &words
@@ -120,7 +129,7 @@ func main() {
 		case "recover":
 			ok = ok && gets[id] == 1
 		case "words":
-			ok = ok && strings.Join(received[id], ",") == words && len(options.Hotwords) == 0
+			ok = ok && strings.Join(received[id], ",") == words && len(options.Hotwords) == 0 && len(options.Corrections) == 0 && len(receivedRules[id]) == 1 && receivedRules[id][0].Term == "HeliosCode" && receivedRules[id][0].Context[0] == "editor"
 		case "legacy":
 			ok = ok && len(received[id]) == 0
 		}
@@ -128,7 +137,7 @@ func main() {
 		if err != nil {
 			msg = err.Error()
 		}
-		rows = append(rows, map[string]any{"case": id, "passed": ok, "connections": starts[id], "audio_bytes": bytesSent[id], "result_gets": gets[id], "hotwords": received[id], "error": msg})
+		rows = append(rows, map[string]any{"case": id, "passed": ok, "connections": starts[id], "audio_bytes": bytesSent[id], "result_gets": gets[id], "hotwords": received[id], "corrections": receivedRules[id], "error": msg})
 		mu.Unlock()
 	}
 	b, _ := json.MarshalIndent(rows, "", "  ")

@@ -7,7 +7,7 @@ import (
 
 func init() {
 	texts["errorNoAudio"] = [3]string{"No sound recorded. Check your microphone.", "未錄到聲音，請檢查麥克風", "未录到声音，请检查麦克风"}
-	texts["errorNoText"] = [3]string{"No text recognized. Try again.", "未識別到文字，請重試", "未识别到文字，请重试"}
+	texts["errorNoText"] = [3]string{"No speech recognized. Move closer to the microphone.", "未識別到語音，請靠近麥克風", "未识别到语音，请靠近麦克风"}
 	texts["errorDictation"] = [3]string{"Dictation failed. Try again.", "聽寫失敗，請重試", "听写失败，请重试"}
 	texts["errorCleanup"] = [3]string{"Text cleanup failed. Try again.", "文字整理失敗，請重試", "文字整理失败，请重试"}
 	texts["errorMicrophone"] = [3]string{"Check microphone access and settings.", "請檢查麥克風權限與設定", "请检查麦克风权限与设置"}

@@ -517,7 +517,15 @@ func (c *Controller) cleanupOptions(s config.Settings) (cleanup.Options, error) 
 // dialer is the speech service the default model is on.
 func (c *Controller) dialer(s config.Settings) (asr.Dialer, error) {
 	if c.ResolveASR != nil {
-		return c.ResolveASR(s)
+		service, err := c.ResolveASR(s)
+		if err == nil && c.Dict != nil {
+			if scoped, ok := service.(interface {
+				WithCorrections([]textstyle.Correction) asr.Dialer
+			}); ok {
+				service = scoped.WithCorrections(c.Dict.ConfirmedCorrections())
+			}
+		}
+		return service, err
 	}
 	return asr.LocalLanguage(s.ASRURL, config.LocalASRLanguage(s.ASRLanguage)), nil
 }
