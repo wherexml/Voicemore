@@ -36,6 +36,7 @@ func (a *app) startErrorAcceptance() {
 					key  string
 				}{
 					{"silent audio", session.View{Phase: session.Failed, SilentAudio: true, Message: "sub2api ASR_EMPTY_RESULT (task fixture)"}, "errorNoAudio"},
+					{"digital silence before request", session.View{Phase: session.Failed, SilentAudio: true, Message: T("errorNoAudio")}, "errorNoAudio"},
 					{"non-silent empty result", session.View{Phase: session.Failed, Message: "sub2api ASR_EMPTY_RESULT (task fixture)"}, "errorNoText"},
 					{"unknown service error", session.View{Phase: session.Failed, SilentAudio: true, Message: "sub2api INTERNAL_ERROR (task fixture)"}, "errorDictation"},
 					{"cleanup retains text", session.View{Phase: session.Failed, CleanupFailed: true, Text: "retained original", Message: "request failed: private endpoint", Notice: "request failed"}, "errorCleanup"},

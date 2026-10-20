@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"voiceinput/internal/asr"
 )
 
 // Messages the controller shows or stores. The app gives Controller.Tr to
@@ -100,13 +101,5 @@ func (c *Controller) cleanupFailure(err error) string {
 // silentPCM uses exact digital silence, not an energy threshold: quiet speech
 // must never be labelled as a microphone failure. Empty capture is unknown.
 func silentPCM(pcm []byte) bool {
-	if len(pcm) == 0 {
-		return false
-	}
-	for _, b := range pcm {
-		if b != 0 {
-			return false
-		}
-	}
-	return true
+	return asr.DigitalSilence(pcm)
 }

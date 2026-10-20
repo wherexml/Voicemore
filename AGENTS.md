@@ -89,3 +89,5 @@
 - 听写错误提示统一 3 秒后退场，保留正文与历史，旧计时器不得影响下一轮；见[胶囊错误提示规格](docs/public/CAPSULE.md#错误提示自动退出2026-10-19)。
 
 - Capsule errors use concise localized summaries; retain diagnostic codes and task IDs only in diagnostics. See docs/public/CAPSULE.md.
+
+- 真实语音基线、词表摘要、全零录音与学习质量的隔离验收见[语音质量规格](docs/public/VOICE-QUALITY.md)；先冻结基线，留出样本不参与调参，服务端配套更新后才能发布客户端。

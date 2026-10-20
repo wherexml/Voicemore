@@ -26,6 +26,7 @@ func must(e error) {
 func main() {
 	corpus := flag.String("corpus", "", "frozen JSON with id, raw and previous fields")
 	repeat := flag.Int("repeat", 1, "serial repetitions per record")
+	standalone := flag.Bool("standalone", false, "explicitly test the saved independent cleanup configuration without changing app settings")
 	flag.Parse()
 	if *corpus == "" || *repeat < 1 {
 		panic("corpus and positive repeat required")
@@ -43,12 +44,16 @@ func main() {
 	cfg, e := config.Open(dir)
 	must(e)
 	s := cfg.Get()
+	if *standalone && providers.ManagedVoice(s) {
+		s.ASRAssign.Provider = providers.Local
+	}
 	d, e := dict.Open(dir)
 	must(e)
 	vault, e := secrets.Open(dir)
 	must(e)
 	opts, e := providers.CleanupOptions(s, func(k string) string { v, e := vault.Get(k); must(e); return v })
 	must(e)
+	opts.PolishRules = s.PolishRules
 	enc := json.NewEncoder(os.Stdout)
 	failed := false
 	for _, r := range rows {
