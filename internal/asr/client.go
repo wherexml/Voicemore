@@ -105,9 +105,10 @@ func Inspect(ctx context.Context, base string) (Info, error) {
 }
 
 var (
-	ErrBadURL      = errors.New("the ASR URL is not a valid http(s) address")
-	ErrUnreachable = errors.New("the ASR service is not reachable")
-	ErrNotASR      = errors.New("the address did not answer as the ASR service does")
+	ErrNoAudioSignal = errors.New("the recording contains only digital silence; check the microphone before recording again")
+	ErrBadURL        = errors.New("the ASR URL is not a valid http(s) address")
+	ErrUnreachable   = errors.New("the ASR service is not reachable")
+	ErrNotASR        = errors.New("the address did not answer as the ASR service does")
 )
 
 // modelName finds the model's name in the health document, whose model
@@ -489,6 +490,9 @@ func Transcribe(ctx context.Context, d Dialer, hotwords *string, pcm []byte) (st
 
 // TranscribeResult also preserves an integrated service's paid result.
 func TranscribeResult(ctx context.Context, d Dialer, hotwords *string, pcm []byte) (string, *ProcessedResult, error) {
+	if DigitalSilence(pcm) {
+		return "", nil, ErrNoAudioSignal
+	}
 	s, err := d.Dial(ctx, hotwords)
 	if err != nil {
 		return "", nil, err
@@ -511,4 +515,18 @@ func TranscribeResult(ctx context.Context, d Dialer, hotwords *string, pcm []byt
 		return s.Final(), p.Processed(), nil
 	}
 	return s.Final(), nil, err
+}
+
+// DigitalSilence identifies missing signal, not quiet speech. A single nonzero
+// sample is enough to keep audio eligible for recognition. Empty input is unknown.
+func DigitalSilence(pcm []byte) bool {
+	if len(pcm) == 0 {
+		return false
+	}
+	for _, b := range pcm {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
 }

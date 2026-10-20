@@ -141,6 +141,28 @@ func (d *Dict) Propose(original, revised, source, recordID string) (int, string)
 		return 0, "no change to learn from"
 	}
 	hunks := diff(a, b)
+	// Passive field observation is weaker evidence than an explicit history
+	// revision: replacing an entire short message is usually new content.
+	// The former six-token exemption admitted short whole-message rewrites.
+	if source == "observed-edit" {
+		changed, anchored := 0, false
+		for _, h := range hunks {
+			changed += max(len(h.from), len(h.to))
+		}
+		for _, t := range a {
+			if hasLetter([]string{t}) {
+				for _, u := range b {
+					if t == u {
+						anchored = true
+						break
+					}
+				}
+			}
+		}
+		if !anchored || float64(changed) > maxChangedPart*float64(len(a)) {
+			return 0, "the observed edit replaces the message; no replacement rule proposed"
+		}
+	}
 	changed := 0
 	var repl []hunk
 	for _, h := range hunks {
@@ -155,6 +177,12 @@ func (d *Dict) Propose(original, revised, source, recordID string) (int, string)
 		}
 		// Punctuation and numbers are corrections of fact or style.
 		if !hasLetter(h.from) || !hasLetter(h.to) || onlyDigits(h.from) || onlyDigits(h.to) {
+			continue
+		}
+		// Do not turn clauses or uncommitted apostrophe-separated Pinyin into
+		// vocabulary. This only affects proposed learning, never dictation output
+		// or existing confirmed rules. Keep normal technical term punctuation.
+		if source == "observed-edit" && (!termShape(h.from) || !termShape(h.to)) {
 			continue
 		}
 		repl = append(repl, h)
@@ -185,6 +213,21 @@ func (d *Dict) Propose(original, revised, source, recordID string) (int, string)
 		return 0, "the same correction is already known or was ignored"
 	}
 	return added, fmt.Sprintf("%d candidate(s) wait for confirmation in the dictionary", added)
+}
+
+func termShape(tokens []string) bool {
+	apostrophes := 0
+	for _, r := range join(tokens) {
+		switch {
+		case unicode.IsLetter(r), unicode.IsDigit(r), unicode.IsSpace(r):
+		case r == '\'' || r == '’':
+			apostrophes++
+		case strings.ContainsRune("._-+/#", r):
+		default:
+			return false
+		}
+	}
+	return apostrophes <= 1
 }
 
 func (d *Dict) propose(next *data, wrong, right, sentence, source, recordID string) bool {

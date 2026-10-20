@@ -32,6 +32,7 @@ type VoiceTextOptions struct {
 	Version     int               `json:"version"`
 	Format      textstyle.Options `json:"format"`
 	PolishRules string            `json:"polish_rules"`
+	Hotwords    []string          `json:"hotwords,omitempty"`
 }
 
 func (o *VoiceTextOptions) digest() string {
@@ -52,7 +53,7 @@ func (v Sub2API) base() (string, error) {
 	return b, nil
 }
 func (v Sub2API) Label() string                   { b, _ := v.base(); return b }
-func (v Sub2API) Hotwords() bool                  { return false }
+func (v Sub2API) Hotwords() bool                  { return true }
 func (v Sub2API) Check(context.Context) error     { _, e := v.base(); return e }
 func (v Sub2API) WithTaskID(id string) asr.Dialer { v.TaskID = id; return v }
 
@@ -70,7 +71,26 @@ type voiceEvent struct {
 	} `json:"error"`
 }
 
-func (v Sub2API) Dial(ctx context.Context, _ *string) (asr.Stream, error) {
+func (v Sub2API) Dial(ctx context.Context, hotwords *string) (asr.Stream, error) {
+	// Each connection owns its option snapshot. Never mutate the shared
+	// settings pointer when multiple dictations/replays use the same dialer.
+	if hotwords != nil && strings.TrimSpace(*hotwords) != "" {
+		if v.TextOptions == nil {
+			return nil, errors.New("sub2api hotwords require explicit text options")
+		}
+		o := *v.TextOptions
+		o.Hotwords = strings.Split(*hotwords, ",")
+		if len(o.Hotwords) > 500 || len(*hotwords) > 16384 {
+			return nil, errors.New("sub2api dictionary exceeds the hotword limit")
+		}
+		for i, w := range o.Hotwords {
+			o.Hotwords[i] = strings.TrimSpace(w)
+			if o.Hotwords[i] == "" || strings.ContainsAny(w, "\r\n\x00") {
+				return nil, errors.New("sub2api dictionary contains an invalid hotword")
+			}
+		}
+		v.TextOptions = &o
+	}
 	b, e := v.base()
 	if e != nil {
 		return nil, e

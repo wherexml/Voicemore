@@ -826,6 +826,14 @@ func (c *Controller) record(r *run, s config.Settings) {
 		err = sess.Err()
 	}
 	if err == nil {
+		c.mu.Lock()
+		noSignal := asr.DigitalSilence(r.pcm)
+		c.mu.Unlock()
+		if noSignal {
+			err = asr.ErrNoAudioSignal
+		}
+	}
+	if err == nil {
 		finCtx, cancel := context.WithTimeout(r.ctx, time.Duration(max(s.FinalizeTimeoutSec, 5))*time.Second)
 		err = sess.Finish(finCtx)
 		cancel()

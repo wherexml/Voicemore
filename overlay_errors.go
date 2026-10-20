@@ -29,7 +29,7 @@ func conciseFailure(v session.View) session.View {
 		}
 	case v.CleanupFailed:
 		key = "errorCleanup"
-	case v.Message == T("micNoFrames"):
+	case v.Message == T("micNoFrames"), v.Message == T("errorNoAudio"):
 		key = "errorNoAudio"
 	case v.Message == T("micMissing"), v.Message == T("micDenied"), v.Message == T("micNotGranted"):
 		key = "errorMicrophone"

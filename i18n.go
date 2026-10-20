@@ -122,6 +122,8 @@ func explain(err error) string {
 	switch {
 	case err == nil:
 		return ""
+	case errors.Is(err, asr.ErrNoAudioSignal):
+		return T("errorNoAudio")
 	case errors.As(err, &service):
 		return T("eCloudService", service.Code, service.Message)
 	case errors.Is(err, cloudasr.ErrAuth):
