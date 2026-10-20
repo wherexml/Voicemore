@@ -57,6 +57,18 @@ func main() {
 	cfg, e := config.Open(dir)
 	must(e)
 	s := cfg.Get()
+	// Capture the application's route before any acceptance-only override.
+	// Saved independent cleanup settings do not mean daily dictation uses them.
+	route := map[string]any{
+		"scope":                          "standalone_cleanup_replay",
+		"application_uses_managed_voice": providers.ManagedVoice(s),
+		"configured_asr_provider":        s.ASRAssign.Provider,
+		"configured_asr_model":           s.ASRAssign.Model,
+		"configured_cleanup_provider":    s.CleanupAssign.Provider,
+		"explicit_standalone":            *standalone,
+		"isolated_endpoint_override":     *localBase != "",
+		"application_settings_changed":   false,
+	}
 	dictDir := dir
 	if *frozenDir != "" {
 		b, e := os.ReadFile(filepath.Join(*frozenDir, "options.json"))
@@ -127,7 +139,7 @@ func main() {
 			trace := map[string]any{"connection_reused": reused, "connection_ms": connectionMS, "first_byte_ms": firstByteMS}
 			mu.Unlock()
 			requests++
-			must(enc.Encode(map[string]any{"id": r.ID, "round": i + 1, "request_index": requests, "raw": r.Raw, "input": input, "input_sha256": fmt.Sprintf("%x", sha256.Sum256([]byte(input))), "previous": r.Previous, "model": opts.Model, "body": out, "final": final, "error": msg, "ms": time.Since(start).Milliseconds(), "http": trace, "isolated_endpoint": *localBase, "semanticReviewRequired": true}))
+			must(enc.Encode(map[string]any{"id": r.ID, "round": i + 1, "request_index": requests, "raw": r.Raw, "input": input, "input_sha256": fmt.Sprintf("%x", sha256.Sum256([]byte(input))), "previous": r.Previous, "model": opts.Model, "body": out, "final": final, "error": msg, "ms": time.Since(start).Milliseconds(), "http": trace, "route": route, "isolated_endpoint": *localBase, "semanticReviewRequired": true}))
 		}
 	}
 	if *stream {
