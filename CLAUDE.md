@@ -39,7 +39,7 @@
 
 - 普通单数对象及次数使用自然中文，整理与前后基础格式共同遵守[数字规格](docs/public/TEXT-FORMATTING.md)；保留数量限定、计量和编号，不全局反向替换阿拉伯数字。
 
-- DeepSeek 整理默认关闭思考；长文按对象分组、含糊字串原位保留，协议与真实模型复验见[整理模块规格](internal/cleanup/README.md#deepseek-默认关闭思考与分组保留)。
+- DeepSeek 整理默认关闭思考；无编号单段保持单段、明确编号逐项换行、含糊字串原位保留，协议与真实模型复验见[整理模块规格](internal/cleanup/README.md#deepseek-默认关闭思考与分组保留)。
 
 - 延迟发送默认 2 秒、取消与编辑、固定深色五行浮层及远程统一下拉，见 [自动发送规格](docs/public/AUTO-SEND.md#延迟取消与编辑)。
 
