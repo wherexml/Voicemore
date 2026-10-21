@@ -21,6 +21,9 @@ func homeChartColor(t *ui.Theme, strong bool) ui.Color {
 // Use local wall-clock hours (not elapsed-hour arithmetic) across DST changes.
 func (m *mainWindow) todayChart(c *ui.Context, s historySummary, now time.Time) {
 	t := c.Theme()
+	var tipAnchor ui.Element
+	var tipKey, tipText string
+	tipHovered := false
 	day := dayStart(now)
 	atHour := func(h int) time.Time {
 		return time.Date(day.Year(), day.Month(), day.Day(), h, 0, 0, 0, now.Location())
@@ -31,8 +34,8 @@ func (m *mainWindow) todayChart(c *ui.Context, s historySummary, now time.Time) 
 			peakHour = h
 		}
 	}
-	ui.Column(c.Key("today-chart")).FillWidth().Gap(0).Children(func() {
-		ui.Row(c).FillWidth().Height(26).AlignItems(ui.Center).Gap(6).Children(func() {
+	ui.Column(c.Key("today-chart")).FillWidth().Padding(0).Gap(0).Children(func() {
+		ui.Row(c).FillWidth().Height(26).Padding(0).AlignItems(ui.Center).Gap(6).Children(func() {
 			ui.Text(c, statNumber(s.chars)).FontSize(18).FontWeight(600).SingleLine()
 			ui.Text(c, T("homeAsOf", now.Format("15:04"))).FontSize(11).TextColor(t.TextMuted).SingleLine()
 			ui.Spacer(c)
@@ -41,8 +44,9 @@ func (m *mainWindow) todayChart(c *ui.Context, s historySummary, now time.Time) 
 			}
 			ui.Box(c).Width(31)
 		})
-		ui.Row(c.Key("hours")).Role(ui.RoleGroup).Label(T("homeHourly")).FillWidth().Height(116).Gap(3).Children(func() {
-			ui.Row(c).Grow(1).MinWidth(0).Height(116).Gap(3).Children(func() {
+		ui.Box(c).Height(8) // Keep the peak clear of the summary without moving the baseline.
+		ui.Row(c.Key("hours")).Role(ui.RoleGroup).Label(T("homeHourly")).FillWidth().Height(108).Gap(3).Children(func() {
+			ui.Row(c).Grow(1).MinWidth(0).Height(108).Gap(3).Children(func() {
 				for h := 0; h < 24; h++ {
 					at := atHour(h)
 					key := hourKey(at)
@@ -58,8 +62,15 @@ func (m *mainWindow) todayChart(c *ui.Context, s historySummary, now time.Time) 
 						ref = &ui.Handle{}
 						m.heatFocus[key] = ref
 					}
-					b := ui.ButtonBase(c.Key(key)).Bind(ref).Grow(1).MinWidth(0).Height(116).Padding(0).Radius(3).
-						Label(tip).Tooltip(tip).Selected(selected).Disabled(future)
+					b := ui.ButtonBase(c.Key(key)).Bind(ref).Grow(1).MinWidth(0).Height(108).Padding(0).Radius(3).
+						Label(tip).Description(tip).Selected(selected).Disabled(future)
+					// Chart values follow the pointer immediately; keyboard focus
+					// still reveals them, with hover taking precedence.
+					hovered := b.Hovered()
+					if !future && (hovered || b.FocusVisible()) && (!tipHovered || hovered) {
+						tipAnchor, tipKey, tipText = b, key, tip
+						tipHovered = hovered
+					}
 					active := selected || b.Hovered() || b.Focused()
 					b.Draw(func(p *ui.Painter, r ui.Rect) {
 						line := settingsGroupLine(c)
@@ -91,6 +102,7 @@ func (m *mainWindow) todayChart(c *ui.Context, s historySummary, now time.Time) 
 						p.Fill(ui.Rect{X: r.X, Y: r.Y + r.H - height, W: r.W, H: height}, color, 3)
 					})
 					if b.Clicked() {
+						m.chartTipDismissed = key
 						m.hHour = at
 						if selected {
 							m.hHour = time.Time{}
@@ -118,7 +130,7 @@ func (m *mainWindow) todayChart(c *ui.Context, s historySummary, now time.Time) 
 					})
 				}
 			})
-			ui.Column(c).Width(34).Height(116).Justify(ui.SpaceBetween).Children(func() {
+			ui.Column(c).Width(34).Height(108).Justify(ui.SpaceBetween).Children(func() {
 				label := ""
 				if s.peak > 0 {
 					label = statNumber(s.peak)
@@ -139,13 +151,34 @@ func (m *mainWindow) todayChart(c *ui.Context, s historySummary, now time.Time) 
 							p.Fill(ui.Rect{X: r.X + r.W/2 - 2, Y: r.Y + 2, W: 4, H: 4}, homeChartColor(t, false), 2)
 						}
 					}).Children(func() {
-						ui.Text(c, label).FillWidth().Padding(7, 0, 0).FontSize(10).Font("Menlo").TextColor(t.TextMuted).TextAlign(ui.Center)
+						align := ui.Center
+						if h == 0 {
+							align = ui.Start
+						}
+						ui.Text(c, label).FillWidth().Padding(7, 0, 0).FontSize(10).Font("Menlo").TextColor(t.TextMuted).TextAlign(align)
 					})
 				}
 			})
 			ui.Box(c).Width(34)
 		})
 	})
+	if tipKey != m.chartTipDismissed {
+		m.chartTipDismissed = ""
+	}
+	if tipKey != "" && m.chartTipDismissed == "" && !tipAnchor.Pressed() {
+		ui.Overlay(c.Key("hour-value-tip"), func() {
+			tip := ui.Box(c).Absolute().PassThrough().Role(ui.RoleTooltip).
+				AttachTo(tipAnchor, ui.AnchorTop, ui.AnchorBottom).Margin(0, 0, 6, 0).
+				Padding(5, 8).Radius(5).Background(t.Text).TextColor(t.Background).
+				Shadow(0, 2, 8, 0, ui.RGBA(0, 0, 0, .2))
+			if tip.OverlayShortcut(0, ui.KeyEscape) {
+				m.chartTipDismissed = tipKey
+				c.After(0)
+				return
+			}
+			tip.Children(func() { ui.Text(c, tipText).FontSize(11).SingleLine() })
+		})
+	}
 }
 
 func init() {
