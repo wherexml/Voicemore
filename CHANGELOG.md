@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- 更新就绪后保持“立即重启”可点击：忙碌时明确显示等待状态，当前任务结束后再提交更新；防止重复提交，保留失败恢复和签名校验。此行为尚未随正式版本发布。
+
 ## 0.3.12
 
 - Preserve explicit device preferences during migration; do not invent a DJI receiver binding for older settings with no configured device.

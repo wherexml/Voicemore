@@ -22,6 +22,7 @@ type updateState struct {
 	available                         *updateclient.Update
 	checking, downloading, restarting bool
 	committing                        bool
+	restartRequested                  bool
 	prepared                          *updateclient.Prepared
 	status, detail                    string
 	downloaded, total                 int64
@@ -165,12 +166,27 @@ func (a *app) installUpdate() {
 
 func (a *app) commitUpdate() {
 	u := &a.updates
-	if u.prepared == nil || u.committing {
+	if u.prepared == nil || u.committing || u.restartRequested {
+		return
+	}
+	u.restartRequested = true
+	a.commitUpdateWhenIdle()
+}
+
+// Keep the explicit restart request while active work finishes. Preparation
+// never blocks normal use, and the bundle is swapped only after the idle check.
+func (a *app) commitUpdateWhenIdle() {
+	u := &a.updates
+	if a.quitting || !u.restartRequested || u.prepared == nil || u.committing {
 		return
 	}
 	if a.updateBusy() {
+		u.status = "updateRestartWaiting"
+		a.main.refresh()
+		time.AfterFunc(250*time.Millisecond, func() { mygo.RunOnMain(a.commitUpdateWhenIdle) })
 		return
 	}
+	u.restartRequested = false
 	u.committing, u.status = true, "updateRestarting"
 	a.bindTrigger()
 	a.main.refresh()
@@ -238,6 +254,8 @@ exec /usr/bin/open -n "$bundle"
 func (m *mainWindow) updatePresentation() (string, string, string) {
 	u := &m.a.updates
 	switch {
+	case u.restartRequested:
+		return T("updateRestartWaiting"), T("updateRestartWaiting"), ""
 	case u.prepared != nil && !u.committing:
 		return T("updateRestartAction"), T("updateReadyRestart"), ""
 	case u.status == "updateRestarting":
@@ -365,8 +383,10 @@ func (m *mainWindow) updateView(c *ui.Context) {
 				ui.Text(c, T("updateErrorDetails")).FontSize(11).TextColor(t.TextMuted).Tooltip(u.detail)
 			}
 			switch {
+			case u.restartRequested:
+				// The panel title already shows the pending restart state.
 			case u.prepared != nil && !u.committing:
-				if ui.PrimaryButton(c, T("updateRestartAction")).Disabled(m.a.updateBusy()).Clicked() {
+				if ui.PrimaryButton(c.Key("restart-update"), T("updateRestartAction")).Clicked() {
 					m.a.commitUpdate()
 				}
 			case u.committing:

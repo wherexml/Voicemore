@@ -7,7 +7,7 @@ Updates live in the bottom-left rail, directly above Settings, on every page. Th
 | Idle / current | Quiet refresh icon | Check for Updates |
 | Checking | Rotating mint arc (static with reduced motion) | Disabled check button |
 | New version | Indigo download icon; “Update available” tooltip | Download update |
-| Active dictation / model setup | Update available / downloading | Background download allowed; Restart now disabled until idle |
+| Active dictation / model setup | Update available / downloading | Background download allowed; Restart now queues a request until idle |
 | Downloading | Mint progress ring + percentage tooltip | Progress bar and Cancel Update |
 | Download complete | Verifying | Background verification; normal use remains available |
 | Verified / ready | Compact refresh icon | Restart now; dismiss to continue working |
@@ -35,7 +35,7 @@ Visual acceptance: build and launch the locally signed app, inspect the idle ico
 
 ## Interaction boundaries
 
-Direct download requires an available version, no check/download/commit in progress, no staged update, and no error detail. Downloads and verification do not disable dictation, translation, hotkeys, settings, model setup or ordinary quit. After preparation, show a restart reminder and wait for explicit Restart now. Commit is allowed only while dictation/model setup and pending Home startup are idle; only this short phase suspends triggers and quit. Otherwise the rail opens the details panel. Progress redraws are limited to 10 per second, plus the final byte count. Known-length downloads show determinate progress; checking, verification, installation and restart use an indeterminate arc. Reduced Motion freezes that arc. The indigo accent is scoped to the updater. Include busy-state clicks and Reduced Motion in native acceptance, and record unexecuted cases explicitly.
+Direct download requires an available version, no check/download/commit in progress, no staged update, and no error detail. Downloads and verification do not disable dictation, translation, hotkeys, settings, model setup or ordinary quit. After preparation, show a restart reminder and wait for explicit Restart now. Restart now remains clickable during active work and shows a waiting title after the request. Commit starts automatically once dictation/model setup and pending Home startup are idle; only this short phase suspends triggers and quit. Closing the panel does not cancel an explicit restart request; ordinary quit remains available while waiting. Otherwise the rail opens the details panel. Progress redraws are limited to 10 per second, plus the final byte count. Known-length downloads show determinate progress; checking, verification, installation and restart use an indeterminate arc. Reduced Motion freezes that arc. The indigo accent is scoped to the updater. Include busy-state clicks and Reduced Motion in native acceptance, and record unexecuted cases explicitly.
 
 ## Background update regression (2026-10-18)
 
@@ -46,3 +46,9 @@ The installer separates `Prepare` (download, authentication, extraction and veri
 Update GET requests retry timeouts and HTTP 408/429/502/503/504 at most three times, with cancellable one- and two-second delays. Each attempt starts from the original URL so expiring release redirects are refreshed. Check operations have a 45-second total deadline; TLS verification and HTTPS downgrade protection remain mandatory. Response-body or signature failures are not retried. Errors shown by the update panel omit URL query strings by displaying the server hostname and underlying request error. Check/download failures do not suspend dictation.
 
 Repeatable HTTPS acceptance: `go run -tags updateacceptance ./cmd/update-network-acceptance /absolute/path/to/Voicemore.app > artifacts/update-network/results.json`. Use an existing officially signed app; the harness only reads its identity/version and contacts local fixtures, without installation. It covers a real TLS handshake timeout followed by recovery, retry exhaustion, cancellation, HTTP failures, untrusted certificates, downgrade rejection and signed-link redaction. This does not establish the network route or native visual behavior on another Mac.
+
+## 重启请求验收（2026-10-21）
+
+更新就绪后，“立即重启”须响应点击；当前听写、模型准备或首页启动倒计时未结束时，显示“等待当前任务结束…”，保留已校验候选包。每 250 毫秒复查空闲状态，仅在空闲后提交；重复点击不得并发提交，退出时不执行迟到回调。关闭面板不撤销已确认的重启请求。
+
+原生隔离夹具：先运行 `python3 scripts/build-development.py`，再以相同绝对证据目录设置 `VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE` 与 `VOICE_INPUT_UPDATE_UI_ACCEPTANCE` 后启动开发版可执行文件。`VOICE_INPUT_UPDATE_UI_BUSY=1` 模拟首页未完成的启动；点击面板按钮，应显示等待标题，`state.json` 中 `restartRequested=true`、`committing=false`。向证据目录 `command` 文件写入 `idle` 后应触发提交并安全显示校验失败。夹具只允许独立 Dev 名称，使用空候选对象，身份校验前置失败，绝不安装或重启正式应用。另以默认空闲启动验证鼠标点击，关闭/Escape 后重开验证候选保留。结果与操作记录保存到 `artifacts/update-restart-20261021/`。这不代表另一台 Mac 的失效根因或正式更新重启已通过验收。
