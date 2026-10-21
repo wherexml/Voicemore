@@ -250,7 +250,10 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 			p.change(func(s *config.Settings) { s.InputDevice, s.InputDeviceName = uid, device })
 		})
 		if !permissionsGranted() {
-			if ui.Button(c, T("gPerms")).TextColor(t.Danger).Height(30).Clicked() {
+			if ui.Button(c, "").Label(T("homePermissionsMissing")).TextColor(t.Danger).Height(30).Gap(6).AlignItems(ui.Center).Children(func() {
+				ui.Icon(c, icShield).Size(14, 14)
+				ui.Text(c, T("homePermissionsMissing")).SingleLine()
+			}).Clicked() {
 				p.open("perms")
 			}
 		}

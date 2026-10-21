@@ -446,13 +446,14 @@ var texts = map[string][3]string{
 	"ignored":        {"Ignored. The same correction will not be proposed again.", "已忽略。同樣的更正不會再提出。", "已忽略。同样的纠正不会再提出。"},
 
 	// Settings.
-	"gPerms":              {"Permissions", "權限", "权限"},
-	"permDragHint":        {"Drag into the list above to allow access.", "拖入上方列表，開啟權限", "拖入上方列表，开启权限"},
-	"permDragSide":        {"Drag into the list to allow access.", "拖入列表，開啟權限", "拖入列表，开启权限"},
-	"permDragGranted":     {"Access allowed", "已開啟權限", "已开启权限"},
-	"permDragUnavailable": {"Open the installed app to drag it here.", "請開啟已安裝的應用程式以拖移授權。", "请打开已安装的应用以拖拽授权。"},
-	"permDragApp":         {"Drag Voicemore to System Settings", "拖移 Voicemore 到系統設定", "拖拽 Voicemore 到系统设置"},
-	"permDragFailed":      {"Could not drag the app. Try again.", "無法拖移應用程式，請重試。", "无法拖拽应用，请重试。"},
+	"gPerms":                 {"Permissions", "權限", "权限"},
+	"homePermissionsMissing": {"Permissions required", "權限不足", "权限不足"},
+	"permDragHint":           {"Drag into the list above to allow access.", "拖入上方列表，開啟權限", "拖入上方列表，开启权限"},
+	"permDragSide":           {"Drag into the list to allow access.", "拖入列表，開啟權限", "拖入列表，开启权限"},
+	"permDragGranted":        {"Access allowed", "已開啟權限", "已开启权限"},
+	"permDragUnavailable":    {"Open the installed app to drag it here.", "請開啟已安裝的應用程式以拖移授權。", "请打开已安装的应用以拖拽授权。"},
+	"permDragApp":            {"Drag Voicemore to System Settings", "拖移 Voicemore 到系統設定", "拖拽 Voicemore 到系统设置"},
+	"permDragFailed":         {"Could not drag the app. Try again.", "無法拖移應用程式，請重試。", "无法拖拽应用，请重试。"},
 
 	"gGeneral":          {"General", "一般", "通用"},
 	"gTriggerClean":     {"Trigger and text cleanup", "觸發與文字整理", "触发与文字整理"},
