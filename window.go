@@ -36,6 +36,8 @@ type mainWindow struct {
 	wavePeaks                         []float32
 	waveLoading                       bool
 
+	chartTipDismissed string
+
 	// History.
 	hRange        int
 	hApp, hStatus string
