@@ -73,3 +73,7 @@
 自动退出只隐藏窗口，不清空控制器保留的正文，不删除历史或录音，不自动复制、发送或重试。历史保存失败时，未落盘正文仍保留在控制器中，不应将提示退出描述为保存成功。
 
 原生复验：运行 `python3 scripts/build-development.py`，给独立 Dev 可执行文件同时设置 `VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE` 和 `VOICE_INPUT_ERROR_ACCEPTANCE` 为本地证据目录。专用驱动重放失败状态并使用真实原生窗口、UI 调度及计时器；`results.json` 核对两种样式的到期隐藏、重复刷新、迟到刷新及下一轮保护。该验收不访问麦克风或调用收费识别。故障清单及构建输出保存于 `artifacts/error-dismissal/`。
+
+### 启动前错误关闭（2026-10-22）
+
+配置等启动前错误可能没有录音会话。Failed/Done 的关闭和 Escape 同样应回到 Idle，不以不存在会话为由忽略；练习页的取消不得清除其他入口的错误。开始下一轮时旧错误详情应消失，旧 3 秒计时器不得隐藏新胶囊。Controller 隔离验收见 `cmd/official-translation-acceptance`，原生双样式计时与详情退场见前述错误夹具。

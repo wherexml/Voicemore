@@ -21,7 +21,7 @@ type mainWindow struct {
 	status     func() string
 	busy       func() string // the rerun in progress, if any
 	updateOpen bool
-	starting   bool // the 3-second countdown before a dictation
+	starting   bool // a home-button action being handed off to the session
 
 	// Shared copy feedback for the Home and History timelines.
 	recentCopied map[string]time.Time // record ID → last successful copy

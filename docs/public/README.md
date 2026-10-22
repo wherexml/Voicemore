@@ -7,12 +7,12 @@
 | 模块 | 规格与验收 | 实现入口 |
 | --- | --- | --- |
 | DMG 安装窗口 | [布局、固定英文提示与原生验收](DMG-INSTALLER.md) | `scripts/build-dmg.py`、`scripts/verify-dmg-layout.py` |
-| 首页与历史 | [布局、功能与原生验收](HOME-HISTORY.md)、[首页标准选择器](HOME-HISTORY.md#首页标准选择器2026-10-17) | `home.go`、`journal.go`、`history.go`、`history_stats.go`、`app_identity.go`、`action_icons.go`、`prefs.go`、`select.go` |
+| 首页与历史 | [布局、功能与原生验收](HOME-HISTORY.md)、[首页标准选择器](HOME-HISTORY.md#首页标准选择器2026-10-17)、[立即听写](HOME-HISTORY.md#首页听写立即开始2026-10-23) | `home.go`、`journal.go`、`history.go`、`history_stats.go`、`app_identity.go`、`action_icons.go`、`prefs.go`、`select.go` |
 | 权限授权 | [共享拖拽引导、签名授权恢复与原生验收](PERMISSIONS.md) | `permission_drag.go`、`internal/macos/file_drag_darwin.go`、`internal/macos/settings_window_darwin.go` |
 | 开始使用引导 | [窗口布局与原生验收](ONBOARDING.md) | `onboarding.go`、`onboarding_bridge.go`、`resources/onboarding/` |
 | 全局触发键 | [后台监听、主动恢复与原生验收](HOTKEY.md) | `internal/macos/hotkey_darwin.go` |
 | 蓝牙音频恢复 | [AirPods 播放恢复与实机验收](BLUETOOTH-AUDIO.md) | `internal/macos/bluetooth_output_darwin.go`、`internal/macos/mic_darwin.go` |
-| 翻译听写 | [快捷键、模型复用与失败恢复](TRANSLATION.md) | `dictation_controls.go`、`internal/session/controller.go`、`internal/cleanup/cleanup.go` |
+| 翻译听写 | [快捷键、官方组合服务与失败恢复](TRANSLATION.md) | `dictation_controls.go`、`internal/session/controller.go`、`internal/cleanup/cleanup.go` |
 | 外接设备按键 | [通用添加、识别与多绑定](DEVICE-BUTTONS.md) | `dictation_controls.go`、`internal/macos/device_buttons_darwin.go`、`internal/macos/button_capabilities.go`、`internal/macos/device_button_interception_darwin.go` |
 | DJI 麦克风按钮 | [设备匹配与原生验收](DJI-BUTTON.md) | `internal/macos/dji_darwin.go` |
 | 听写胶囊 | [显示规则与原生验收](CAPSULE.md) | `overlay.go`、`overlay_v2.go` |

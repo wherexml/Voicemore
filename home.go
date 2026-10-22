@@ -129,26 +129,13 @@ func (m *mainWindow) homeToolbar(c *ui.Context) {
 		if recording {
 			label = T("homeFinish")
 		}
-		if m.starting {
-			label = T("homeCountdown")
-		}
 		if homeControl(c.Key("dictate"), icMic, label, false, keyName(s.TriggerKey)).Height(32).Background(railText(t)).TextColor(cardColor(t)).Disabled(m.starting || m.a.updates.committing || (phase != session.Idle && !recording && phase != session.Done && phase != session.Failed)).Clicked() {
-			if recording {
-				go m.a.ctrl.Toggle()
-			} else {
-				m.starting = true
-				if phase == session.Done || phase == session.Failed {
-					m.a.ctrl.Dismiss()
-				}
-				time.AfterFunc(3*time.Second, func() {
-					m.win.Update(func() {
-						m.starting = false
-						if !m.a.quitting && !m.a.updates.committing && m.a.ctrl.View().Phase == session.Idle {
-							go m.a.ctrl.Toggle()
-						}
-					})
-				})
-			}
+			// Guard duplicate clicks and updater commits while handing off to the session.
+			m.starting = true
+			go func() {
+				m.a.ctrl.Toggle()
+				m.win.Update(func() { m.starting = false })
+			}()
 		}
 		keys := []string{macos.KeyFn, macos.KeyRightOption, macos.KeyRightCommand, macos.KeyRightControl}
 		if !slices.Contains(keys, s.TriggerKey) {
