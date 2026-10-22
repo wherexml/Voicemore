@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+	"voiceinput/internal/config"
 	"voiceinput/internal/session"
 )
 
@@ -66,10 +67,52 @@ func (a *app) startErrorAcceptance() {
 			onUI(func() { a.overlay.syncView(session.View{Phase: session.Preparing}); a.overlay.syncView(failed) })
 			time.Sleep(time.Second)
 			onUI(func() { a.overlay.syncView(session.View{Phase: session.Preparing}) })
+			onUI(func() {
+				results = append(results, map[string]any{"case": label + " new recording clears old error detail", "pass": a.overlay.v.Message == "" && a.overlay.panelKind() == panelNone})
+			})
 			time.Sleep(2400 * time.Millisecond)
 			check(label+" old timer preserves new recording", true)
 			onUI(func() { a.overlay.syncView(session.View{Phase: session.Idle}) })
 			time.Sleep(300 * time.Millisecond)
+		}
+		// Exercise the actual no-run failure path and native close dispatcher,
+		// using a separate corrupt configuration, never the Dev user's settings.
+		fixture, fixtureErr := os.MkdirTemp("", "voicemore-preflight-error-")
+		if fixtureErr == nil {
+			defer os.RemoveAll(fixture)
+			fixtureErr = os.WriteFile(filepath.Join(fixture, "settings.json"), []byte("{"), 0600)
+		}
+		if fixtureErr == nil {
+			broken, _ := config.Open(fixture)
+			if broken != nil && broken.LoadError() != nil {
+				var previous *session.Controller
+				onUI(func() {
+					previous = a.ctrl
+					a.ctrl = &session.Controller{Settings: broken, OnChange: a.overlay.sync}
+				})
+				for _, action := range []string{"dismiss", "escape-handler"} {
+					onUI(a.ctrl.ToggleTranslation)
+					time.Sleep(200 * time.Millisecond)
+					check("preflight "+action+" visible", true)
+					onUI(func() {
+						if action == "dismiss" {
+							a.ctrl.Dismiss()
+						} else {
+							a.cancelInput()
+						}
+					})
+					time.Sleep(500 * time.Millisecond)
+					check("preflight "+action+" hides native window", false)
+					onUI(func() {
+						results = append(results, map[string]any{"case": "preflight " + action + " controller idle", "pass": a.ctrl.View().Phase == session.Idle})
+					})
+				}
+				onUI(func() { a.ctrl = previous })
+			} else {
+				results = append(results, map[string]any{"case": "preflight fixture rejects corrupt settings", "pass": false})
+			}
+		} else {
+			results = append(results, map[string]any{"case": "preflight fixture setup", "pass": false})
 		}
 		data, _ := json.MarshalIndent(results, "", "  ")
 		os.WriteFile(filepath.Join(dir, "results.json"), data, 0600)

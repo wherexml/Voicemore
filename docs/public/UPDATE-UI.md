@@ -59,6 +59,6 @@ Repeatable HTTPS acceptance: `go run -tags updateacceptance ./cmd/update-network
 
 ## 重启请求验收（2026-10-21）
 
-更新就绪后，“立即重启”须响应点击；当前听写、模型准备或首页启动倒计时未结束时，显示“等待当前任务结束…”，保留已校验候选包。每 250 毫秒复查空闲状态，仅在空闲后提交；重复点击不得并发提交，退出时不执行迟到回调。关闭面板不撤销已确认的重启请求。
+更新就绪后，“立即重启”须响应点击；当前听写、模型准备或首页听写启动交接未结束时，显示“等待当前任务结束…”，保留已校验候选包。每 250 毫秒复查空闲状态，仅在空闲后提交；重复点击不得并发提交，退出时不执行迟到回调。关闭面板不撤销已确认的重启请求。
 
 原生隔离夹具：先运行 `python3 scripts/build-development.py`，再以相同绝对证据目录设置 `VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE` 与 `VOICE_INPUT_UPDATE_UI_ACCEPTANCE` 后启动开发版可执行文件。`VOICE_INPUT_UPDATE_UI_BUSY=1` 模拟首页未完成的启动；点击面板按钮，应显示等待标题，`state.json` 中 `restartRequested=true`、`committing=false`。向证据目录 `command` 文件写入 `idle` 后应触发提交并安全显示校验失败。夹具只允许独立 Dev 名称，使用空候选对象，身份校验前置失败，绝不安装或重启正式应用。另以默认空闲启动验证鼠标点击，关闭/Escape 后重开验证候选保留。结果与操作记录保存到 `artifacts/update-restart-20261021/`。这不代表另一台 Mac 的失效根因或正式更新重启已通过验收。

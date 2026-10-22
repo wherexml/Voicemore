@@ -20,7 +20,7 @@ func (c *Controller) RecoverVoiceResult(id string) error {
 	if !ok || r.VoiceTaskID == "" {
 		return errors.New("no cloud task to recover")
 	}
-	d, err := c.dialer(c.Settings.Get())
+	d, err := c.taskDialer(c.Settings.Get(), r.TranslationLanguage)
 	if err != nil {
 		return err
 	}

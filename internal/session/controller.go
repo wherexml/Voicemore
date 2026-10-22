@@ -341,15 +341,6 @@ func (c *Controller) startConfigured(viaHold bool, sink func(string), language s
 		r.cleanup = s.CleanupDefault
 	}
 	r.translation = language
-	if providers.ManagedVoice(s) {
-		if language != "" {
-			stop()
-			c.view = View{Phase: Failed, Message: c.tr("managedTranslationUnavailable")}
-			c.mu.Unlock()
-			c.changed()
-			return
-		}
-	}
 	if language != "" {
 		r.cleanup = true
 	}
@@ -419,6 +410,12 @@ func (c *Controller) Cancel() {
 func (c *Controller) cancel(practiceOnly bool) {
 	c.mu.Lock()
 	r := c.cur
+	if r == nil && !practiceOnly && (c.view.Phase == Done || c.view.Phase == Failed) {
+		c.view = View{}
+		c.mu.Unlock()
+		c.changed()
+		return
+	}
 	if r == nil || (practiceOnly && r.sink == nil) {
 		c.mu.Unlock()
 		return
@@ -460,12 +457,17 @@ func (c *Controller) cancel(practiceOnly bool) {
 func (c *Controller) Dismiss() {
 	c.mu.Lock()
 	r := c.cur
-	if r == nil || (c.view.Phase != Done && c.view.Phase != Failed) {
+	if c.view.Phase != Done && c.view.Phase != Failed {
 		c.mu.Unlock()
 		return
 	}
 	c.cur = nil
 	c.view = View{}
+	if r == nil {
+		c.mu.Unlock()
+		c.changed()
+		return
+	}
 	observing := r.observing
 	c.mu.Unlock()
 	r.stop()
@@ -528,6 +530,17 @@ func (c *Controller) dialer(s config.Settings) (asr.Dialer, error) {
 		return service, err
 	}
 	return asr.LocalLanguage(s.ASRURL, config.LocalASRLanguage(s.ASRLanguage)), nil
+}
+
+func (c *Controller) taskDialer(s config.Settings, language string) (asr.Dialer, error) {
+	d, err := c.dialer(s)
+	if err != nil || language == "" || !providers.ManagedVoice(s) {
+		return d, err
+	}
+	if scoped, ok := d.(interface{ WithTranslation(string) asr.Dialer }); ok {
+		return scoped.WithTranslation(language), nil
+	}
+	return nil, errors.New(c.tr("managedTranslationUnavailable"))
 }
 
 func pcmMs(pcm []byte) int64 { return int64(len(pcm)) * 1000 / (2 * asr.SampleRate) }
@@ -745,7 +758,7 @@ func (c *Controller) record(r *run, s config.Settings) {
 		defer release()
 	}
 	dialCtx, cancel := context.WithTimeout(r.ctx, 10*time.Second)
-	service, err := c.dialer(s)
+	service, err := c.taskDialer(s, r.translation)
 	if err != nil {
 		cancel()
 		c.finish(r, s, "", errors.New(c.explain(err)))
@@ -926,10 +939,10 @@ func (c *Controller) finish(r *run, s config.Settings, raw string, err error) {
 	formatSettings.CleanupDefault = r.cleanup
 	text, applied := c.formatTranscript(raw, formatSettings)
 	if r.processed != nil {
-		// Preserve the billed cleaned receipt. With cleanup off, deliver the
-		// raw ASR field instead; never apply local changes to either field.
+		// Preserve the billed receipt. Ordinary cleanup-off delivers raw ASR;
+		// explicit translation always delivers Text without local rewriting.
 		raw, text, applied = r.processed.RawText, r.processed.Text, nil
-		if !r.cleanup {
+		if !r.cleanup && r.translation == "" {
 			text = r.processed.RawText
 		}
 	}
@@ -1328,7 +1341,7 @@ func (c *Controller) Retranscribe(id string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(max(s.FinalizeTimeoutSec, 5))*time.Second+time.Duration(pcmMs(pcm))*time.Millisecond)
 	defer cancel()
-	service, err := c.dialer(s)
+	service, err := c.taskDialer(s, rec.TranslationLanguage)
 	if err != nil {
 		return errors.New(c.explain(err))
 	}
@@ -1351,7 +1364,7 @@ func (c *Controller) Retranscribe(id string) error {
 	text, applied := c.formatTranscript(strings.TrimSpace(raw), s)
 	if processed != nil {
 		text, raw, applied = processed.Text, processed.RawText, nil
-		if !s.CleanupDefault {
+		if !s.CleanupDefault && rec.TranslationLanguage == "" {
 			text = processed.RawText
 		}
 	}

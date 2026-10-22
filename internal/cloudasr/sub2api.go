@@ -29,11 +29,30 @@ type Sub2API struct {
 	TextOptions          *VoiceTextOptions
 }
 type VoiceTextOptions struct {
-	Version     int                    `json:"version"`
-	Format      textstyle.Options      `json:"format"`
-	PolishRules string                 `json:"polish_rules"`
-	Hotwords    []string               `json:"hotwords,omitempty"`
-	Corrections []textstyle.Correction `json:"corrections,omitempty"`
+	Version             int                    `json:"version"`
+	Format              textstyle.Options      `json:"format"`
+	PolishRules         string                 `json:"polish_rules"`
+	Hotwords            []string               `json:"hotwords,omitempty"`
+	Corrections         []textstyle.Correction `json:"corrections,omitempty"`
+	TranslationLanguage string                 `json:"translation_language,omitempty"`
+}
+
+// WithTranslation freezes the target in this task's options and digest.
+func (v Sub2API) WithTranslation(language string) asr.Dialer {
+	o := VoiceTextOptions{Version: 1}
+	if v.TextOptions != nil {
+		o = *v.TextOptions
+	}
+	o.TranslationLanguage = language
+	v.TextOptions = &o
+	return v
+}
+
+func (v Sub2API) translationLanguage() string {
+	if v.TextOptions == nil {
+		return ""
+	}
+	return v.TextOptions.TranslationLanguage
 }
 
 func (o *VoiceTextOptions) digest() string {
@@ -88,6 +107,11 @@ func (v Sub2API) WithCorrections(rules []textstyle.Correction) asr.Dialer {
 }
 
 func (v Sub2API) Dial(ctx context.Context, hotwords *string) (asr.Stream, error) {
+	switch v.translationLanguage() {
+	case "", "en", "hans", "hant", "ja", "ko", "fr", "de", "es":
+	default:
+		return nil, errors.New("unsupported translation language")
+	}
 	// Each connection owns its option snapshot. Never mutate the shared
 	// settings pointer when multiple dictations/replays use the same dialer.
 	if hotwords != nil && strings.TrimSpace(*hotwords) != "" {
@@ -218,6 +242,9 @@ func (s *sub2Stream) complete(r *asr.ProcessedResult) error {
 	if r == nil || r.ID != s.api.TaskID || r.Model != Sub2APIModel || strings.TrimSpace(r.Text) == "" || r.UsageLogID <= 0 {
 		return ErrProtocol
 	}
+	if r.TranslationLanguage != s.api.translationLanguage() {
+		return ErrProtocol
+	}
 	s.mu.Lock()
 	r.ASRFinalAt = s.asrFinalAt
 	s.result = r
@@ -336,6 +363,9 @@ func (v Sub2API) Result(ctx context.Context, id string) (*asr.ProcessedResult, e
 				return nil, ErrProtocol
 			}
 			if r.ID != id || r.Model != Sub2APIModel || strings.TrimSpace(r.Text) == "" || r.UsageLogID <= 0 {
+				return nil, ErrProtocol
+			}
+			if r.TranslationLanguage != v.translationLanguage() {
 				return nil, ErrProtocol
 			}
 			return &r, nil

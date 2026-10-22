@@ -32,7 +32,6 @@ func init() {
 	texts["allRecords"] = [3]string{"All records", "全部記錄", "全部记录"}
 	texts["today"] = [3]string{"Today", "今天", "今天"}
 	texts["homeTry"] = [3]string{"Try dictating", "在這裡試一次", "在这里试一次"}
-	texts["homeCountdown"] = [3]string{"Starting in 3 seconds — switch to your input field", "3 秒後開始，請切換到輸入位置", "3 秒后开始，请切换到输入位置"}
 	texts["homeFinish"] = [3]string{"Finish & insert", "結束並寫入", "结束并写入"}
 
 	texts["cleanupGroup"] = [3]string{"Text cleanup", "文字整理", "文字整理"}
@@ -331,8 +330,6 @@ var texts = map[string][3]string{
 	"errKeyRead": {"The cleanup API key could not be read from the encrypted local store: %s", "無法從本機加密檔案讀取整理用的 API 金鑰：%s", "无法从本机加密文件读取整理用的 API 密钥：%s"},
 
 	// Dictation page and overlay.
-	"startIn3":     {"Start dictation in 3 seconds", "3 秒後開始聽寫", "3 秒后开始听写"},
-	"startHint":    {"Switch to the input you want to dictate into after clicking. Or press %s in any app.", "點按後請切換到要輸入的位置；也可以在任何 App 中按 %s。", "点击后请切换到要输入的位置；也可以在任何应用中按 %s。"},
 	"stopInsert":   {"Stop and insert", "結束並寫入", "结束并写入"},
 	"cancel":       {"Cancel", "取消", "取消"},
 	"cleanup":      {"Tidy up text", "整理文字", "整理文字"},
