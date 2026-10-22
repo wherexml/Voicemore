@@ -106,6 +106,6 @@
 
 - 组件画廊、独立交互 V2 与更新入口预览见 [Mock 导航](docs/public/MOCK-NAVIGATION.md)；Mock 方案及历史浏览器结果不得代替当前原生行为或本轮验收。
 
-- 官方翻译的任务语言、回执与服务先行部署见[翻译规格](docs/public/TRANSLATION.md#voicemore-official14-本地候选)；启动前错误关闭见[胶囊规格](docs/public/CAPSULE.md#启动前错误关闭2026-10-22)。
+- 官方翻译的任务语言、回执与服务先行部署见[翻译规格](docs/public/TRANSLATION.md#翻译独立发布范围2026-10-23)；启动前错误关闭见[胶囊规格](docs/public/CAPSULE.md#启动前错误关闭2026-10-22)。
 
 - 首页立即听写与启动交接保护见[首页规格](docs/public/HOME-HISTORY.md#首页听写立即开始2026-10-23)。

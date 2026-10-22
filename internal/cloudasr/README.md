@@ -101,3 +101,7 @@ Native regression uses an isolated development app and synthetic credentials: st
 验收先冻结失败清单，再运行本地独立服务、PostgreSQL、Redis、受控 ASR/模型上游及真实 WS/HTTP；核对正常/翻译、非法语言、旧服务拒绝、同 ID 变更语言、回执丢失取回、模型失败/空输出/截断/取消、结算回滚及账本。`cmd/official-translation-acceptance`（构建标签 `officialtranslationacceptance`）通过生产适配器和 Controller 验证历史与交付，不访问麦克风、不粘贴用户窗口。可重复运行器与结果保存在本机 `artifacts/official-translation-20261022/`；真实模型的合成文本质量样例与受控上游结果单独记录，均不等于物理录音/原生跨应用输入验收。
 
 2026-10-23 提交前复验：重新构建当前客户端、1.4 候选服务与 1.3 基线服务，运行既有本地 `acceptance.py`（不带 `--live`），31/31 通过，包含生产 Controller、回执校验、历史、幂等、失败与账本一致性。证据：`artifacts/official-translation-20261022/run-20261023-004935/`；运行步骤见该验收目录的 `REPRODUCE.md`。本轮未重跑真实模型、浏览器或原生麦克风/跨应用输入。
+
+## 翻译独立发布范围（2026-10-23）
+
+当前稳定候选依赖 `voice-1.4.1`，以线上 1.1 为基准，仅新增翻译协议和处理；前述 1.3/1.4 为未通过全部质量门槛的实验记录。普通听写不变，客户端 `Hotwords()` 为 false，确认纠错不进入请求；翻译同样不发送实验词表。ASR 原音、普通提示词、确定性格式及计费规则保留线上行为。按[稳定增量补丁](service-patches/README.md#141-翻译独立发布范围2026-10-23)应用，不串联历史实验补丁。
