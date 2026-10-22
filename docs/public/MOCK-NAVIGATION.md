@@ -25,6 +25,10 @@ python3 -m http.server 38127 --bind 127.0.0.1 --directory mock
 | 官网 · 模型与服务 | `website/index.html#models`（蓝色方案，简繁英） |
 | 官网 · 文案 V2 | `website-v2/index.html`（独立文案方案，简繁英） |
 | 连续胶囊状态 | `capsule-states-v2.html?tidy=1&autoSend=1` |
+| 独立交互 V2 | `interaction-v2/index.html` |
+| 组件画廊 | `component-gallery/index.html`（17 类；单组件 `?solo=1#capsule`） |
+| 手动检查更新 | `auto-send.html?update=current#settings/general` |
+| 发现新版本 | `auto-send.html?update=available` |
 
 旧稿导航：`mock/archive/index.html`；本次归档：`mock/archive/2026-10-17/`。早期备份留在 `mock/archive/`，隔夜快照留在 `mock/archive/overnight-20261016/`，均由归档导航收录。独立设备按键稿已归档，当前入口为听写设置。
 
@@ -71,3 +75,45 @@ python3 -m http.server 38127 --bind 127.0.0.1 --directory mock
 ## 首次 Fn 提醒（2026-10-19）
 
 `onboarding-v6.html` 首次进入 Fn 步骤时，在快捷键卡片下方显示一行弱提示：“Fn 组合键不受影响，退出后恢复原功能。”不弹窗、不遮罩、不额外确认；点击“继续”后保存已提醒状态，再返回不重复显示。预览重播入口：`onboarding-v6.html#fn-notice`（刷新可重播）；工具栏“重置”可复验完整首次流程。仅为视觉与交互 mock，不操作系统快捷键。Chrome 验收步骤、结果及截图：`artifacts/fn-notice-mock-20261019/`。
+
+## 更新入口 Mock（2026-10-19）
+
+共享实现 `mock/components/update-entry.js` 用于 `auto-send.html` 与 `history-v3.html`。入口显示条件、固定状态参数、手动检查与复验步骤统一见[更新入口 Mock 规格](UPDATE-UI.md#更新入口-mock2026-10-19)。这是本地预览方案，原生仍保留常驻更新入口。
+
+## 独立交互 V2（2026-10-20）
+
+独立入口：`interaction-v2/index.html`，保留原 `capsule-states-v2.html`。用于评审连续胶囊的状态接续、打断重来、两秒发送取消、耳机断开模拟，以及真实示例音频的波形播放和拖动定位。页面内听写、整理、插入和发送均为模拟，不调用系统录音、模型或目标应用；音频是本机合成的示例语音，波形由该 WAV 解码取峰值生成。慢速预览将整理等待和倒计时延长，正常倒计时保持两秒。使用共享返回导航，支持深浅色和减少动态效果。
+
+浏览器验收脚本、结果与截图：`artifacts/interaction-v2-20261020/`；重跑 `ego-browser nodejs < artifacts/interaction-v2-20261020/verify.mjs`，先替换脚本中的任务空间 ID。本次只交付独立 mock，不代表原生实现或发布。
+
+## 组件画廊（2026-10-20）
+
+入口 `component-gallery/index.html`：独立 HTML mock，仅保留组件目录、标题与交互画布，无首页介绍、使用说明或代码区。胶囊、录音波形、标准选择器、开关、今日柱状图分开预览；`?solo=1#capsule` 仅显示单组件。共享返回导航，原有交互 V2 保留。
+
+参考 Onevra 的 `source/examples/gallery/web/main.go` 单页预览和 `bridge_js.go` hash 切换结构：https://github.com/oneo-me/onevra/tree/main/source/examples/gallery/web 。Onevra 原站运行 MyGo WASM；本稿是 HTML 视觉与交互预览，未迁移原生 Go 组件、未调用真实听写或发送。音频复用交互 V2 的合成 WAV；设备选项与图表为固定演示数据。切换组件会中止胶囊计时和音频播放。
+
+复验：打开入口 → 开始听写 → 结束 → 打断并重来 → 切换波形并播放 → 进度 End → 选择器选择豆包 → 自动发送开关 → 点击 14 时柱（160）→ 今日重置 → 切换深浅色 → 单组件展开。Chrome 本轮上述交互通过；结果与截图保存在 `artifacts/component-gallery-20261020/`，不入库。
+
+2026-10-20 增量：选择器接入共享 `VMSelect`，保留分组、键盘选择、Escape 焦点恢复及切页关闭；深浅色按钮移至组件标题区，窄屏仍可访问。本轮 Ego 浏览器 13 项交互通过，脚本与原始结果位于 `artifacts/component-gallery-20261020/followup/verify.mjs`、`results.json`，另有选择器、深色和 390px 截图。重跑前将脚本首行任务空间与页面 ID 换为当前自有空间；这仍是 HTML mock 验收。
+
+### 组件画廊扩充
+
+现有 5 类之外新增 12 类：按钮与反馈 `#buttons`、文本输入 `#inputs`、分段选择 `#segments`、滑块 `#sliders`、快捷键录入 `#shortcuts`、日期选择 `#calendar`、词典编辑 `#dictionary`、应用筛选 `#tags`、历史卡片 `#history`、模型卡片 `#models`、更新进度 `#updates`、确认弹窗 `#dialogs`。共 17 类，复用现有画布和路由，新增示例独立维护在 `mock/component-gallery/catalog.js` 与 `catalog.css`。
+
+示例值只存页面内存；保存、选择、删除和下载状态不修改应用配置或历史，不下载模型/更新。复制按钮通过浏览器剪贴板复制公开示例，失败有反馈。快捷键录入支持取消、失焦回退及重复检查，仅浏览器范围；日期按实际月份生成并支持翻月；切页停止下载计时与快捷键录入并关闭弹窗。确认弹窗支持 Escape、外部点击关闭和原触发器焦点恢复。沿用简洁标签，不增加解释区。
+
+重复验收脚本：`artifacts/component-gallery-20261020/expanded/verify.mjs`（执行前替换任务空间/页面 ID）；结果与浅深色、日期及窄屏截图保存在同目录。此目录及 mock 不入 Git，不代表原生组件验收。
+
+本轮 Ego 实测 44 项通过（`expanded/results.json`）：17 类路由、输入/筛选、快捷键冲突与取消、词典增删去重、历史编辑恢复、下载取消/失败/完成、弹窗及 390px 五类布局。后续定向复验确认桌面目录独立滚动、标题仍可见（top=54）、页面无纵向溢出，以及失败重试完成后按钮恢复“下载”；最终截图 `expanded/final.png`。
+
+### Fedora Claude 细节优化（2026-10-20）
+
+本轮由 Fedora Claude Opus 5.5 在共享目录修改画廊三文件，Mac 协调端复验。统一输入框、按钮、危险动作、提示色及焦点样式；窄屏模型卡纵向排列；分段选择、应用标签和模型卡使用单 Tab 停靠与方向键；日历支持方向键、Home/End、PageUp/PageDown；词典增加大小写不敏感去重、空态和移除后焦点恢复；历史编辑可取消、拒绝空正文；下载示例增加失败续传、取消归零和完成状态；弹窗默认聚焦取消，仅确认显示完成反馈。共享选择器另有无设备禁用示例。
+
+Mac 复核统一快捷键修饰键的序列，避免与默认快捷键重复但未识别；去掉未验证版本号。远端未执行构建、测试或类型检查，未运行 Fedora 浏览器；本机浏览器证据位于 `artifacts/component-gallery-20261020/remote-polish/`。原首轮回归在弹窗 `close` 事件前读取提示而失败，单独等待实际确认反馈后通过；复跑脚本已等待该异步事件，不把这次失败隐藏为旧结果。
+
+最终本机验收：完整回归 44/44 与新增细节 13/13 通过，分别见 `remote-polish/results.json`、`details-results.json`；窄屏模型卡、深色与确认弹窗截图同目录。没有构建、安装、发布或原生 App 验收。
+
+## 文档核对边界（2026-10-22）
+
+以上 2026-10-19 / 20 的浏览器结果为既有本地验收记录。本次对照 `6976d6b` 整理文档，核对入口、共享源码、结果文件与忽略规则，没有重跑浏览器或原生验收；不得将旧结果标为本次 E2E 通过。克隆仓库后不要求存在 `mock/`、脚本或截图，须在保有这些本地文件的环境中复验。

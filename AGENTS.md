@@ -22,7 +22,7 @@
 - 文字整理的错误分类、延迟排查和 HTTP 验收见 [整理模块规格](internal/cleanup/README.md)；保留响应体读取阶段的超时与取消原因。
 - DJI 接收器按钮与键盘触发的边界、原生验收见[触发键规格](docs/public/DJI-BUTTON.md)。
 
-- V2 原生历史统计、系统图标与筛选：[首页与历史规格](docs/public/HOME-HISTORY.md#v2-原生历史统计)；词典页标题、布局与交互：[词典规格](docs/public/DICTIONARY.md#v2-原生词典页面)。
+- V2 原生历史统计、系统图标与筛选：[首页与历史规格](docs/public/HOME-HISTORY.md#v2-原生历史统计v3-沿用的数据口径)；词典页标题、布局与交互：[词典规格](docs/public/DICTIONARY.md#v2-原生词典页面)。
 
 - 数字默认格式、保护范围与真实音频验收：[基础格式规格](docs/public/TEXT-FORMATTING.md)。
 
@@ -103,3 +103,5 @@
 - 今日图表左对齐、柱顶留白与即时 hover/键盘提示见[首页图表规格](docs/public/HOME-HISTORY.md#今日图表对齐留白与即时提示2026-10-21)。
 
 - 首页缺失权限入口使用盾牌图标与“权限不足”，点击及本地化见[首页权限提示](docs/public/HOME-HISTORY.md#首页权限提示2026-10-21)。
+
+- 组件画廊、独立交互 V2 与更新入口预览见 [Mock 导航](docs/public/MOCK-NAVIGATION.md)；Mock 方案及历史浏览器结果不得代替当前原生行为或本轮验收。

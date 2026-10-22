@@ -47,6 +47,16 @@ Update GET requests retry timeouts and HTTP 408/429/502/503/504 at most three ti
 
 Repeatable HTTPS acceptance: `go run -tags updateacceptance ./cmd/update-network-acceptance /absolute/path/to/Voicemore.app > artifacts/update-network/results.json`. Use an existing officially signed app; the harness only reads its identity/version and contacts local fixtures, without installation. It covers a real TLS handshake timeout followed by recovery, retry exhaustion, cancellation, HTTP failures, untrusted certificates, downgrade rejection and signed-link redaction. This does not establish the network route or native visual behavior on another Mac.
 
+## 更新入口 Mock（2026-10-19）
+
+当前原生代码启动约 10 秒后检查更新，此后每小时检查；原生左下角仍有常驻入口。新 mock 方案仅在已发现新版本或下载/安装过程中显示左下角入口，已是最新版、无已知新版本的检查中及检查失败均不显示。手动“检查更新”位于设置 → 通用 → 软件更新，检查中禁用按钮，结果在同一行反馈；安装失败保留入口。
+
+共享实现：`mock/components/update-entry.js`，用于 `auto-send.html` 与 `history-v3.html`。统一导航新增“检查更新”和“发现新版本”预览；`?update=current|available|checking|downloading|failed` 固定预览状态，普通入口使用 10 秒/1 小时模拟调度。检查结果为 mock 数据，不访问发布服务。尚未修改原生入口或发布。
+
+可重跑交互验收：`ego-browser nodejs < artifacts/update-entry-mock-20261019/verify.mjs`（脚本中的 taskSpace ID 需替换为当前任务空间）。覆盖两页的手动检查、检查失败、新版本入口、详情、Escape、下载中与安装失败；结果保存在同目录 `results.json`。
+
+该结果属于 2026-10-19 的本地浏览器记录。2026-10-22 文档核对仅确认共享脚本、状态参数、原生调度与既有证据文件存在，未重跑交互；本节不覆盖下述原生重启请求规格。
+
 ## 重启请求验收（2026-10-21）
 
 更新就绪后，“立即重启”须响应点击；当前听写、模型准备或首页启动倒计时未结束时，显示“等待当前任务结束…”，保留已校验候选包。每 250 毫秒复查空闲状态，仅在空闲后提交；重复点击不得并发提交，退出时不执行迟到回调。关闭面板不撤销已确认的重启请求。
