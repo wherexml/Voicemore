@@ -137,6 +137,9 @@ func onlyDigits(tokens []string) bool {
 // until the user accepts a candidate.
 func (d *Dict) Propose(original, revised, source, recordID string) (int, string) {
 	a, b := tokenize(original), tokenize(revised)
+	if len(a) > 1024 || len(b) > 1024 {
+		return 0, "the revision is too large to learn from"
+	}
 	if len(a) == 0 || join(a) == join(b) {
 		return 0, "no change to learn from"
 	}
@@ -182,7 +185,7 @@ func (d *Dict) Propose(original, revised, source, recordID string) (int, string)
 		// Do not turn clauses or uncommitted apostrophe-separated Pinyin into
 		// vocabulary. This only affects proposed learning, never dictation output
 		// or existing confirmed rules. Keep normal technical term punctuation.
-		if source == "observed-edit" && (!termShape(h.from) || !termShape(h.to)) {
+		if source == "observed-edit" && !observedTermPair(join(h.from), join(h.to)) {
 			continue
 		}
 		repl = append(repl, h)
@@ -202,7 +205,11 @@ func (d *Dict) Propose(original, revised, source, recordID string) (int, string)
 	added := 0
 	for _, h := range repl {
 		wrong, right := join(h.from), join(h.to)
-		if d.propose(&next, wrong, right, snippet(original, wrong), source, recordID) {
+		sentence := snippet(original, wrong)
+		if !candidateEligible(Candidate{Wrong: wrong, Right: right, Sentence: sentence, Source: source}) {
+			continue
+		}
+		if d.propose(&next, wrong, right, sentence, source, recordID) {
 			added++
 		}
 	}
@@ -213,6 +220,60 @@ func (d *Dict) Propose(original, revised, source, recordID string) (int, string)
 		return 0, "the same correction is already known or was ignored"
 	}
 	return added, fmt.Sprintf("%d candidate(s) wait for confirmation in the dictionary", added)
+}
+
+// Passive edits are spelling evidence only. Changes between discourse
+// particles express tone, not reusable terminology. Explicit revisions and
+// manually configured rules remain available.
+func observedTermPair(wrong, right string) bool {
+	if !termShape(tokenize(wrong)) || !termShape(tokenize(right)) {
+		return false
+	}
+	particles := "啊呀呢吧嘛吗嗎呐吶哦噢哎唉嗯啦呗唄哟喲"
+	isParticle := func(s string) bool {
+		return len([]rune(s)) == 1 && strings.Contains(particles, s)
+	}
+	return !isParticle(wrong) && !isParticle(right)
+}
+
+// Reassess legacy passive suggestions without rewriting the user's file or
+// touching accepted entries. Old records contain only a local source snippet,
+// so ambiguous positions cannot establish reliable replacement evidence.
+func candidateEligible(c Candidate) bool {
+	if c.Source != "observed-edit" {
+		return true
+	}
+	if c.Wrong == "" || c.Right == "" || c.Wrong == c.Right || !observedTermPair(c.Wrong, c.Right) {
+		return false
+	}
+	a := tokenize(c.Sentence)
+	from, to := tokenize(c.Wrong), tokenize(c.Right)
+	if len(a) > 1024 || len(from) == 0 || len(from) > maxHunkTokens || len(to) > maxHunkTokens || !hasLetter(from) || !hasLetter(to) {
+		return false
+	}
+	// Stored pairs were joined from tokens; the original can still contain
+	// spaces between Han and Latin ("V 六" versus "V六"). Match tokens rather
+	// than falsely discarding those legitimate legacy suggestions.
+	at := -1
+	for i := 0; i+len(from) <= len(a); i++ {
+		if join(a[i:i+len(from)]) == join(from) {
+			if at >= 0 {
+				return false
+			}
+			at = i
+		}
+	}
+	if at < 0 || (!hasLetter(a[:at]) && !hasLetter(a[at+len(from):])) {
+		return false
+	}
+	b := append([]string{}, a[:at]...)
+	b = append(b, to...)
+	b = append(b, a[at+len(from):]...)
+	changed := 0
+	for _, h := range diff(a, b) {
+		changed += max(len(h.from), len(h.to))
+	}
+	return float64(changed) <= maxChangedPart*float64(len(a))
 }
 
 func termShape(tokens []string) bool {

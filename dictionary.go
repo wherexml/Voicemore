@@ -3,6 +3,7 @@ package main
 import (
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/egoist/mygo"
 	"github.com/egoist/mygo/ui"
@@ -78,35 +79,7 @@ func (m *mainWindow) dictView(c *ui.Context) {
 				}
 			})
 		})
-		// Manual additions are keywords, one entry at a time.
-		ui.Column(c.Key("add")).Gap(12).Children(func() {
-			ui.Text(c, T("addEntry")).FontSize(15).FontWeight(600)
-			add := func() {
-				term := strings.TrimSpace(m.newTerm)
-				if term == "" || strings.ContainsAny(term, "\r\n") {
-					return
-				}
-				err := d.Add(dict.Entry{Kind: dict.KindTerm, Term: term, Source: "manual"})
-				m.report(err, "added", term)
-				if err == nil {
-					m.newTerm = ""
-					m.dPage = 1
-					m.dictKind = 0
-					m.dictQuery = ""
-				}
-			}
-			blocked := strings.TrimSpace(m.newTerm) == "" || strings.ContainsAny(m.newTerm, "\r\n")
-			ui.Row(c.Key("fields")).Gap(8).FillWidth().Children(func() {
-				groupTextInput(c.Key("term"), &m.newTerm, false).Placeholder(T("right")).Label(T("right")).Grow(1).OnSubmit(add)
-				if ui.PrimaryButton(c.Key("ok"), "").Label(T("add")).Disabled(blocked).Children(func() {
-					ui.Icon(c, icPlus).FontSize(13)
-					ui.Text(c, T("add")).SingleLine()
-				}).Clicked() {
-					add()
-				}
-			})
-			ui.Text(c, T("willHint")).FontSize(12).TextColor(t.TextMuted)
-		})
+		m.dictEditor(c)
 
 		// Candidates learned from corrections: nothing applies before the
 		// user accepts it.
@@ -209,13 +182,26 @@ func (m *mainWindow) dictView(c *ui.Context) {
 						if !e.CreatedAt.IsZero() {
 							ui.Text(c, e.CreatedAt.Format("2006/1/2")).FontSize(12).TextColor(t.TextMuted)
 						}
+						if ui.Button(c.Key("edit"), T("dictEdit")).Clicked() {
+							m.dictEditID, m.newTerm, m.newWrong = e.ID, e.Term, e.Wrong
+							m.newContext = strings.Join(e.Context, "; ")
+							m.newDictKind = 0
+							if e.Kind == dict.KindRule {
+								m.newDictKind = 1
+							}
+							m.dictEditJump = true
+						}
 						// Deleting an entry undoes it from the next dictation on.
 						del := iconButton(c.Key("del"), icTrash, T("remove", e.Term))
 						if !row.Hovered() && !row.FocusWithin() {
 							del.Opacity(0)
 						}
 						if del.Clicked() {
-							m.report(d.Delete(e.ID), "removed", e.Term)
+							err := d.Delete(e.ID)
+							m.report(err, "removed", e.Term)
+							if err == nil && m.dictEditID == e.ID {
+								m.resetDictEditor()
+							}
 						}
 					})
 				}
@@ -231,4 +217,88 @@ func (m *mainWindow) importFile(path string) {
 	m.dPage = 1
 	added, total, err := m.a.dict.Import(path)
 	m.report(err, "imported", total, added, total-added)
+}
+
+// Context phrases are separated by semicolons, never spaces or commas: a
+// Chinese single-character scope may be a complete original sentence.
+func ruleContexts(s string) []string {
+	return strings.FieldsFunc(s, func(r rune) bool { return r == ';' || r == '；' || r == '\n' })
+}
+
+func (m *mainWindow) resetDictEditor() {
+	m.newTerm, m.newWrong, m.newContext, m.dictEditID = "", "", "", ""
+}
+
+func (m *mainWindow) saveDictEntry() {
+	if !m.dictEntryReady() {
+		return
+	}
+	e := dict.Entry{Kind: dict.KindTerm, Term: m.newTerm, Source: "manual"}
+	if m.newDictKind == 1 {
+		e.Kind, e.Wrong, e.Context = dict.KindRule, m.newWrong, ruleContexts(m.newContext)
+	}
+	var err error
+	message := "added"
+	if m.dictEditID == "" {
+		err = m.a.dict.Add(e)
+	} else {
+		err = m.a.dict.Update(m.dictEditID, e)
+		message = "dictSaved"
+	}
+	m.report(err, message, strings.TrimSpace(e.Term))
+	if err == nil {
+		m.resetDictEditor()
+		m.dPage, m.dictKind, m.dictQuery = 1, 0, ""
+	}
+}
+
+func (m *mainWindow) dictEntryReady() bool {
+	term, wrong := strings.TrimSpace(m.newTerm), strings.TrimSpace(m.newWrong)
+	return term != "" && !strings.ContainsAny(term, "\r\n") &&
+		(m.newDictKind == 0 || wrong != "" && wrong != term && !strings.ContainsAny(wrong, "\r\n"))
+}
+
+func (m *mainWindow) dictEditor(c *ui.Context) {
+	section := ui.Column(c.Key("add")).Gap(12).FillWidth()
+	if m.dictEditJump {
+		section.ScrollIntoView()
+		m.dictEditJump = false
+	}
+	section.Children(func() {
+		heading, action := "addEntry", "add"
+		if m.dictEditID != "" {
+			heading, action = "dictEditEntry", "save"
+		}
+		ui.Text(c, T(heading)).FontSize(15).FontWeight(600)
+		segmentedSize(c.Key("add-kind"), &m.newDictKind, true, T("v2Terms"), T("rule"))
+		rightLabel := "right"
+		if m.newDictKind == 1 {
+			rightLabel = "dictReplacement"
+		}
+		ui.Row(c.Key("fields")).Gap(8).FillWidth().Children(func() {
+			if m.newDictKind == 1 {
+				groupTextInput(c.Key("wrong"), &m.newWrong, false).Placeholder(T("dictOriginal")).Label(T("dictOriginal")).Grow(1).OnSubmit(m.saveDictEntry)
+				ui.Text(c, "→").TextColor(c.Theme().TextMuted)
+			}
+			groupTextInput(c.Key("term"), &m.newTerm, false).Placeholder(T(rightLabel)).Label(T(rightLabel)).Grow(1).OnSubmit(m.saveDictEntry)
+		})
+		if m.newDictKind == 1 {
+			scopeLabel := "dictScope"
+			if r := []rune(strings.TrimSpace(m.newWrong)); len(r) == 1 && unicode.Is(unicode.Han, r[0]) {
+				scopeLabel = "dictPhrase"
+			}
+			groupTextInput(c.Key("scope"), &m.newContext, false).Placeholder(T(scopeLabel)).Label(T(scopeLabel)).FillWidth().OnSubmit(m.saveDictEntry)
+		}
+		ui.Row(c.Key("actions")).Gap(8).FillWidth().Children(func() {
+			ui.Spacer(c)
+			if m.dictEditID != "" {
+				if ui.Button(c.Key("cancel"), T("cancel")).Clicked() {
+					m.resetDictEditor()
+				}
+			}
+			if ui.PrimaryButton(c.Key("ok"), T(action)).Disabled(!m.dictEntryReady()).Clicked() {
+				m.saveDictEntry()
+			}
+		})
+	})
 }

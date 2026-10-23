@@ -148,7 +148,7 @@ func (d *Dict) Pending() []Candidate {
 	defer d.mu.Unlock()
 	var out []Candidate
 	for _, c := range d.d.Candidates {
-		if !c.Ignored {
+		if !c.Ignored && candidateEligible(c) {
 			out = append(out, c)
 		}
 	}
@@ -167,11 +167,42 @@ func (d *Dict) Add(e Entry) error {
 	return d.save(next)
 }
 
+// Update validates a complete draft before committing it. Keep identity,
+// creation time and application order; a failed edit never removes the old rule.
+func (d *Dict) Update(id string, e Entry) error {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	next := d.draft()
+	i := slices.IndexFunc(next.Entries, func(x Entry) bool { return x.ID == id })
+	if i < 0 {
+		return errors.New("the entry is gone")
+	}
+	old := next.Entries[i]
+	next.Entries = slices.Delete(next.Entries, i, i+1)
+	if err := d.add(&next, e); err != nil {
+		return err
+	}
+	updated := next.Entries[len(next.Entries)-1]
+	updated.ID, updated.CreatedAt, updated.Source = old.ID, old.CreatedAt, old.Source
+	next.Entries = slices.Insert(next.Entries[:len(next.Entries)-1], i, updated)
+	return d.save(next)
+}
+
 func (d *Dict) add(next *data, e Entry) error {
 	e.Term, e.Wrong = strings.TrimSpace(e.Term), strings.TrimSpace(e.Wrong)
 	if e.Term == "" {
 		return errors.New("the term is empty")
 	}
+	if strings.ContainsAny(e.Term+e.Wrong, "\r\n") {
+		return errors.New("spellings must be a single line")
+	}
+	contexts := []string{}
+	for _, context := range e.Context {
+		if context = strings.TrimSpace(context); context != "" && !slices.Contains(contexts, context) {
+			contexts = append(contexts, context)
+		}
+	}
+	e.Context = contexts
 	if e.Kind == KindRule && (e.Wrong == "" || e.Wrong == e.Term) {
 		return errors.New("a rule needs a wrong spelling that differs from the right one")
 	}

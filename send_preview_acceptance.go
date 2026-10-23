@@ -16,6 +16,10 @@ import (
 )
 
 func (a *app) startSendPreviewAcceptance() {
+	if os.Getenv("VOICE_INPUT_DICTIONARY_ACCEPTANCE") != "" {
+		a.startDictionaryAcceptance()
+		return
+	}
 	if os.Getenv("VOICE_INPUT_UPDATE_UI_ACCEPTANCE") != "" {
 		a.startUpdateUIAcceptance()
 		return
