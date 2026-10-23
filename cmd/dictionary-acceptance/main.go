@@ -101,18 +101,26 @@ func main() {
 			panic("fixture not foreground")
 		}
 
-		type observation struct{ text, status string }
+		type observation struct {
+			text, status string
+			samples      []map[string]any
+			hasElement   bool
+		}
 		done := make(chan observation, 1)
+		pasteStarted := time.Now()
 		res, err := macos.Insert(original, macos.InsertOptions{RestoreDelayMs: 650, OnPasted: func(t *macos.Target) {
 			go func() {
+				var samples []map[string]any
+				hasElement := t.HasElement()
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 				defer cancel()
 				text, status := dict.Observe(ctx, original, func() (string, bool) {
+					started := time.Since(pasteStarted).Milliseconds()
 					v, ok := t.ReadValue()
-
+					samples = append(samples, map[string]any{"startMs": started, "endMs": time.Since(pasteStarted).Milliseconds(), "readable": ok, "text": v})
 					return v, ok
 				})
-				done <- observation{text, status}
+				done <- observation{text: text, status: status, samples: samples, hasElement: hasElement}
 			}()
 		}})
 		must(err)
@@ -137,7 +145,7 @@ func main() {
 		if want == 1 {
 			passed = passed && pending[0].Wrong == "mark" && pending[0].Right == "mock"
 		}
-		results = append(results, map[string]any{"case": name, "passed": passed, "observed": observed.text, "status": observed.status, "note": note, "pending": pending, "clipboardRestored": res.ClipboardRestored})
+		results = append(results, map[string]any{"case": name, "passed": passed, "observed": observed.text, "status": observed.status, "note": note, "pending": pending, "clipboardRestored": res.ClipboardRestored, "capturedElement": observed.hasElement, "samples": observed.samples})
 	}
 	b, _ := json.MarshalIndent(results, "", "  ")
 	must(os.WriteFile(filepath.Join(dir, "native-results.json"), b, 0600))

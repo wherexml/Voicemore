@@ -430,8 +430,6 @@ var texts = map[string][3]string{
 	"right":          {"Correct word, e.g. Claude", "正確詞彙，例如 Claude", "正确词汇，例如 Claude"},
 	"wrong":          {"Heard as, e.g. Cloud", "被聽成，例如 Cloud", "被听成，例如 Cloud"},
 	"wrongToggle":    {"Wrong spelling (optional)", "錯誤寫法（選填）", "错误写法（选填）"},
-	"willHint":       {"Adds a term hint.", "將新增為詞彙提示。", "将添加为词汇提示。"},
-	"willRule":       {"Adds a replacement rule.", "將新增為替換規則。", "将添加为替换规则。"},
 	"add":            {"Add", "新增", "添加"},
 	"importSeed":     {"Import seed terms", "匯入種子詞表", "导入种子词表"},
 	"importHelp":     {"Import a UTF-8 TXT file, one keyword per line. Blank lines and duplicates are skipped.", "匯入 UTF-8 TXT 檔案，每行一個關鍵詞。自動略過空白行和重複詞。", "导入 UTF-8 TXT 文件，每行一个关键词，自动跳过空行和重复词。"},

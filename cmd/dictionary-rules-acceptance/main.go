@@ -84,6 +84,7 @@ func main() {
 		{ID: "tone", Wrong: "呢", Right: "啊", Sentence: "具体是哪方面比较强呢？", Source: "observed-edit"},
 		{ID: "valid", Wrong: "mark", Right: "mock", Sentence: "这个产品的 mark 地址", Source: "observed-edit"},
 		{ID: "spacing", Wrong: "V六", Right: "V6", Sentence: "把 V 六的背景改成流动的风格吧", Source: "observed-edit"},
+		{ID: "missing-source", Wrong: "no号", Right: "know-how", Sentence: "旧版只保留了长句开头，未保存修改位置", Source: "observed-edit"},
 		{ID: "explicit", Wrong: "杰森", Right: "json", Sentence: "杰森", Source: "history-revision"},
 		{ID: "ignored", Wrong: "mork", Right: "mock", Sentence: "这个产品的 mork 地址", Source: "observed-edit", Ignored: true},
 	}
@@ -92,14 +93,14 @@ func main() {
 	l, err := dict.Open(legacy)
 	must(err)
 	pending := l.Pending()
-	check("legacy noise hidden and valid suggestions retained", len(pending) == 3 && pending[0].ID == "valid" && pending[1].ID == "spacing" && pending[2].ID == "explicit")
+	check("legacy noise hidden and valid suggestions retained", len(pending) == 4 && pending[0].ID == "valid" && pending[1].ID == "spacing" && pending[2].ID == "missing-source" && pending[3].ID == "explicit")
 	after, _ = os.ReadFile(filepath.Join(legacy, "dictionary.json"))
 	check("read filtering preserves file and confirmed rule", string(after) == string(b) && len(l.Entries("")) == 1)
 	must(l.Accept("valid", dict.KindRule, "mark", "mock", nil))
 	l, err = dict.Open(legacy)
 	must(err)
 	applied, _ = l.Apply("mark marketing")
-	check("accept reopen apply", applied == "mock marketing" && len(l.Pending()) == 2)
+	check("accept reopen apply", applied == "mock marketing" && len(l.Pending()) == 3)
 	n, _ := l.Propose(strings.Repeat("字", 1025), "词", "history-revision", "large")
 	check("bounded diff", n == 0)
 	must(d.Delete(first.ID))

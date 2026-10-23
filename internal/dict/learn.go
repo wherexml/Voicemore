@@ -237,8 +237,8 @@ func observedTermPair(wrong, right string) bool {
 }
 
 // Reassess legacy passive suggestions without rewriting the user's file or
-// touching accepted entries. Old records contain only a local source snippet,
-// so ambiguous positions cannot establish reliable replacement evidence.
+// touching accepted entries. Single-Han rules require a unique local position;
+// repeated full terms can still be proposed for explicit review.
 func candidateEligible(c Candidate) bool {
 	if c.Source != "observed-edit" {
 		return true
@@ -258,12 +258,21 @@ func candidateEligible(c Candidate) bool {
 	for i := 0; i+len(from) <= len(a); i++ {
 		if join(a[i:i+len(from)]) == join(from) {
 			if at >= 0 {
-				return false
+				if singleHan(c.Wrong) {
+					return false
+				}
+				continue
 			}
 			at = i
 		}
 	}
-	if at < 0 || (!hasLetter(a[:at]) && !hasLetter(a[at+len(from):])) {
+	// Older snippets can omit the changed term: joining "no 号" into "no号"
+	// made snippet() fall back to the start of a long sentence. Missing source
+	// evidence is not evidence of a bad suggestion; leave it for review.
+	if at < 0 {
+		return true
+	}
+	if !hasLetter(a[:at]) && !hasLetter(a[at+len(from):]) {
 		return false
 	}
 	b := append([]string{}, a[:at]...)
