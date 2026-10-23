@@ -1,0 +1,22 @@
+{
+  "config.go": {
+    "base": "1b44c8490043b28900dc0b88a791f1efd887cd06735c8d7cbc0f5ee211396622",
+    "target": "94e862ed04f534f1fb4e58b034089d1951f8f0ff34f7f49df6f5b3752ca24e07"
+  },
+  "options.go": {
+    "base": "d3669446c4bccf8e7f0d9dde4e7db7d0f5c0d4ed4a82aaa9795eee99fbc4a5d3",
+    "target": "5a0fbff763f7466193cd9244366addba42c71e9591b975ec7459a8ae50a540e4"
+  },
+  "upstream.go": {
+    "base": "92968e6f03ecf6d24fd7b6fab9fea8ff831791f7d9b19ef8b92ef7d30954dff2",
+    "target": "5e01e63e588c9f8890435de89b55b130bdfb9c2028a3e71cf4fde3c49c505a34"
+  },
+  "server.go": {
+    "base": "bf5086b4d5e37037446d3696f87a1465df433f4f60a1753eba774b26f563ac9c",
+    "target": "2407fe19753c0328cf6d3a42e4f02c94aafa0b375f9c82e97cad6de3014a9439"
+  },
+  "textstyle/corrections.go": {
+    "base": null,
+    "target": "ca34b7c8d804dcd87d79f801c831494a806a3df34e10ee127e2561e7e9fa6946"
+  }
+}
