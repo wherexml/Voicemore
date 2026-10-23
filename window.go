@@ -65,6 +65,11 @@ type mainWindow struct {
 	dPage          int
 	cPage          int // the page of the candidates, three to a page
 	newTerm        string
+	newWrong       string
+	newContext     string
+	newDictKind    int
+	dictEditID     string
+	dictEditJump   bool
 	contexts       map[string]string // candidate ID → context words typed for it
 	candOpen       map[string]bool   // candidate ID → its context sentence is showing
 }

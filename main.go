@@ -208,6 +208,10 @@ func main() {
 		dataName = "Voice Input Dev"
 	}
 	mygo.App.SetPath(mygo.PathUserData, filepath.Join(dataRoot, dataName))
+	// Opt-in native dictionary E2E uses a separate data root and no hotkeys.
+	if fixture := os.Getenv("VOICE_INPUT_DICTIONARY_ACCEPTANCE"); debug && filepath.IsAbs(fixture) && os.Getenv("VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE") != "" {
+		mygo.App.SetPath(mygo.PathUserData, filepath.Join(fixture, "data"))
+	}
 	// An ordinary app: it has a Dock icon and takes part in app switching.
 	// The menu bar item and the trigger key work whether or not its window
 	// is open.

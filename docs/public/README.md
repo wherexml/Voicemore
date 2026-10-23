@@ -21,7 +21,7 @@
 | 云端语音识别 | [Seed ASR 2.0、Agent Plan 与豆包 DDC 验收](../../internal/cloudasr/README.md) | `internal/cloudasr/volc.go`、`internal/providers/providers.go` |
 | 私密应用 | [判定、延迟落盘与原生验收](PRIVATE-APPS.md) | `internal/session/privacy.go`、`prefs_privacy.go` |
 | 配置持久化 | [状态保存、隐私恢复保护、清空与凭证净化验收](../../internal/config/README.md#状态持久化与恢复)、[保存与退出的锁边界](../../internal/config/README.md#保存与退出的锁边界) | `internal/config/config.go`、`internal/config/json.go`、`internal/config/legacy_key.go`、`internal/store/store.go`、`internal/session/privacy.go` |
-| 词典与纠正学习 | [V2 页面、热词与纠正验收](DICTIONARY.md) | `dictionary.go`、`internal/dict/`、`internal/cloudasr/volc.go`、`internal/session/controller.go` |
+| 词典与纠正学习 | [手动替换、词条编辑、热词与纠正验收](DICTIONARY.md) | `dictionary.go`、`internal/dict/`、`internal/cloudasr/volc.go`、`internal/session/controller.go` |
 | 基础格式与数字 | [数字默认与保留边界](TEXT-FORMATTING.md) | `internal/textstyle/`、`prefs.go` |
 | 文字整理 | [提示词、非拦截返回与验收边界](../../internal/cleanup/README.md) | `internal/cleanup/cleanup.go` |
 | 客户端更新 | [界面状态与原生验收](UPDATE-UI.md)、[更新协议与发布](UPDATES.md) | `updates.go`、`internal/updateclient/`、`internal/distribution/`、`window.go` |

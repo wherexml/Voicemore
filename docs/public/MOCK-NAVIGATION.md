@@ -13,7 +13,7 @@ python3 -m http.server 38127 --bind 127.0.0.1 --directory mock
 | 首页 · 中文 | `home-v3.html` |
 | 首页 · English | `home-v3-en.html` |
 | 历史记录 | `history-v3.html?lang=hans#history` |
-| 词典 | `auto-send.html#dictionary` |
+| 词典 | `dictionary-rules.html`（手动规则与编辑）；完整旧页面 `auto-send.html#dictionary` |
 | 通用 | `auto-send.html#settings/general` |
 | 听写 · 设备按键 · 翻译 | `auto-send.html#settings/dictation` |
 | 文字与粘贴 · 文字整理 · 自动发送 · 远程桌面 | `auto-send.html#settings/output` |
@@ -130,3 +130,7 @@ Mac 复核统一快捷键修饰键的序列，避免与默认快捷键重复但�
 - `auto-send.html?lang=hans&service=official#settings/dictation` 是 Official 1.4 本地候选场景，使用既有目标语言与预设译文；可播放翻译成功、失败、错误退场及原任务取回，取回不自动输入。工具条标记 Mock，不接服务、不收费，不代表正式服务已部署。
 
 本轮浏览器 18 项检查通过，截图和结果在 `artifacts/mock-sync-20261023/`；可重跑 `ego-browser nodejs < artifacts/mock-sync-20261023/verify-final.mjs`。首次脚本因胶囊按钮选择器匹配两项中断，修正为带 aria-label 的按钮后续跑通过；导航首次读到浏览器旧缓存，刷新后确认新增入口。保留首次脚本与续跑脚本。此证据仅覆盖 HTML Mock，不代表原生或生产验收。原本在其他任务中更新的首页立即听写逻辑保持不变。
+
+## 词典规则编辑（2026-10-23）
+
+`dictionary-rules.html` 为本轮手动词条/规则、上下文和编辑/取消的独立草稿，已接入统一导航与共享返回入口。旧完整词典仍保留在 `auto-send.html#dictionary`，不能把它的旧手动添加入口当作本轮实现。原生生产行为与验收见 [词典规格](DICTIONARY.md#手动配置编辑与被动建议过滤2026-10-23)。

@@ -402,6 +402,14 @@ var texts = map[string][3]string{
 	"failed":          {"Failed: %s", "失敗：%s", "失败：%s"},
 
 	// Dictionary.
+	"dictPhrase":      {"Original phrase (required)", "原句片段（必填）", "原句片段（必填）"},
+	"dictEdit":        {"Edit", "編輯", "编辑"},
+	"dictEditEntry":   {"Edit entry", "編輯詞條", "编辑词条"},
+	"dictOriginal":    {"Original", "原詞", "原词"},
+	"dictReplacement": {"Replacement", "替換為", "替换为"},
+	"dictScope":       {"Context (optional; separate phrases with semicolons)", "限定上下文（選填，以分號分隔）", "限定上下文（选填，以分号分隔）"},
+	"dictSaved":       {"Saved: %s", "已儲存：%s", "已保存：%s"},
+
 	"dictTitle":      {"Dictionary Management", "詞典管理", "词典管理"},
 	"hotOver":        {"The local dictionary exceeds the recognizer's limits and is not sent: %s", "本機詞典超出辨識服務的限制，不會傳送：%s", "本机词典超出识别服务的限制，不会发送：%s"},
 	"pending":        {"Waiting for confirmation (%d)", "等待確認（%d）", "等待确认（%d）"},
