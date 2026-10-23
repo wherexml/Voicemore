@@ -24,6 +24,7 @@ func main() {
 		{"particle_tone", "具体是哪方面比较强呢？", "具体是哪方面比较强啊？", "observed-edit", 0},
 		{"screenshot_ime", "我今天都没用这个 API 呀", "我今天都没用这个 API ，ying'g'shi", "observed-edit", 0},
 		{"explicit_particle", "呢", "啊", "history-revision", 1},
+		{"repeated_full_term", "请把mark的地址和mark的截图发给我", "请把mock的地址和mock的截图发给我", "observed-edit", 1},
 		{"confirmed_term", "这个产品的 mark 的 demo 地址是多少？", "这个产品的 mock 的 demo 地址是多少？", "observed-edit", 1},
 		{"chinese_to_english", "怎么连这个杰森都识别不了呢？", "怎么连这个 json 都识别不了呢？", "observed-edit", 1},
 		{"ime_snapshot", "这个效果还可以呀", "这个效果还可以，ying'g'shi", "observed-edit", 0},
