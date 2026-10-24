@@ -9,7 +9,7 @@ import (
 
 // Retain gives the preview its own lifetime beyond Insert's return.
 func (t *Target) Retain() *Target {
-	out := &Target{AppName: t.AppName, BundleID: t.BundleID, pid: t.pid}
+	out := &Target{AppName: t.AppName, BundleID: t.BundleID, pid: t.pid, paste: t.paste}
 	OnMain(func() {
 		if t.element != 0 {
 			out.element = cfRetain(t.element)

@@ -105,6 +105,7 @@ type Controller struct {
 	view           View
 	cleanupNext    *bool // the user's choice for the next dictation, if made
 	retranscribing bool
+	observeStop    context.CancelFunc
 
 	notifyOnce sync.Once
 	notify     chan struct{}
@@ -346,6 +347,10 @@ func (c *Controller) startConfigured(viaHold bool, sink func(string), language s
 	}
 	r.sink = sink // assigned atomically with creating this run
 	c.cur = r
+	if c.observeStop != nil {
+		c.observeStop()
+		c.observeStop = nil
+	}
 	c.view = View{Phase: Preparing, Cleanup: r.cleanup, TranslationLanguage: language}
 	c.mu.Unlock()
 	c.changed()
@@ -1140,10 +1145,15 @@ func (c *Controller) insert(r *run, s config.Settings, text string) {
 			return
 		}
 		observing = true
+		ctx, stop := context.WithCancel(context.Background())
 		c.mu.Lock()
 		r.observing = true
+		if c.observeStop != nil {
+			c.observeStop()
+		}
+		c.observeStop = stop
 		c.mu.Unlock()
-		go c.observe(r, s, text, target)
+		go c.observe(ctx, stop, r, s, text, target)
 	}
 	var editMu sync.Mutex
 	editedText := text
@@ -1258,13 +1268,22 @@ func (c *Controller) done(r *run, message string) {
 	})
 }
 
-// observe retains the last correction across send/clear and continued typing.
-func (c *Controller) observe(r *run, s config.Settings, inserted string, target *macos.Target) {
+// observe learns from the user's completed edit of the inserted text, in
+// the field and at the place it was pasted, until a send, a focus change,
+// an undo, a change nobody typed, a new dictation (stop) or the deadline.
+func (c *Controller) observe(ctx context.Context, stop context.CancelFunc, r *run, s config.Settings, inserted string, target *macos.Target) {
 	defer r.release()
 	defer target.Release()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(max(s.ObserveSeconds, 5))*time.Second)
+	defer stop()
+	ctx, cancel := context.WithTimeout(ctx, time.Duration(max(s.ObserveSeconds, 5))*time.Second)
 	defer cancel()
-	revised, status := dict.Observe(ctx, inserted, target.ReadValue)
+	b := target.Binding()
+	span := dict.Span{Inserted: inserted, Before: b.Before, BeforeKnown: b.Known, Prefix: b.Prefix, Suffix: b.Suffix, Exact: b.Exact}
+	revised, status := dict.ObserveSpan(ctx, span, func() dict.Sample {
+		v := target.Sample()
+		return dict.Sample{Value: v.Value, Readable: v.Readable, Focused: v.Focused, Input: v.Input, Undo: v.Undo,
+			Composing: v.Composing, CompositionKnown: v.CompositionKnown}
+	})
 	if c.markPrivate(r, s, target.BundleID) {
 		return
 	}

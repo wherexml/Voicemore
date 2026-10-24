@@ -44,6 +44,11 @@ var (
 	cgEventPost                 func(tap uint32, event uintptr)
 	cgPreflightListenEvent      func() bool
 	cgRequestListenEvent        func() bool
+
+	cgEventSourceSecondsSinceLastEventType func(state int32, typ uint32) float64
+	cgEventSourceKeyState                  func(state int32, key uint16) bool
+	cgEventSourceFlagsState                func(state int32) uint64
+	axCopyParameterizedAttributeValue      func(element, attribute, parameter uintptr, value *uintptr) int32
 )
 
 const frameworks = "/System/Library/Frameworks/"
@@ -99,6 +104,10 @@ func load() error {
 		purego.RegisterLibFunc(&cgEventPost, cg, "CGEventPost")
 		purego.RegisterLibFunc(&cgPreflightListenEvent, cg, "CGPreflightListenEventAccess")
 		purego.RegisterLibFunc(&cgRequestListenEvent, cg, "CGRequestListenEventAccess")
+		purego.RegisterLibFunc(&cgEventSourceSecondsSinceLastEventType, cg, "CGEventSourceSecondsSinceLastEventType")
+		purego.RegisterLibFunc(&cgEventSourceKeyState, cg, "CGEventSourceKeyState")
+		purego.RegisterLibFunc(&cgEventSourceFlagsState, cg, "CGEventSourceFlagsState")
+		purego.RegisterLibFunc(&axCopyParameterizedAttributeValue, as, "AXUIElementCopyParameterizedAttributeValue")
 	})
 	return loadErr
 }

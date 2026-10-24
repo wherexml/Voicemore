@@ -9,6 +9,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"time"
 	"voiceinput/internal/config"
 )
 
@@ -111,6 +112,32 @@ type InsertResult struct {
 	// Nonzero only after exact full-value and UTF-16 caret readback.
 	PasteConfirmedMs   int64
 	ClipboardRestoreMs int64
+}
+
+// PasteBinding is a field read just before a paste into it.
+type PasteBinding struct {
+	Before string
+	Known  bool // Before was read
+	// Prefix and Suffix are Before on either side of the selection the
+	// paste replaces; Exact says that selection was read.
+	Prefix, Suffix string
+	Exact          bool
+}
+
+// InputSample is one read of a target field for edit observation.
+type InputSample struct {
+	Value    string
+	Readable bool
+	// Focused says the field has the keyboard in the frontmost app.
+	Focused bool
+	// Input is the latest physical key or mouse press; zero when unknown,
+	// which observation treats as not manual.
+	Input time.Time
+	// Undo says Command-Z was held at the read.
+	Undo bool
+	// Composing says marked (uncommitted) input-method text is in the field;
+	// CompositionKnown says the field exposes its marked range at all.
+	Composing, CompositionKnown bool
 }
 
 // Application identifies a selectable running desktop client.
