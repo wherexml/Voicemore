@@ -20,6 +20,7 @@ type Target struct {
 	pid      int32
 	app      objc.ID // NSRunningApplication, retained
 	element  uintptr // AXUIElement, retained; 0 when the app exposed none
+	paste    PasteBinding
 }
 
 // focusedElement returns the element with the keyboard focus in an app,
@@ -168,27 +169,15 @@ func pasteValue(el uintptr) (string, bool) {
 	return s, len(s) <= 65536
 }
 
-func expectedPaste(el uintptr, text string) (string, int64, bool) {
-	before, ok := pasteValue(el)
-	if !ok {
+// expectedPaste is the field a paste into the bound selection must leave,
+// and the UTF-16 caret after it. The binding comes from pasteBinding.
+func expectedPaste(b PasteBinding, text string) (string, int64, bool) {
+	if !b.Exact {
 		return "", 0, false
 	}
-	r, ok := selectedPasteRange(el)
-	u, inserted := utf16.Encode([]rune(before)), utf16.Encode([]rune(text))
-	if !ok || r.location < 0 || r.length < 0 || r.location > int64(len(u)) || r.length > int64(len(u))-r.location {
-		return "", 0, false
-	}
-	end := r.location + r.length
-	// Reject a range cutting a surrogate pair rather than changing its text.
-	boundary := func(i int64) bool {
-		return i == 0 || i == int64(len(u)) || !(u[i-1] >= 0xd800 && u[i-1] <= 0xdbff && u[i] >= 0xdc00 && u[i] <= 0xdfff)
-	}
-	if !boundary(r.location) || !boundary(end) {
-		return "", 0, false
-	}
-	next := append(append(append([]uint16(nil), u[:r.location]...), inserted...), u[end:]...)
-	expected := string(utf16.Decode(next))
-	return expected, r.location + int64(len(inserted)), expected != before
+	expected := b.Prefix + text + b.Suffix
+	caret := int64(len(utf16.Encode([]rune(b.Prefix + text))))
+	return expected, caret, expected != b.Before
 }
 
 // pasteMenuEnabled supports custom editors (including Qt/WeChat) which do
@@ -386,8 +375,13 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 		canPaste = canPaste && frontmostPID() == current.pid
 		if canPaste {
 			saved = saveClipboard()
+			// The observer binds to this exact field and selection, read before
+			// the paste, rather than to wherever the text appears afterwards.
+			if current.element != 0 {
+				current.paste = pasteBinding(current.element)
+			}
 			if res.FocusVerified && sendKey == "" && o.RestoreDelayMs <= 600 {
-				expected, caret, verifyPaste = expectedPaste(cur, text)
+				expected, caret, verifyPaste = expectedPaste(current.paste, text)
 			}
 		}
 		pb := pasteboard()

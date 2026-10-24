@@ -76,3 +76,6 @@ func (t *Target) StillSelected() bool { return false }
 func StartCaptureFromWithOutputMute(string, func([]byte), bool) (*Capture, error) {
 	return nil, errUnsupported
 }
+
+func (t *Target) Binding() PasteBinding { return PasteBinding{} }
+func (t *Target) Sample() InputSample   { return InputSample{} }
