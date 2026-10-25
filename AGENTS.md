@@ -115,3 +115,5 @@
 - 词典去说明、重复词与旧片段误过滤回归、前后对比的实际改善和未解决边界见[词典复验](docs/public/DICTIONARY.md#去说明与前后对比复验2026-10-24)。
 
 - 语音写入后手动纠正的选区绑定、焦点/输入法来源门槛与真实输入框验收见[词典修改观察](docs/public/DICTIONARY.md#修改观察)；原生入口为 `scripts/verify-manual-edits.sh`。
+
+- 失败音频直接重新转写、最新版本正文与无固定录音时限、任务续租及回放验收见[云端 ASR](internal/cloudasr/README.md#长录音与失败历史重试2026-10-25)。

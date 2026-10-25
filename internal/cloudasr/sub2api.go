@@ -181,7 +181,6 @@ type sub2Stream struct {
 	err        error
 	result     *asr.ProcessedResult
 	carry      []byte // Send and Finish have one writer, as required by asr.Stream.
-	total      int
 	lastSend   time.Time
 	asrFinalAt time.Time
 }
@@ -283,10 +282,6 @@ func (s *sub2Stream) send(ctx context.Context, b []byte) error {
 	return nil
 }
 func (s *sub2Stream) Send(ctx context.Context, pcm []byte) error {
-	s.total += len(pcm)
-	if s.total > 180*32000 {
-		return errors.New("sub2api recordings must be at most 180 seconds")
-	}
 	s.carry = append(s.carry, pcm...)
 	for len(s.carry) >= 6400 {
 		if e := s.send(ctx, s.carry[:6400]); e != nil {

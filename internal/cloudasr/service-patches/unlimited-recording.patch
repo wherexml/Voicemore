@@ -1,0 +1,221 @@
+--- a/config.go
++++ b/config.go
+@@ -153,7 +153,7 @@
+ 	if p < 10000 || p > 65535 {
+ 		return nil, errors.New("five digit port required")
+ 	}
+-	if c.MaxSeconds < 1 || c.MaxSeconds > 300 || c.MaxConcurrent < 1 || c.MaxConcurrent > 50 || len(c.GroupIDs) == 0 || c.CleanupAccountID < 1 || c.PriceVersion == "" {
++	if c.MaxSeconds < 0 || c.MaxConcurrent < 1 || c.MaxConcurrent > 50 || len(c.GroupIDs) == 0 || c.CleanupAccountID < 1 || c.PriceVersion == "" {
+ 		return nil, errors.New("invalid limits or routing")
+ 	}
+ 	for _, v := range []string{c.ASRURL, c.CleanupURL} {
+--- a/server.go
++++ b/server.go
+@@ -2,6 +2,8 @@
+ 
+ import (
+ 	"context"
++	"crypto/sha256"
++	"encoding/hex"
+ 	"encoding/json"
+ 	"errors"
+ 	"log"
+@@ -104,7 +106,7 @@
+ 		sendError(w, e)
+ 		return
+ 	}
+-	r.Body = http.MaxBytesReader(w, r.Body, int64(s.cfg.MaxSeconds)*32000+(1<<20))
++	r.Body = http.MaxBytesReader(w, r.Body, s.uploadLimit()+(1<<20))
+ 	media, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+ 	var data []byte
+ 	kind := media
+@@ -126,7 +128,7 @@
+ 			return
+ 		}
+ 		defer file.Close()
+-		data, e = readLimited(file, int64(s.cfg.MaxSeconds)*32000+65536)
++		data, e = readLimited(file, s.uploadLimit()+65536)
+ 		if e != nil {
+ 			sendError(w, e)
+ 			return
+@@ -136,7 +138,7 @@
+ 			kind = "audio/pcm"
+ 		}
+ 	} else {
+-		data, e = readLimited(r.Body, int64(s.cfg.MaxSeconds)*32000+65536)
++		data, e = readLimited(r.Body, s.uploadLimit()+65536)
+ 		if e != nil {
+ 			sendError(w, e)
+ 			return
+@@ -158,8 +160,9 @@
+ 		sendJSON(w, j.Response, j.HTTPStatus, true)
+ 		return
+ 	}
+-	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(s.cfg.MaxSeconds+60)*time.Second)
++	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(len(audio)/32000+60)*time.Second)
+ 	defer cancel()
++	go s.renewLease(ctx, cancel, j)
+ 	ar, e := s.recognize(ctx, j, audio, nil)
+ 	lastAudio := ar.LastAudio
+ 	if e != nil {
+@@ -203,7 +206,11 @@
+ 	}
+ 	defer c.CloseNow()
+ 	c.SetReadLimit(128 << 10)
+-	ctx, cancel := context.WithTimeout(r.Context(), time.Duration(s.cfg.MaxSeconds+60)*time.Second)
++	ctx, cancel := context.WithCancel(r.Context())
++	if s.cfg.MaxSeconds > 0 {
++		cancel()
++		ctx, cancel = context.WithTimeout(r.Context(), time.Duration(s.cfg.MaxSeconds+60)*time.Second)
++	}
+ 	defer cancel()
+ 	var mu sync.Mutex
+ 	write := func(v any) error {
+@@ -262,6 +269,7 @@
+ 		}(), "result": result, "replayed": true})
+ 		return
+ 	}
++	go s.renewLease(ctx, cancel, j)
+ 	j.TextOptions = init.TextOptions
+ 	if e = write(map[string]any{"type": "accepted", "id": key, "job_id": j.ID, "text_options_digest": init.TextOptions.digest()}); e != nil {
+ 		failure(j, problem(499, "CLIENT_CANCELLED"))
+@@ -274,7 +282,9 @@
+ 		return
+ 	}
+ 	defer up.conn.CloseNow()
+-	var audio, pending []byte
++	var pending []byte
++	var audioBytes int64
++	audioHash := sha256.New()
+ 	lastAudio := time.Now()
+ 	for {
+ 		readCtx, done := context.WithTimeout(ctx, 15*time.Second)
+@@ -285,11 +295,12 @@
+ 			return
+ 		}
+ 		if typ == websocket.MessageBinary {
+-			if len(b) == 0 || len(b)%2 != 0 || len(b) > 64000 || len(audio)+len(b) > s.cfg.MaxSeconds*32000 {
++			if len(b) == 0 || len(b)%2 != 0 || len(b) > 64000 || (s.cfg.MaxSeconds > 0 && audioBytes+int64(len(b)) > int64(s.cfg.MaxSeconds)*32000) {
+ 				failure(j, problem(400, "INVALID_PCM"))
+ 				return
+ 			}
+-			audio = append(audio, b...)
++			audioBytes += int64(len(b))
++			_, _ = audioHash.Write(b)
+ 			if pending != nil {
+ 				if e = up.send(ctx, pending, false); e != nil {
+ 					failure(j, e)
+@@ -309,11 +320,11 @@
+ 				failure(j, problem(499, "CLIENT_CANCELLED"))
+ 				return
+ 			}
+-			if control.Type != "finish" || len(audio) == 0 {
++			if control.Type != "finish" || audioBytes == 0 {
+ 				failure(j, problem(400, "INVALID_STREAM_CONTROL"))
+ 				return
+ 			}
+-			ah := hash(audio)
++			ah := hex.EncodeToString(audioHash.Sum(nil))
+ 			if init.AudioSHA256 != "" && ah != init.AudioSHA256 {
+ 				failure(j, problem(400, "AUDIO_HASH_MISMATCH"))
+ 				return
+@@ -326,6 +337,9 @@
+ 			break
+ 		}
+ 	}
++	// Bound finalization, never the user's recording duration.
++	finishTimer := time.AfterFunc(60*time.Second, cancel)
++	defer finishTimer.Stop()
+ 	// Continue observing disconnect/cancel while ASR and cleanup finish.
+ 	go func() { _, _, _ = c.Read(ctx); cancel() }()
+ 	var ar asrDone
+@@ -335,8 +349,8 @@
+ 		failure(j, problem(499, "CLIENT_CANCELLED"))
+ 		return
+ 	}
+-	ah := hash(audio)
+-	body, e := s.finish(ctx, a, j, ar, ah, float64(len(audio))/32000, true, start, lastAudio, emit)
++	ah := hex.EncodeToString(audioHash.Sum(nil))
++	body, e := s.finish(ctx, a, j, ar, ah, float64(audioBytes)/32000, true, start, lastAudio, emit)
+ 	if e != nil {
+ 		failure(j, e)
+ 		return
+@@ -434,3 +448,11 @@
+ 	case <-time.After(8 * time.Second):
+ 	}
+ }
++
++// Files retain a transport size guard; streaming has no total byte/time ceiling.
++func (s *Server) uploadLimit() int64 {
++	if s.cfg.MaxSeconds > 0 {
++		return int64(s.cfg.MaxSeconds) * 32000
++	}
++	return 64 << 20
++}
+--- a/store.go
++++ b/store.go
+@@ -304,3 +304,24 @@
+ 		}
+ 	}
+ }
++
++// Long recordings hold their concurrency slot while alive. Crashes release it
++// after the short renewable lease, rather than after a fixed recording limit.
++func (s *Server) renewLease(ctx context.Context, cancel context.CancelFunc, j *Job) {
++	tick := time.NewTicker(30 * time.Second)
++	defer tick.Stop()
++	for {
++		select {
++		case <-ctx.Done():
++			return
++		case <-tick.C:
++			qctx, done := context.WithTimeout(ctx, 5*time.Second)
++			_, err := s.db.ExecContext(qctx, `UPDATE voice_jobs SET deadline_at=now()+interval '90 seconds' WHERE id=$1 AND state='processing'`, j.ID)
++			done()
++			if err != nil {
++				cancel()
++				return
++			}
++		}
++	}
++}
+--- a/upstream.go
++++ b/upstream.go
+@@ -293,7 +293,7 @@
+ }
+ func pcm(data []byte, kind string, max int) ([]byte, error) {
+ 	if kind == "audio/pcm" || kind == "application/octet-stream" {
+-		if len(data) == 0 || len(data)%2 != 0 || len(data) > max*32000 {
++		if len(data) == 0 || len(data)%2 != 0 || (max > 0 && len(data) > max*32000) {
+ 			return nil, problem(400, "INVALID_PCM")
+ 		}
+ 		return data, nil
+@@ -320,7 +320,7 @@
+ 		}
+ 		i = end + n%2
+ 	}
+-	if !valid || len(audio) == 0 || len(audio)%2 != 0 || len(audio) > max*32000 {
++	if !valid || len(audio) == 0 || len(audio)%2 != 0 || (max > 0 && len(audio) > max*32000) {
+ 		return nil, problem(400, "PCM16_WAV_REQUIRED")
+ 	}
+ 	return audio, nil
+--- a/README.md
++++ b/README.md
+@@ -20,7 +20,7 @@
+ - 必须带稳定的 `Idempotency-Key`：8–128位 ASCII 字母、数字、横线或下划线。重试保持不变。
+ - `audio/pcm` 或 `application/octet-stream` 请求体：16kHz、mono、signed 16bit little endian PCM。
+ - 或 multipart `file`：同格式 WAV，`model` 为上面的固定模型名。
+-- 最长180秒。服务按实时节奏发送上游，上传文件模式总耗时含回放时长；实时使用推荐下面的 WebSocket。
++- `max_audio_seconds=0` 不设录音时长上限；HTTP 上传另设64 MiB传输保护。服务按实时节奏发送上游，上传文件模式总耗时含回放时长；实时使用推荐下面的 WebSocket。
+ 
+ ## 实时接口
+ 
+@@ -47,7 +47,7 @@
+ - WS首次可以不带预知音频哈希。若重连已有任务，不带哈希会返回409 `TASK_EXISTS_USE_RESULT_ENDPOINT`；使用GET取回，或带已知哈希重连。不会把无哈希重连当作新任务。
+ - ASR、整理、空响应、截断、取消、额度或事务失败均不扣费；失败同 ID 重放原失败，另一次主动重试使用新 ID。
+ - 结果和收费已持久提交后丢失网络响应，重试取回同一已付结果；不会再次扣费。如果数据库提交结果暂时无法确定，返回 `BILLING_STATUS_UNKNOWN`、`charged:null`，必须沿用原 ID 查询，不生成新 ID。
+-- 进程优雅中断会取消未完成任务；异常进程退出的未完成任务在租期过后标为失败且不收费，不自动重复执行。最长租期为音频时长限制+90秒。
++- 进程优雅中断会取消未完成任务；异常进程退出的未完成任务在租期过后标为失败且不收费，不自动重复执行。运行中每30秒续租90秒，失联或崩溃后过期回收。
+ 
+ ## 安全与运行
+ 

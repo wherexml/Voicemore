@@ -7,6 +7,7 @@ import (
 	"github.com/egoist/mygo/ui"
 	"math"
 	"time"
+	"voiceinput/internal/providers"
 	"voiceinput/internal/store"
 )
 
@@ -138,17 +139,27 @@ func (m *mainWindow) recordDetail(c *ui.Context, r store.Record) {
 			})
 		}
 	})
-	ui.Row(c).Gap(6).Children(func() {
-		if ui.Button(c.Key("reclean"), T("reclean")).Height(28).FontSize(12).Disabled(r.Transcript() == "" || m.busy != nil).Clicked() {
-			m.do("recleaning", func() error { return m.a.ctrl.Recleanup(r.ID, r.Transcript()) }, "versionAdded")
+	ui.Row(c).Wrap().Gap(6).Children(func() {
+		if ui.Button(c.Key("retranscribe"), T("retranscribe")).Height(28).FontSize(12).Disabled(!r.HasAudio() || m.busy != nil).Clicked() {
+			m.do("retranscribing", func() error { return m.a.ctrl.Retranscribe(r.ID) }, "versionAdded")
 		}
+		if r.VoiceTaskID != "" && r.VoiceBilling == nil {
+			if ui.Button(c.Key("recover"), T("recoverVoiceResult")).Height(28).FontSize(12).Disabled(m.busy != nil).Clicked() {
+				m.do("retranscribing", func() error { return m.a.ctrl.RecoverVoiceResult(r.ID) }, "saved")
+			}
+		}
+		base, _ := primaryText(r)
+		if ui.Button(c.Key("reclean"), T("reclean")).Height(28).FontSize(12).Disabled(base == "" || m.busy != nil || providers.ManagedVoice(m.a.settings.Get())).Clicked() {
+			m.do("recleaning", func() error { return m.a.ctrl.Recleanup(r.ID, base) }, "versionAdded")
+		}
+		raw := latestRawText(r)
 		label := T("v3CopyRaw")
 		if at, ok := m.recentCopied["raw-"+r.ID]; ok && time.Since(at) < 1500*time.Millisecond {
 			label = T("copied")
 			c.After(1500*time.Millisecond - time.Since(at))
 		}
-		if ui.Button(c.Key("copy-raw"), label).Height(28).FontSize(12).Disabled(r.RawText == "").Clicked() {
-			mygo.Clipboard.WriteText(r.RawText)
+		if ui.Button(c.Key("copy-raw"), label).Height(28).FontSize(12).Disabled(raw == "").Clicked() {
+			mygo.Clipboard.WriteText(raw)
 			if m.recentCopied == nil {
 				m.recentCopied = map[string]time.Time{}
 			}

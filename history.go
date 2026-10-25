@@ -60,15 +60,18 @@ func statusTag(c *ui.Context, r store.Record) {
 }
 
 // primaryText is the one text that matters of a record: the latest
-// revision or cleanup result, else what was inserted, else what was heard.
+// latest revision, cleanup or transcription, then the original delivered result.
 func primaryText(r store.Record) (text string, revised bool) {
 	for i := len(r.Versions) - 1; i >= 0; i-- {
-		if r.Versions[i].Kind == store.KindRevision || r.Versions[i].Kind == store.KindRecleanup {
+		if r.Versions[i].Kind == store.KindRevision || r.Versions[i].Kind == store.KindRecleanup || r.Versions[i].Kind == store.KindRetranscribe {
 			return r.Versions[i].Text, true
 		}
 	}
 	if r.InsertedText != "" {
 		return r.InsertedText, false
+	}
+	if r.CleanedText != "" && (r.CleanupRequested || r.TranslationLanguage != "") {
+		return r.CleanedText, false
 	}
 	return r.Transcript(), false
 }
@@ -376,4 +379,14 @@ func (m *mainWindow) detailView(c *ui.Context, r store.Record) {
 			m.say("notSaved", err.Error())
 		}
 	}
+}
+
+// The original record remains evidence; raw copy follows the newest ASR version.
+func latestRawText(r store.Record) string {
+	for i := len(r.Versions) - 1; i >= 0; i-- {
+		if r.Versions[i].Kind == store.KindRetranscribe {
+			return r.Versions[i].BasedOn
+		}
+	}
+	return r.RawText
 }

@@ -1377,7 +1377,7 @@ func (c *Controller) Retranscribe(id string) error {
 	if errors.Is(err, asr.ErrLanguage) {
 		return errors.New(c.tr("asrLanguageOld"))
 	}
-	if err != nil && raw == "" {
+	if err != nil && (raw == "" || providers.ManagedVoice(s)) {
 		return errors.New(c.tr("asrUnreachable", service.Label(), c.explain(err)))
 	}
 	text, applied := c.formatTranscript(strings.TrimSpace(raw), s)
