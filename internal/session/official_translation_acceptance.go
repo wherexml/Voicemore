@@ -59,7 +59,7 @@ func AcceptOfficialTranslation(base string) []map[string]any {
 			continue
 		}
 		out := []string{}
-		r := &run{id: id, started: time.Now(), ctx: ctx, stop: stop, pcm: pcm, translation: language, cleanup: false, processed: p, holdCopied: true, sink: func(t string) { out = append(out, t) }, rec: store.Record{ID: id, StartedAt: time.Now(), TranslationLanguage: language}}
+		r := &run{id: id, started: time.Now(), ctx: ctx, stop: stop, pcm: pcm, translation: language, cleanup: false, processed: p, sink: func(t string) { out = append(out, t) }, rec: store.Record{ID: id, StartedAt: time.Now(), TranslationLanguage: language}}
 		c.cur = r
 		c.view = View{Phase: Finalizing, TranslationLanguage: language}
 		c.finish(r, s, raw, nil)

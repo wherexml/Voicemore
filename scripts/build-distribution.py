@@ -4,6 +4,7 @@
 The production configuration and source runtime are not modified.
 A candidate is NOT approved for distribution until notarization and final-artifact checks pass.
 """
+import subtitle_capture
 import argparse
 import hashlib
 import json
@@ -169,6 +170,8 @@ def main():
     (source / 'internal/localasr/assets/runtime-manifest.json').write_text(descriptor)
     (source / 'resources/local-asr/runtime-manifest.json').write_text(descriptor)
     (source / 'internal/localasr/assets/runtime.sha256').write_text(runtime_hash + '\n')
+    # Built after the source inventory, from committed Swift source, so it never enters source_sha256.
+    subtitle_capture.build(source, IDENTITY, json.loads((source / 'mygo.json').read_text())['identifier'] + '.audiotap', release=True)
     config_path = source / 'mygo.json'
     config = json.loads(config_path.read_text())
     config['out'] = str(work / 'build')
@@ -190,6 +193,7 @@ def main():
     run('go', 'run', './cmd/distribution-check', '--candidate', app, cwd=ROOT)
     with (work / 'app-signature.txt').open('w') as log:
         run('codesign', '--verify', '--deep', '--strict', app, stdout=log, stderr=log)
+        subtitle_capture.verify_bundled(app)
         run('codesign', '-d', '-r-', '--verbose=4', app, stdout=log, stderr=log)
     (work / 'candidate.json').write_text(json.dumps({'status': 'signed-not-notarized', 'app': str(app), 'runtime_sha256': runtime_hash, 'runtime_archive': target.name, 'runtime_remote': True, 'runtime_asset': str(target), 'runtime_manifest': runtime_spec, 'cache_runtime_sha256': cache_runtime_hash, 'identity': IDENTITY, 'version': config['version'], 'source_sha256': inventory, 'runtime_cache_spec': spec, 'runtime_cache_hit': cached is not None}, indent=2))
     print(f'Signed candidate ready, NOT notarized or published: {app}', flush=True)

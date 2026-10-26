@@ -2,6 +2,8 @@
 
 设置 → 隐私 → 不留历史的应用。列表中的应用照常写入，但本次听写不保存历史文字和录音，也不观察修改、不产生词典候选。界面以 [mock/language-privacy.html](../../../mock/language-privacy.html) 为准；实现见 `internal/session/privacy.go`、`prefs_privacy.go`。
 
+此规则适用于听写链路；系统音频字幕的采集、翻译与手动保存范围另见[字幕隐私边界](LIVE-SUBTITLES.md#数据与隐私范围)。
+
 ## 实现前失败路径
 
 - 开始时在私密应用，结束前切到普通应用（或反过来）：只要任一端命中就整次私密，后续不能恢复为普通。

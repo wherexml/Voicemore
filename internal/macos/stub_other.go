@@ -67,7 +67,8 @@ func SetLoginItem(bool) error     { return errUnsupported }
 func OpenLoginItemsSettings()     {}
 func SetDockIcon(bool)            {}
 
-func RunningApplications() []Application { return nil }
+func RunningApplications() []Application    { return nil }
+func SelectableApplications() []Application { return nil }
 
 func WatchOutsideClicks(uintptr, func()) func() { return func() {} }
 

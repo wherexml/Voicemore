@@ -49,6 +49,37 @@ func main() {
 	st, err = config.Open(settingsDir)
 	must(err)
 	record("explicit off and single app survive reopen", len(st.Get().AutoSend.Apps) == 1 && st.Get().AutoSend.Shortcut("com.openai.chat") == "")
+	// Follow a manually added non-AI rule through the real save/reopen/startup path.
+	s = st.Get()
+	s.AutoSend.Apps = append(s.AutoSend.Apps, config.AutoSendApp{BundleID: "com.apple.TextEdit", AppName: "TextEdit", Shortcut: "inherit"})
+	must(st.Set(s))
+	st, err = config.Open(settingsDir)
+	must(err)
+	s = st.Get()
+	s.AutoSend.MigrateAIApplications()
+	record("custom application survives startup and inherits default", len(s.AutoSend.Apps) == 2 && s.AutoSend.Shortcut("com.apple.TextEdit") == "enter")
+	if len(s.AutoSend.Apps) == 2 {
+		s.AutoSend.Apps[1].Shortcut = "cmd-enter"
+	}
+	must(st.Set(s))
+	st, err = config.Open(settingsDir)
+	must(err)
+	s = st.Get()
+	s.AutoSend.MigrateAIApplications()
+	record("custom override survives restart", s.AutoSend.Shortcut("com.apple.TextEdit") == "cmd-enter")
+	record("unlisted applications stay input only", s.AutoSend.Shortcut("com.apple.Notes") == "")
+	s.AutoSend.Enabled = false
+	record("global off disables custom applications", s.AutoSend.Shortcut("com.apple.TextEdit") == "")
+	s.AutoSend.Apps = nil
+	must(st.Set(s))
+	st, err = config.Open(settingsDir)
+	must(err)
+	s = st.Get()
+	s.AutoSend.MigrateAIApplications()
+	record("deleted custom and AI applications stay deleted", len(s.AutoSend.Apps) == 0)
+	legacy := config.AutoSend{Apps: []config.AutoSendApp{{BundleID: "com.apple.Notes", Shortcut: "enter"}}}
+	legacy.MigrateAIApplications()
+	record("first legacy migration does not restore unrestricted sending", len(legacy.Apps) == len(config.AIApplicationPresets()) && legacy.Apps[0].BundleID != "com.apple.Notes")
 	var manifest struct {
 		Revision string `json:"revision"`
 		Files    []struct {

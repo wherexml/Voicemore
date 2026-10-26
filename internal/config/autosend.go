@@ -59,8 +59,8 @@ func (a AutoSend) Shortcut(bundle string) string {
 	return ""
 }
 
-// AIApplicationPresets is an explicit desktop allowlist. Never add a general
-// browser or terminal: their Bundle ID cannot identify the active AI surface.
+// AIApplicationPresets is the default desktop list. Other apps are added only
+// by the user; a Bundle ID cannot identify a browser's active AI surface.
 // IDs come from installed Info.plists and Homebrew cask application metadata.
 func AIApplicationPresets() []AutoSendApp {
 	return []AutoSendApp{
@@ -95,13 +95,14 @@ func IsAIApplication(bundle string) bool {
 }
 
 // MigrateAIApplications removes legacy unrestricted rules and adds the AI
-// catalog once. Subsequent launches preserve explicit removals and overrides.
+// catalog once. Subsequent launches preserve manually added applications,
+// explicit removals and overrides.
 func (a *AutoSend) MigrateAIApplications() bool {
 	changed := false
 	apps := make([]AutoSendApp, 0, len(a.Apps))
 	seen := map[string]bool{}
 	for _, app := range a.Apps {
-		if !IsAIApplication(app.BundleID) || seen[app.BundleID] {
+		if app.BundleID == "" || seen[app.BundleID] || (a.AICatalogVersion < 1 && !IsAIApplication(app.BundleID)) {
 			changed = true
 			continue
 		}

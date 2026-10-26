@@ -204,6 +204,8 @@ type Settings struct {
 	// it the app lives in the menu bar only. Launch at login is not kept
 	// here: macOS holds it (System Settings → Login Items).
 	ShowInDock bool `json:"showInDock"`
+	// Subtitles are the live subtitles' own settings (subtitles.go).
+	Subtitles Subtitles `json:"subtitles"`
 }
 
 const (

@@ -42,6 +42,14 @@ This copies the base Python installation and installed packages without changing
 - 正式发布默认要求 Developer ID 签名、Apple 公证与票据校验；开发调试包使用独立身份且不进入正式更新源。首次下载后的系统放行不等于签名校验通过。
 - 不把私人验收材料、密钥、配置、录音和模型权重加入 Git。大型运行环境以 Release 附件提供。
 
+## 实时字幕采集助手
+
+开发与正式候选构建都通过 `scripts/subtitle_capture.py` 编译 `internal/subtitles/capture/main.swift`，仅在隔离源码副本中生成 `resources/subtitles/VoicemoreAudioTap`，随应用放入 `Contents/Resources/subtitles/`。编译目标为 arm64/macOS 14.2；这是助手 API 的最低版本，不降低主应用的系统要求。
+
+助手使用本次应用的固定签名身份和 `<Bundle ID>.audiotap` 标识；正式候选启用 hardened runtime 与安全时间戳，开发版使用开发身份且不公证。打包后同时验证应用整体签名及助手存在和签名有效。`mygo.json` 提供 `NSAudioCaptureUsageDescription`。签名构建成功不能替代首次系统音频授权、真实采集或最终 DMG 公证校验。
+
+助手不携带 sherpa、Qwen 或说话人模型；运行环境、缺失模型与进程回收验收见[实时字幕规格](LIVE-SUBTITLES.md#安装与运行开发验收)。构建脚本的变更本身不表示已发布或安装。
+
 ## Client updates
 
 From 0.3.0, signed archives and a manifest support in-app updates. See [publishing and E2E acceptance](UPDATES.md). Development uses the pinned original v0.2.0 runtime asset on demand. Official candidate builds produce a separately signed/notarized runtime asset and embed its immutable URL, size and hash; the publisher uploads and verifies it alongside the app before exposing the release. New DMGs and update archives exclude runtime payloads.

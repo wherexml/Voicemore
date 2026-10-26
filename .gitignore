@@ -32,3 +32,14 @@ __pycache__/
 
 # Local frontend and design specifications (not distributed).
 /spec/
+
+# Local previews, visual concepts and machine-specific investigation evidence.
+/tmp/
+/website/approved/
+/website/v2/
+/website/v3/
+/website/q/
+/website/assets/hero-concepts/
+/pelican-bicycle.html
+/sky-stroll.html
+/sky-stroll-preview.png

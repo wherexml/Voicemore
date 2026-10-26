@@ -6,6 +6,7 @@
   "macos": {
     "infoPlist": {
       "NSMicrophoneUsageDescription": "Voicemore records your speech when you dictate and sends it to the speech recognition service chosen in Settings: the local one on this Mac by default, or a cloud provider you set up and select.",
+      "NSAudioCaptureUsageDescription": "Voicemore captures the audio your Mac is playing only while live subtitles are open, and recognizes it with the speech model chosen for subtitles.",
       "CFBundleIconFile": "Voicemore.icns"
     },
     "entitlements": "resources/VoiceInput.entitlements",

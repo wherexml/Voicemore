@@ -1,5 +1,9 @@
 # 开发入口
 
+Git 提交与 GitHub Release 说明使用英文，见[仓库发布文案](docs/public/DISTRIBUTION.md#repository-facing-language)。
+
+实时字幕的系统音频、同进程听写优先、说话人与保存见[字幕规格](docs/public/LIVE-SUBTITLES.md)及[模块入口](internal/subtitles/README.md)。应用搜索与焦点交接见[自动发送规格](docs/public/AUTO-SEND.md)，完成提示退场见[胶囊规格](docs/public/CAPSULE.md#完成提示统一退出2026-10-27)。
+
 遵循 [AGENTS.md](AGENTS.md)，本地 macOS 构建前读取其中链接的本机签名约定。
 
 - 模块规格与验收入口：[文档索引](docs/public/README.md)。
@@ -88,6 +92,8 @@
 - 今日图表左对齐、柱顶留白与即时 hover/键盘提示见[首页图表规格](docs/public/HOME-HISTORY.md#今日图表对齐留白与即时提示2026-10-21)。
 
 - 首页缺失权限入口使用盾牌图标与“权限不足”，点击及本地化见[首页权限提示](docs/public/HOME-HISTORY.md#首页权限提示2026-10-21)。
+
+- 听写宣传动画、中英文官网接入、合成数据边界与本地验收入口见[宣传动画](docs/public/MOCK-NAVIGATION.md#宣传动画2026-10-23)。
 
 - 词典手动替换、原子编辑、被动建议过滤与隔离原生验收见[词典规格](docs/public/DICTIONARY.md#手动配置编辑与被动建议过滤2026-10-23)。
 

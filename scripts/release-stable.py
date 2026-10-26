@@ -194,7 +194,7 @@ def main():
     checksums = stage / 'SHA256SUMS.txt'
     checksums.write_text(''.join(f'{sha(f)}  {f.name}\n' for f in (target, archive, manifest_path, *extra_assets)))
     notes_file = work / 'release-notes.md'
-    notes_file.write_text(notes + '\n\nApple Silicon / macOS 26.2+. Developer ID signed and Apple notarized, with stapled app and DMG tickets. Update archive authenticated with the existing Ed25519 key.\n\n首次安装下载 DMG，拖入 Applications。此版本已完成 Developer ID 正式签名与 Apple 公证。由开发签名旧版升级后，macOS 可能要求重新确认麦克风、辅助功能与输入监控权限。\n')
+    notes_file.write_text(notes + '\n\nApple Silicon / macOS 26.2+. Developer ID signed and Apple notarized, with stapled app and DMG tickets. Update archive authenticated with the existing Ed25519 key.\n\nFor a first-time installation, download the DMG and drag Voicemore into Applications. This release is signed with a Developer ID certificate and notarized by Apple. When upgrading from an older development-signed version, macOS may ask you to confirm microphone, Accessibility, and Input Monitoring permissions again.\n')
     head = source_commit
     if a.source_ref:
         # A concurrent main may have moved ahead. Never move it backwards or

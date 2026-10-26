@@ -74,6 +74,41 @@ func (a *app) startErrorAcceptance() {
 			check(label+" old timer preserves new recording", true)
 			onUI(func() { a.overlay.syncView(session.View{Phase: session.Idle}) })
 			time.Sleep(300 * time.Millisecond)
+			for _, tc := range []struct {
+				name string
+				view session.View
+			}{
+				{"clipboard", session.View{Phase: session.Done, Message: T("copiedFallback")}},
+				{"no speech", session.View{Phase: session.Done, Message: T("noSpeech")}},
+				{"success", session.View{Phase: session.Done}},
+				{"retained text", session.View{Phase: session.Failed, Retained: true, Text: "synthetic retained text", Message: "insertion failed"}},
+				{"cleanup failure", session.View{Phase: session.Failed, CleanupFailed: true, Text: "synthetic original", Message: "cleanup failed"}},
+				{"save failure", session.View{Phase: session.Failed, Retained: true, Text: "synthetic unsaved text", Notice: "save failed", Message: "save failed"}},
+			} {
+				onUI(func() {
+					a.overlay.syncView(session.View{Phase: session.Preparing})
+					a.overlay.syncView(tc.view)
+					a.overlay.classic = classic
+					a.overlay.place()
+				})
+				time.Sleep(2500 * time.Millisecond)
+				check(label+" "+tc.name+" still visible at 2.5s", true)
+				onUI(func() { a.overlay.syncView(tc.view) })
+				time.Sleep(time.Second)
+				check(label+" "+tc.name+" entire window hidden after 3s plus fade", false)
+				onUI(func() { a.overlay.syncView(tc.view) })
+				check(label+" "+tc.name+" late refresh stays hidden", false)
+			}
+			onUI(func() {
+				a.overlay.syncView(session.View{Phase: session.Preparing})
+				a.overlay.syncView(session.View{Phase: session.Done, Message: T("copiedFallback")})
+			})
+			time.Sleep(time.Second)
+			onUI(func() { a.overlay.syncView(session.View{Phase: session.Recording}) })
+			time.Sleep(2400 * time.Millisecond)
+			check(label+" copied timer preserves next recording", true)
+			onUI(func() { a.overlay.syncView(session.View{Phase: session.Idle}) })
+			time.Sleep(300 * time.Millisecond)
 		}
 		// Exercise the actual no-run failure path and native close dispatcher,
 		// using a separate corrupt configuration, never the Dev user's settings.

@@ -65,9 +65,9 @@ type overlay struct {
 	// when it starts, so a change of style never lands mid-dictation.
 	classic      bool
 	width        int
-	errorID      uint64
-	errorView    session.View
-	errorHidden  bool
+	noticeID     uint64
+	noticeView   session.View
+	noticeHidden bool
 	sendFinished bool // Suppress the terminal notice after a completed countdown.
 	v2           v2State
 }
@@ -97,27 +97,27 @@ func (o *overlay) sync() {
 	o.win.Update(func() { o.syncView(v) })
 }
 
-// syncView runs on the UI thread, including error notice lifetime management.
+// syncView runs on the UI thread, including terminal notice lifetime management.
 func (o *overlay) syncView(v session.View) {
-	if v.Phase != session.Failed {
-		o.errorID++
-		o.errorView = session.View{}
-		o.errorHidden = false
-	} else if v != o.errorView {
-		o.errorID++
-		o.errorView = v
-		o.errorHidden = false
-		id := o.errorID
-		time.AfterFunc(3*time.Second, func() {
+	if v.Phase != session.Failed && v.Phase != session.Done {
+		o.noticeID++
+		o.noticeView = session.View{}
+		o.noticeHidden = false
+	} else if v != o.noticeView {
+		o.noticeID++
+		o.noticeView = v
+		o.noticeHidden = false
+		id := o.noticeID
+		time.AfterFunc(session.TerminalNoticeDuration, func() {
 			o.win.Update(func() {
-				if id != o.errorID || o.v.Phase != session.Failed || o.a.quitting {
+				if id != o.noticeID || (o.v.Phase != session.Failed && o.v.Phase != session.Done) || o.a.quitting {
 					return
 				}
-				o.errorHidden = true
+				o.noticeHidden = true
 				o.hideAfterFade(nil)
 			})
 		})
-	} else if o.errorHidden {
+	} else if o.noticeHidden {
 		return
 	}
 	v = conciseFailure(v)

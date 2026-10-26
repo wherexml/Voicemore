@@ -100,6 +100,12 @@ On the second Apple Silicon Mac (macOS 26.2), Chrome downloaded the final DMG ov
 
 The exact DMG SHA-256 is `c90fd16ae149f3a6d012c9dffc299e17bbdc4f8745de408971c3309f7f1481c4`. Repeatable steps, native screenshots, browser quarantine evidence, verification logs and the publication gate report are kept locally under `artifacts/release-0.3.4/` and are not committed. The three static website language pages are updated; no production website has been deployed.
 
+## Repository-facing language
+
+Git commit subjects and bodies, and GitHub Release titles and notes, use English. Include the concrete behavior change, validation actually performed, and material limitations. Keep historical failure and unverified states intact when translating existing text; translation must not turn a proposal or local check into a deployment or release claim. This rule does not change the product's localized interface or the language of module specifications.
+
+Editing published release prose does not rebuild assets or move tags. Any explicitly requested commit-message history rewrite must preserve each commit's file tree, authorship, timestamps and parent topology, retain a recoverable local backup, and verify the expected remote tip before pushing. Preserve published release tags and artifacts so existing signatures, source inventories and release provenance remain valid.
+
 ## Finder installer presentation
 
 Both local and notarized packaging use `scripts/build-dmg.sh`; see [DMG installer specification](DMG-INSTALLER.md) for artwork, fixed-English instructions and acceptance. The shared builder preserves the signed/stapled app and refuses existing output paths. Formal signing/notarization gates remain after layout packaging.

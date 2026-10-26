@@ -2,11 +2,18 @@
 
 ## Unreleased
 
+- Add live system-audio subtitles with streaming recognition, incremental translation, optional Qwen correction, session-local speaker labels, editable assignments, and explicit session saving. Optional background work yields to dictation in the same process.
+- Allow manually adding installed applications to auto-send rules, with searchable selection and persistent per-app overrides.
+- Wait briefly for a newly focused local editor before insertion and recheck the target before dispatching paste; retain the clipboard fallback when focus changes.
+- Dismiss completed and failed capsule notices after three seconds in both styles, protecting the next session from stale timers.
+
+Subtitle models and runtimes require separate setup. These source changes are not a new release; limited development acceptance does not establish cross-process prioritization, general speaker accuracy, or unchanged dictation latency.
+
 ## 0.3.14
 
-- 官方云端服务接入个人词典热词、已确认替换规则和术语保留；每次听写冻结词典并校验服务端回执，旧服务不再静默忽略词典。
-- 配套云服务升级至1.4.2，保留原始录音、原始识别、翻译与计费协议；此次不启用二遍识别或音频增益。
-- 包含已提交的词典手动配置与编辑入口。
+- Add personal dictionary hotwords, confirmed replacement rules, and terminology preservation to the official cloud service. Each dictation freezes a dictionary snapshot and validates the server receipt; older services can no longer silently ignore the dictionary.
+- Update the companion cloud service to 1.4.2 while preserving the original audio, raw recognition results, translation, and billing protocol. This release does not enable second-pass recognition or audio gain.
+- Include the previously committed controls for manually configuring and editing dictionary entries.
 
 ## 0.3.13
 

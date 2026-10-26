@@ -66,6 +66,8 @@ type app struct {
 	keyErr     string // why the key is not in the encrypted credential store, if it is not
 
 	prefs *prefsWindow
+	// subtitles is the live subtitle window, made when first opened (subtitles.go).
+	subtitles *subtitleWindow
 	// onboard is the first-run guide, a window of its own (onboarding.go).
 	onboard *onboardWindow
 }
@@ -277,6 +279,8 @@ func (a *app) ready() {
 	note("fileDict", err)
 	a.applyLanguage()
 	appearance = a.settings.Get().Appearance // light, dark, or the system's (theme.go)
+	// The dev-only subtitle fixture opens its window once the app is up.
+	defer a.openSubtitleFixture()
 
 	a.ctrl = &session.Controller{Settings: a.settings, History: a.history, Dict: a.dict}
 	a.ctrl.CopyText = func(s string) { mygo.Clipboard.WriteText(s) }
@@ -324,6 +328,7 @@ func (a *app) ready() {
 	mygo.App.OnActivate(func(bool) { a.main.show() })
 	mygo.App.OnSecondInstance(func([]string, string) { mygo.RunOnMain(a.main.show) })
 	a.ctrl.OnChange = func() {
+		noteDictationPhase(a.ctrl.View().Phase) // live subtitles yield optional work to dictation
 		a.overlay.sync()
 		a.main.refresh()
 		a.onboard.refresh() // its first-dictation step follows the dictation
@@ -528,7 +533,9 @@ func (a *app) purge() {
 // toggles. A failure is kept for the window to show; no other key is
 // taken in its place, and no system setting is changed.
 func (a *app) bindTrigger() {
-	if os.Getenv("VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE") != "" {
+	// Native acceptance runs bind no global trigger: send preview, and the
+	// subtitle fixture or live runs (subtitles.go), which must not take Fn.
+	if os.Getenv("VOICE_INPUT_SEND_PREVIEW_ACCEPTANCE") != "" || subtitlesAcceptance() {
 		return
 	}
 	a.triggerGeneration++

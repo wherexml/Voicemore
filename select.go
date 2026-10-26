@@ -1,6 +1,10 @@
 package main
 
-import "github.com/egoist/mygo/ui"
+import (
+	"strings"
+
+	"github.com/egoist/mygo/ui"
+)
 
 // selectOption separates a stable value from its localized text and optional
 // application/provider presentation. All settings pickers share this control.
@@ -12,9 +16,10 @@ type selectOption struct {
 
 // selectPresentation lets compact toolbar buttons share the settings picker panel.
 type selectPresentation struct {
-	Trigger    func(bool) ui.Element
-	MenuWidth  float32
-	MenuHeight float32
+	Trigger           func(bool) ui.Element
+	MenuWidth         float32
+	MenuHeight        float32
+	SearchPlaceholder string
 }
 
 func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholder string, width float32, disabled bool, opts []selectOption, onChange func(string), presentation ...selectPresentation) {
@@ -78,6 +83,9 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 		}
 		*open = !*open
 		p.pickFocus[id] = *open
+		if *open && style.SearchPlaceholder != "" {
+			*p.draft("select-search-"+id, "") = ""
+		}
 	}
 	for _, key := range []ui.Key{ui.KeyDown, ui.KeyUp} {
 		trigger.OnShortcut(0, key, func() {
@@ -89,6 +97,9 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 				}
 				*open = true
 				p.pickFocus[id] = true
+				if style.SearchPlaceholder != "" {
+					*p.draft("select-search-"+id, "") = ""
+				}
 			}
 		})
 	}
@@ -99,8 +110,49 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 			return
 		}
 		panel.Margin(6, 0, 0, 0).Padding(5).Radius(12).Width(max(160, trigger.Bounds().W, style.MenuWidth)).Background(t.Background).Border(1, settingsGroupLine(c)).Shadow(0, 12, 34, 0, ui.RGBA(30, 38, 48, .12))
+		query := ""
+		searchFocused, searchDown, searchUp := false, false, false
+		if style.SearchPlaceholder != "" {
+			draft := p.draft("select-search-"+id, "")
+			in := ui.TextInput(c.Key(id+"-search"), draft).Placeholder(style.SearchPlaceholder).Label(style.SearchPlaceholder).FillWidth().Height(36).Margin(3, 3, 6).FontSize(13).Radius(8).Border(1, settingsGroupLine(c))
+			if p.pickFocus[id] {
+				p.pickFocus[id] = false
+				in.Focus()
+			}
+			searchFocused = in.Focused()
+			searchDown, searchUp = in.Shortcut(0, ui.KeyDown), in.Shortcut(0, ui.KeyUp)
+			query = strings.ToLower(strings.TrimSpace(*draft))
+			filtered := make([]selectOption, 0, len(opts))
+			for _, o := range opts {
+				if strings.Contains(strings.ToLower(o.Label), query) || strings.Contains(strings.ToLower(o.Value), query) {
+					filtered = append(filtered, o)
+				}
+			}
+			opts = filtered
+			chosen = -1
+			for i, o := range opts {
+				if !o.Action && (o.Value == value || o.Selected) {
+					chosen = i
+					break
+				}
+			}
+			if in.Submitted() {
+				for _, o := range opts {
+					if !o.Disabled {
+						*open = false
+						trigger.Focus()
+						onChange(o.Value)
+						return
+					}
+				}
+			}
+		}
 		if len(opts) == 0 {
-			ui.Text(c, T("selectEmpty")).FontSize(12).TextColor(t.TextMuted).Padding(12, 10)
+			empty := "selectEmpty"
+			if query != "" {
+				empty = "selectNoMatches"
+			}
+			ui.Text(c, T(empty)).FontSize(12).TextColor(t.TextMuted).Padding(12, 10)
 			return
 		}
 		handles := p.pickHandles[id]
@@ -125,33 +177,33 @@ func (p *prefsWindow) standardSelect(c *ui.Context, id, label, value, placeholde
 			}
 		}
 		switch {
-		case c.Shortcut(0, ui.KeyDown):
+		case searchDown || c.Shortcut(0, ui.KeyDown):
 			if focused < 0 {
 				move(max(0, chosen), 1)
 			} else {
 				move(focused+1, 1)
 			}
-		case c.Shortcut(0, ui.KeyUp):
+		case searchUp || c.Shortcut(0, ui.KeyUp):
 			if focused < 0 {
 				move(max(0, chosen), 1)
 			} else {
 				move(focused-1, -1)
 			}
-		case c.Shortcut(0, ui.KeyHome):
+		case !searchFocused && c.Shortcut(0, ui.KeyHome):
 			move(0, 1)
-		case c.Shortcut(0, ui.KeyEnd):
+		case !searchFocused && c.Shortcut(0, ui.KeyEnd):
 			move(len(opts)-1, -1)
 		}
 		menuHeight := style.MenuHeight
 		if menuHeight <= 0 {
 			menuHeight = 330
 		}
-		ui.Scroll(c).MaxHeight(menuHeight).Gap(1).Children(func() {
+		ui.Scroll(c.Key(id + "-results-" + query)).MaxHeight(menuHeight).Gap(1).Children(func() {
 			for i, o := range opts {
 				if o.Action && i > 0 && !opts[i-1].Action {
 					ui.Box(c).FillWidth().Height(1).Margin(4, 5).Background(settingsGroupLine(c))
 				}
-				if o.Group != "" && (i == 0 || opts[i-1].Group != o.Group) {
+				if o.Group != "" && style.SearchPlaceholder == "" && (i == 0 || opts[i-1].Group != o.Group) {
 					ui.Text(c, o.Group).FontSize(12).FontWeight(500).TextColor(faintText(t)).Padding(7, 10)
 				}
 				row := ui.ButtonBase(c.Key(o.Value)).FillWidth().MinHeight(38).Padding(9, 10).Gap(10).Radius(8).AlignItems(ui.Center).Label(o.Label).Disabled(o.Disabled).Bind(&handles[i])

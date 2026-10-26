@@ -60,6 +60,7 @@ type prefsWindow struct {
 	remoteApps []macos.Application
 	autoApps   []macos.Application
 	autoAppsAt time.Time
+	sendApps   []macos.Application // installed/running candidates; separate from privacy
 	mics       []macos.InputDevice
 	micsAt     time.Time // when mics was read: microphones come and go
 
@@ -144,6 +145,7 @@ func (p *prefsWindow) visible() bool { return p != nil && p.win != nil && p.win.
 
 // open shows the settings, at a category when one is named.
 func (p *prefsWindow) open(category string) {
+	p.sendApps = nil
 	if category != "" {
 		p.dlgOpen, p.addOpen = false, false
 		p.cat = category
@@ -274,6 +276,7 @@ var categories = []struct {
 	{"general", "gGeneral", icSliders},
 	{"models", "gModels", icSparkle},
 	{"dictation", "catDictation", icKeyboard},
+	{"subtitles", "catSubtitles", icSubtitles},
 	{"output", "catOutput", icPencil},
 	{"perms", "gPerms", icShield},
 	{"privacy", "gPrivacy", icLock},
@@ -328,6 +331,7 @@ func (p *prefsWindow) view(c *ui.Context) {
 					}
 					if row.Clicked() {
 						p.cancelShortcut()
+						p.sendApps = nil
 						p.cat = cat.id
 						p.status = nil
 					}
@@ -356,6 +360,8 @@ func (p *prefsWindow) view(c *ui.Context) {
 						p.remoteInput(c)
 					case "privacy":
 						p.privacy(c)
+					case "subtitles":
+						p.subtitleSettings(c)
 					default:
 						p.general(c)
 					}

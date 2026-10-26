@@ -12,6 +12,11 @@
 
 ## 模块规格
 
+- Git 提交标题、正文与 GitHub Release 说明统一使用英文，见[仓库发布文案](docs/public/DISTRIBUTION.md#repository-facing-language)。
+
+- 实时字幕的系统音频、独立设置、同进程听写优先、说话人与保存边界见[字幕规格](docs/public/LIVE-SUBTITLES.md)；实现分层见[模块入口](internal/subtitles/README.md)。
+- 自动发送的应用搜索、迁移与跨应用焦点交接见[自动发送规格](docs/public/AUTO-SEND.md)；完成与失败提示统一 3 秒退场见[胶囊规格](docs/public/CAPSULE.md#完成提示统一退出2026-10-27)。
+
 - 设置窗口默认居中 820×680 DIP，全屏按钮灰色禁用，不恢复旧最大化状态；边缘缩放和原生复验见[设置窗口规格](docs/public/HOME-HISTORY.md#设置窗口尺寸与窗口按钮)。
 
 - 本地 ASR 自定义与调参先查 [Qwen3-ASR 能力、参数及接入边界](docs/public/QWEN3-ASR-CUSTOMIZATION.md)。
@@ -109,6 +114,8 @@
 - 官方翻译的任务语言、回执与服务先行部署见[翻译规格](docs/public/TRANSLATION.md#翻译独立发布范围2026-10-23)；启动前错误关闭见[胶囊规格](docs/public/CAPSULE.md#启动前错误关闭2026-10-22)。
 
 - 首页立即听写与启动交接保护见[首页规格](docs/public/HOME-HISTORY.md#首页听写立即开始2026-10-23)。
+
+- 听写宣传动画、中英文官网接入、合成数据边界与本地验收入口见[宣传动画](docs/public/MOCK-NAVIGATION.md#宣传动画2026-10-23)。
 
 - 词典手动替换、原子编辑、被动建议过滤与隔离原生验收见[词典规格](docs/public/DICTIONARY.md#手动配置编辑与被动建议过滤2026-10-23)。
 

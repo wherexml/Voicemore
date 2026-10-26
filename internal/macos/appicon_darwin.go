@@ -3,11 +3,18 @@
 package macos
 
 import (
+	"github.com/ebitengine/purego"
 	"github.com/ebitengine/purego/objc"
 	"os"
 	"path/filepath"
+	"sync"
 	"unsafe"
 )
+
+var iconDrawing struct {
+	sync.Once
+	draw func(objc.ID, objc.SEL, dragRect, dragRect, uint64, float64)
+}
 
 // AppIconPNG returns the system application icon, without Dock badges.
 // Old records resolve only an unambiguous running application name.
@@ -59,11 +66,34 @@ func AppIconPNG(bundleID, name string) (out []byte) {
 		if icon == 0 {
 			return
 		}
-		data := objc.Send[objc.ID](icon, sel("TIFFRepresentation"))
-		if data == 0 {
+		// Render only the 2x pixels needed for a 20-DIP icon. Serializing all
+		// NSImage representations expands large icon catalogs into gigabytes.
+		iconDrawing.Do(func() {
+			lib, err := purego.Dlopen("/usr/lib/libobjc.A.dylib", purego.RTLD_LAZY|purego.RTLD_GLOBAL)
+			if err != nil {
+				return
+			}
+			addr, err := purego.Dlsym(lib, "objc_msgSend")
+			if err == nil {
+				purego.RegisterFunc(&iconDrawing.draw, addr)
+			}
+		})
+		if iconDrawing.draw == nil {
 			return
 		}
-		rep := objc.Send[objc.ID](class("NSBitmapImageRep"), sel("imageRepWithData:"), data)
+		rep := class("NSBitmapImageRep").Send(sel("alloc")).Send(sel("initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bytesPerRow:bitsPerPixel:"), uintptr(0), 40, 40, 8, 4, true, false, nsString("NSDeviceRGBColorSpace"), 160, 32)
+		if rep == 0 {
+			return
+		}
+		defer rep.Send(sel("release"))
+		ctx := class("NSGraphicsContext").Send(sel("graphicsContextWithBitmapImageRep:"), rep)
+		if ctx == 0 {
+			return
+		}
+		class("NSGraphicsContext").Send(sel("saveGraphicsState"))
+		class("NSGraphicsContext").Send(sel("setCurrentContext:"), ctx)
+		iconDrawing.draw(icon, sel("drawInRect:fromRect:operation:fraction:"), dragRect{S: dragSize{40, 40}}, dragRect{}, 1, 1)
+		class("NSGraphicsContext").Send(sel("restoreGraphicsState"))
 		png := objc.Send[objc.ID](rep, sel("representationUsingType:properties:"), uint64(4), objc.Send[objc.ID](class("NSDictionary"), sel("dictionary")))
 		if png == 0 {
 			return

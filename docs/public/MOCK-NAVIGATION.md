@@ -22,8 +22,9 @@ python3 -m http.server 38127 --bind 127.0.0.1 --directory mock
 | 识别语言 · 私密应用 | `language-privacy.html` |
 | 开始使用 | `onboarding-v6.html` |
 | 模型选择 | `onboarding-model-v2.html` |
-| 官网 · 模型与服务 | `website/index.html#models`（蓝色方案，简繁英） |
-| 官网 · 文案 V2 | `website-v2/index.html`（独立文案方案，简繁英） |
+| 宣传动画 | `promo-demo/index.html`（听写 → 整理 → 输入，独立网页演示） |
+| 官网 · 最终版 | `website-v3/index.html`（V3 深夜声场，简繁英；`website/` 同指此版） |
+| 官网旧稿 | `archive/website-2026-10-27/`（蓝色 approved、文案 V2、Q 及候选主视觉，2026-10-27 归档） |
 | 连续胶囊状态 | `capsule-states-v2.html?tidy=1&autoSend=1` |
 | 独立交互 V2 | `interaction-v2/index.html` |
 | 组件画廊 | `component-gallery/index.html`（17 类；单组件 `?solo=1#capsule`） |
@@ -131,8 +132,48 @@ Mac 复核统一快捷键修饰键的序列，避免与默认快捷键重复但�
 
 本轮浏览器 18 项检查通过，截图和结果在 `artifacts/mock-sync-20261023/`；可重跑 `ego-browser nodejs < artifacts/mock-sync-20261023/verify-final.mjs`。首次脚本因胶囊按钮选择器匹配两项中断，修正为带 aria-label 的按钮后续跑通过；导航首次读到浏览器旧缓存，刷新后确认新增入口。保留首次脚本与续跑脚本。此证据仅覆盖 HTML Mock，不代表原生或生产验收。原本在其他任务中更新的首页立即听写逻辑保持不变。
 
+## 宣传动画（2026-10-23）
+
+`mock/promo-demo/index.html` 是独立、可重播的 Voicemore 功能宣传动画，沿用官网蓝色、现有图标与连续胶囊表现。分镜为 Fn 激活、听写、文字整理、输入结果；合成示例仅改变页面状态，不录音、不请求模型、不操作系统输入或发送。保留共享返回导航，不替换原官网和胶囊稿。
+
+来源、分镜、失败场景与可调参数见本地 `mock/promo-demo/spec.md`；本轮验收状态和重复步骤见 `artifacts/promo-demo-20261023/acceptance.md`。页面和证据均留本机，不随 Git 发布；网页效果不代表原生业务验收。
+
+宣传动画第二轮按当前胶囊稿复用五条波形与实心整理星芒：转录、写入显示短条，星芒仅用于整理；总时长 7.1 秒，5.1 秒完成写入。状态文字按变化更新，沿用胶囊文字交叠。定向验收与本机帧间隔采样见 `artifacts/promo-demo-20261023/revision-2/`，不代表跨设备帧率保证。
+
+英文宣传动画入口为 `promo-demo/en.html`，标题为 “Think it. Say it. Done.”，与中文版共享 7.1 秒时间轴、图标和播放控制；合成示例、状态和按钮使用英语，长标签保留完整宽度。共享返回组件按文档语言显示英文。验收记录位于 `artifacts/promo-demo-20261023/english/`。
+
+### 官网接入（2026-10-23）
+
+以下 `website/...` 为统一 Mock 服务中的预览路由，对应本机 `website/approved/`，不指 Git 已跟踪的根 `website/index.html`。`approved/`、`v2/`、`v3/`、`q/` 及 `assets/hero-concepts/` 均按本地预览约定忽略；提交这些规格不等于发布网站代码或部署。
+
+当前蓝色官网的 `website/index.html#demo` 与 `website/en.html#demo` 已接入中英文宣传动画，替换原听写展示。独立宣传页仍保留。官网本机代码位于 `website/approved/`，动画副本及嵌入样式在 `demos/promo/`；通过 `scripts/sync-promo.py` 从独立稿刷新，资源不依赖 Mock 路径。新增演示保留暂停/重播与 7.1 秒节奏；语言切换保持动画锚点。浏览器结果与重复步骤：`artifacts/website-promo-20261023/acceptance.md`。本轮只做本地接入，未部署，繁体动画未新增。
+
+2026-10-23 官网动画融合：中英文 `#demo` 使用透明嵌入层与深蓝编辑器；识别正文紧贴状态放在同一胶囊内，以分隔线隔开，随文字测量展开，长句显示末尾，整理淡化、写入收拢。共享独立稿同步胶囊结构，仍保留独立浅色主题。对照 `capsule-states-v2.html` 与用户截图；新证据见 `artifacts/website-promo-20261023/blue-inline/`。
+
+2026-10-23 胶囊文字裁切修订：宣传组件在40px外壳以及22px状态槽、20px正文槽分别约束绘制边界；中英文过渡与窄屏全阶段复验见 `artifacts/website-promo-20261023/text-containment/`。当前蓝色官网三语言导航顺序统一为 EN、简、繁。
+
+2026-10-23 官网自动发送案例：`website/{index,en}.html#scene-send` 的取消窗口改为1.5秒，`#auto-send-card` 复用同一 `demos/capsule.html` 场景的compact布局，统一靛蓝胶囊、Esc、圆环、发送与退场。仅官网合成示例，未改原生客户端默认2秒。验收：`artifacts/website-send-1500/`。
+
+### 蓝色背景流动（2026-10-23）
+
+三语言共用两层低对比度蓝色渐变，以28秒/37秒交错往返，使用 transform 移动；首尾蓝色光晕恢复24秒/31秒缓动。后台标签暂停，首尾光晕离屏暂停，减少动态效果时静止。无新增文案或布局改动，仅本机官网预览。
+
+本轮 Chrome 英文页面截图与两次实际变换采样确认流动、无横向溢出；Ego 简繁页样式、390px宽度和减少动态效果检查通过。Ego 英文页读取旧样式且截图超时，保留失败记录，不作为通过证据。结果、截图和复验脚本：`artifacts/website-flow-20261023/`。复验打开三语言 `#more-abilities`，观察缓慢流动，切至减少动态效果应停止，再检查390px无页面横向溢出。
+
 ## 词典规则编辑（2026-10-23）
 
-`dictionary-rules.html` 为本轮手动词条/规则、上下文和编辑/取消的独立草稿，已接入统一导航与共享返回入口。旧完整词典仍保留在 `auto-send.html#dictionary`，不能把它的旧手动添加入口当作本轮实现。原生生产行为与验收见 [词典规格](DICTIONARY.md#手动配置编辑与被动建议过滤2026-10-23)。
+`dictionary-rules.html` 为手动词条/规则、上下文和编辑/取消的独立草稿，已接入统一导航与共享返回入口。旧完整词典仍保留在 `auto-send.html#dictionary`。原生行为见[词典规格](DICTIONARY.md#手动配置编辑与被动建议过滤2026-10-23)。
 
 词典去说明复验（2026-10-24）：新规则稿及旧 `auto-send.html#dictionary` 均不显示「将添加为词汇提示」；旧页面同步去掉关联的无障碍说明引用。当前原生行为与成对质量结果见 [词典复验](DICTIONARY.md#去说明与前后对比复验2026-10-24)。
+
+## 实时双语字幕（2026-10-24）
+
+`live-subtitles/index.html` 为系统音频英 → 简中实时字幕的独立 Mock：模拟演示背景上的可拖动深色半透明浮层，英文逐词出现后显示定稿中文，含暂停/继续、重播、关闭/重新打开、字号、不透明度与原文显隐，支持键盘操作与减少动态效果。台词为预设示例，不采集音频、不调用模型；已接入统一导航与共享返回入口。手动交互复验步骤见本地 `mock/live-subtitles/README.md`，仅代表 HTML Mock，不代表原生实现。
+
+实时字幕第二版（2026-10-24）：浮层增加右下角悬停/聚焦缩放柄（双向、键盘、视口边界，缩放不移动浮层），显示卡片改为原文/译文独立字号步进、不透明度与原文显隐。设置入口 `auto-send.html#settings/subtitles` 位于现有设置窗口，使用独立的识别模型、识别语言（本地 Qwen：中文/自动/英语；其他服务为服务默认）和翻译目标，不影响听写默认模型与翻译听写。两页偏好经 `components/live-subtitles-prefs.js` 的作用域 localStorage 同步。第一版归档于 `archive/2026-10-24/live-subtitles/`。复验步骤见本地 `mock/live-subtitles/README.md`。
+
+实时字幕记录（2026-10-24）：浮层保留本轮已到达的全部字幕并可纵向滚动，底部自动跟随，向上阅读时保持位置并提供「最新」返回按钮；仅标题栏可拖动窗口。暂停、关闭、偏好变化不清空，切换目标重译全部已到达行，重播清空。步骤见本地 `mock/live-subtitles/README.md`。
+
+## 实时字幕说话人（2026-10-25）
+
+`live-subtitles-speakers/index.html` 为同一会话内说话人编辑与保存的独立 Mock，沿用实时字幕第二版深色浮层：预设三人以上英文对话，标签晚于字幕和译文独立到达；点击标签可全部改名、仅改这一句（含新建说话人拆分误判）、全部合并与撤销，手动单句归属不被后续模拟自动结果覆盖。会话需手动保存，刷新恢复已保存会话；未保存时刷新/新建有确认。存储为本 Mock 独占的版本化键 `voicemore-mock-live-subtitles-speakers.*.v1`，不读写第二版字幕偏好，不含声纹或跨会话身份。保留缩放、历史滚动与「最新」、显示设置和共享返回入口；无录音、播放、识别/翻译接口、全局快捷键或原生交互。失败场景、复验步骤与限制见本地 `mock/live-subtitles-speakers/README.md`；第二版 `live-subtitles/` 保持不变。

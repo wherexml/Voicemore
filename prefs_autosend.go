@@ -3,7 +3,6 @@ package main
 import (
 	"github.com/egoist/mygo/ui"
 	"strconv"
-	"time"
 	"voiceinput/internal/config"
 	"voiceinput/internal/macos"
 )
@@ -59,30 +58,43 @@ func (p *prefsWindow) autoSend(c *ui.Context) {
 				}
 			})
 		}
+		apps := config.AIApplicationPresets()
+		if p.sendApps == nil {
+			p.sendApps = macos.SelectableApplications()
+		}
+		seen := map[string]bool{}
+		for _, a := range apps {
+			seen[a.BundleID] = true
+		}
+		for _, a := range p.sendApps {
+			if !seen[a.BundleID] {
+				seen[a.BundleID] = true
+				apps = append(apps, config.AutoSendApp{BundleID: a.BundleID, AppName: a.Name, Shortcut: "inherit"})
+			}
+		}
+		options := []selectOption{}
+		for _, a := range apps {
+			exists := false
+			for _, r := range s.Apps {
+				if r.BundleID == a.BundleID {
+					exists = true
+					break
+				}
+			}
+			if exists {
+				continue
+			}
+			a := a
+			options = append(options, selectOption{Value: a.BundleID, Label: a.AppName, Group: T("applications"), Content: func(c *ui.Context) { appIdentity(c, a.BundleID, a.AppName, true) }})
+		}
+		if len(options) == 0 {
+			if open := p.pickOpen["send-add"]; open != nil {
+				*open = false
+			}
+			p.pickFocus["send-add"] = false
+			return
+		}
 		ui.Row(c.Key("add")).Padding(12, 16).BorderWidth(1, 0, 0, 0).BorderColor(settingsGroupLine(c)).Children(func() {
-			if time.Since(p.autoAppsAt) > 2*time.Second {
-				p.autoApps = nil
-				for _, preset := range config.AIApplicationPresets() {
-					p.autoApps = append(p.autoApps, macos.Application{BundleID: preset.BundleID, Name: preset.AppName})
-				}
-				p.autoAppsAt = time.Now()
-			}
-			apps := p.autoApps
-			options := []selectOption{}
-			for _, a := range apps {
-				exists := false
-				for _, r := range s.Apps {
-					if r.BundleID == a.BundleID {
-						exists = true
-						break
-					}
-				}
-				if exists {
-					continue
-				}
-				a := a
-				options = append(options, selectOption{Value: a.BundleID, Label: a.Name, Group: T("applications"), Content: func(c *ui.Context) { appIdentity(c, a.BundleID, a.Name, true) }})
-			}
 			p.standardSelect(c, "send-add", T("addApplication"), "", "＋ "+T("addApplication"), 240, !s.Enabled, options, func(v string) {
 				for _, a := range apps {
 					if a.BundleID == v {
@@ -92,17 +104,17 @@ func (p *prefsWindow) autoSend(c *ui.Context) {
 									return
 								}
 							}
-							s.AutoSend.Apps = append(s.AutoSend.Apps, config.AutoSendApp{BundleID: v, AppName: a.Name, Shortcut: "inherit"})
+							s.AutoSend.Apps = append(s.AutoSend.Apps, config.AutoSendApp{BundleID: v, AppName: a.AppName, Shortcut: "inherit"})
 						})
 						break
 					}
 				}
-			})
+			}, selectPresentation{SearchPlaceholder: T("searchApplications")})
 		})
 	})
 }
 
-// Match only known Bundle IDs; localized or renamed apps never expand scope.
+// Refresh display names by exact Bundle ID; names never change rule identity.
 func (a *app) initializeAutoSendApplications() error {
 	s := a.settings.Get()
 	changed := s.AutoSend.MigrateAIApplications()

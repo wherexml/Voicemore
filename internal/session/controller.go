@@ -26,6 +26,9 @@ import (
 
 type Phase int
 
+// TerminalNoticeDuration is shared by completed and failed capsule notices.
+const TerminalNoticeDuration = 3 * time.Second
+
 const (
 	Idle Phase = iota
 	Preparing
@@ -133,17 +136,12 @@ type run struct {
 	viaHold         bool
 	cleanup         bool
 	processed       *asr.ProcessedResult
-	// holdCopied keeps "copied to the clipboard" up until it is dismissed,
-	// as the V2 capsule has it; the classic one hides it after a while.
-	// Read from the settings when the dictation starts.
-	holdCopied bool
-
-	pcm     []byte
-	more    chan struct{} // signals new samples to the sender
-	stopAt  time.Time
-	finalAt time.Time
-	firstMs int64
-	text    string // the transcript after the dictionary's rules
+	pcm             []byte
+	more            chan struct{} // signals new samples to the sender
+	stopAt          time.Time
+	finalAt         time.Time
+	firstMs         int64
+	text            string // the transcript after the dictionary's rules
 
 	// rec is the run's record. finish prepares it in memory; persist writes
 	// it, once the apps the run touched are known (privacy.go). Until then
@@ -334,7 +332,6 @@ func (c *Controller) startConfigured(viaHold bool, sink func(string), language s
 	r := &run{
 		id: store.NewID(), started: time.Now(), ctx: ctx, stop: stop,
 		confirm: make(chan struct{}), ready: make(chan struct{}), lost: make(chan struct{}), more: make(chan struct{}, 1), viaHold: viaHold,
-		holdCopied: s.CapsuleStyle != config.CapsuleClassic,
 	}
 	if c.cleanupNext != nil {
 		r.cleanup = *c.cleanupNext
@@ -460,7 +457,17 @@ func (c *Controller) cancel(practiceOnly bool) {
 
 // Dismiss closes the overlay of a finished or failed dictation.
 func (c *Controller) Dismiss() {
+	c.dismissMatching(nil, nil)
+}
+
+// A timer must match and dismiss under the same lock, so a new run cannot
+// replace the old one between the check and the dismissal.
+func (c *Controller) dismissMatching(expected *run, view *View) {
 	c.mu.Lock()
+	if view != nil && (c.cur != expected || c.view != *view) {
+		c.mu.Unlock()
+		return
+	}
 	r := c.cur
 	if c.view.Phase != Done && c.view.Phase != Failed {
 		c.mu.Unlock()
@@ -1249,22 +1256,11 @@ func (c *Controller) done(r *run, message string) {
 		c.changed()
 		return
 	}
+	finished := c.view
 	c.mu.Unlock()
 	c.changed()
-	if r.holdCopied && message == c.tr("copiedFallback") {
-		return // until the cross, Escape or the next dictation
-	}
-	wait := 900 * time.Millisecond
-	if message != "" {
-		wait = 2200 * time.Millisecond
-	}
-	time.AfterFunc(wait, func() {
-		c.mu.Lock()
-		same := c.cur == r && c.view.Phase == Done
-		c.mu.Unlock()
-		if same {
-			c.Dismiss()
-		}
+	time.AfterFunc(TerminalNoticeDuration, func() {
+		c.dismissMatching(r, &finished)
 	})
 }
 

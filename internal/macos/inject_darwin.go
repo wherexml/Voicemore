@@ -12,8 +12,8 @@ import (
 	"github.com/ebitengine/purego/objc"
 )
 
-// Target is the app and the input element that had the keyboard as a
-// recording started, where its text goes.
+// Target is a snapshot of an app and its focused element. Recording-start
+// snapshots supply context; insertion captures its own current destination.
 type Target struct {
 	AppName  string
 	BundleID string
@@ -311,6 +311,33 @@ func releaseClipboard(saved []clipboardItem) {
 	}
 }
 
+// captureInputTarget gives a newly activated local editor time to publish its
+// input focus. A menu can already advertise Paste while the editor is still
+// mounting; dispatching at that point can silently lose the transcript.
+// Ready fields and configured remote clients have no settling delay. Never
+// activate an application or retry a keyboard event here.
+func captureInputTarget(o InsertOptions) *Target {
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for {
+		t := CaptureTarget()
+		ready := false
+		OnMain(func() {
+			ready = axIsProcessTrusted() && frontmostPID() == t.pid && editableInput(t.element)
+		})
+		for _, rule := range o.RemoteInputs {
+			if rule.BundleID != "" && rule.BundleID == t.BundleID {
+				ready = true
+				break
+			}
+		}
+		if ready || time.Now().After(deadline) || (o.Context != nil && o.Context.Err() != nil) {
+			return t
+		}
+		t.Release()
+		time.Sleep(25 * time.Millisecond)
+	}
+}
+
 // Insert uses only the input focused now, never activating or refocusing an
 // app. If none is editable, the transcript stays on the clipboard for Cmd+V.
 // The caller owns res.Target and must release it when finished observing edits.
@@ -322,7 +349,7 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 	if err := load(); err != nil {
 		return res, err
 	}
-	current := CaptureTarget()
+	current := captureInputTarget(o)
 	res.Target = current
 	if o.OnTarget != nil {
 		o.OnTarget(current)
@@ -367,12 +394,25 @@ func Insert(text string, o InsertOptions) (InsertResult, error) {
 		if cur != 0 {
 			defer cfRelease(cur)
 		}
-		res.FocusVerified = axIsProcessTrusted() && current.element != 0 &&
-			frontmostPID() == current.pid && cur != 0 && cfEqual(cur, current.element) && editableInput(cur)
+		sameFocus := frontmostPID() == current.pid &&
+			((cur == 0 && current.element == 0) || (cur != 0 && current.element != 0 && cfEqual(cur, current.element)))
+		res.FocusVerified = axIsProcessTrusted() && sameFocus && editableInput(cur)
 		// Missing AX editability is not proof that keyboard input is unavailable.
 		// A native enabled Paste command is independent evidence of support.
-		canPaste := res.FocusVerified || (axIsProcessTrusted() && frontmostPID() == current.pid && pasteMenuEnabled(current.pid))
+		canPaste := res.FocusVerified || (axIsProcessTrusted() && sameFocus && pasteMenuEnabled(current.pid))
 		canPaste = canPaste && frontmostPID() == current.pid
+		// Menu traversal can cross another focus transition. An enabled menu
+		// must not authorize a paste into a different field than the one bound
+		// to privacy, history, edit observation and the send rule.
+		if canPaste {
+			latest := focusedElement(current.pid)
+			canPaste = (latest == 0 && current.element == 0) ||
+				(latest != 0 && current.element != 0 && cfEqual(latest, current.element))
+			if latest != 0 {
+				cfRelease(latest)
+			}
+			canPaste = canPaste && frontmostPID() == current.pid
+		}
 		if canPaste {
 			saved = saveClipboard()
 			// The observer binds to this exact field and selection, read before

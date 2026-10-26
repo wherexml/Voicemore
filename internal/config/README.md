@@ -28,6 +28,18 @@ sub2api 的非敏感地址为 `providers.sub2apiEndpoint`；专用 Key 使用加
 
 macOS 隔离复验：`python3 scripts/verify-persistence-exit.py --output artifacts/persistence-exit-new-run`（输出目录须不存在）。该命令按固定开发身份签名独立 `Voicemore Dev.app`，使用真实 Cocoa 主线程调度和退出回调，确定性安排保存通知与退出取消重叠；分别覆盖索引失败、录音失败、双重失败、正常保存和私密运行，使用 race detector 检查并发，并重开合成历史核对提交状态、已插入结果、重复结算和 WAV 残留。每项输出 JSON；超时保存线程栈并失败退出。它不录音、不粘贴、不注册触发键、不读写正式数据，不安装或发布；不替代真实麦克风和日常 App 的人工退出体验验收。
 
+## 实时字幕设置
+
+`settings.subtitles` 是独立的值结构，源于 `subtitles.go`，不改听写的 `asrAssign` 与 `translationLanguage`。读取展示/运行时调用 `Normalized()`：默认 sherpa、中英双语模型；Qwen 可选中文、自动、英语，缺省中文；翻译目标缺省 `zh-Hans`。原文/译文字号默认 15/22，范围 12–24/16–36，不透明度默认 72%、范围 30–100%，`hideOriginal` 默认 false。旧设置缺字段按零值读取并规范化，不需要写迁移版本。
+
+`placed`、`x/y/width/height` 保存浮窗位置尺寸，恢复和屏幕边界由应用层处理；偏好写入沿用 Store 的原子保存。字幕文字、说话人和手动归属不存入 settings，只有显式保存才写独立会话槽位。详细行为与验收见[字幕规格](../../docs/public/LIVE-SUBTITLES.md)。
+
+## 自动发送应用迁移
+
+`aiCatalogVersion < 1` 才清理旧非 AI 规则并补齐预设；迁移后保留手动加入的普通应用、删除和空列表，仍清理空 Bundle ID 与重复项。共享默认只作用于已加入列表且选择继承的应用，不扩展到其他应用。界面选择器与运行应用缓存分别维护，见[自动发送规格](../../docs/public/AUTO-SEND.md#产品行为)。
+
+隔离文件链路复验：`go run ./cmd/config-state-acceptance artifacts/config-state-new-run`（输出目录必须不存在）。检查 `results.json` 的保存重开、启动迁移、独立覆盖、删除后不恢复、列表外不发送及总开关用例；这不等于目标应用已经收到发送键或服务器已送达。
+
 ## RemoteInputs
 
 `remoteInputs` 是可选数组，旧设置缺失该字段时保持空规则，不自动启用远程输入。

@@ -13,9 +13,10 @@
 | 全局触发键 | [后台监听、主动恢复与原生验收](HOTKEY.md) | `internal/macos/hotkey_darwin.go` |
 | 蓝牙音频恢复 | [AirPods 播放恢复与实机验收](BLUETOOTH-AUDIO.md) | `internal/macos/bluetooth_output_darwin.go`、`internal/macos/mic_darwin.go` |
 | 翻译听写 | [快捷键、官方组合服务与失败恢复](TRANSLATION.md) | `dictation_controls.go`、`internal/session/controller.go`、`internal/cleanup/cleanup.go` |
+| 实时字幕 | [系统音频实时识别与翻译、说话人标签与会话保存、浮窗、安装与验收](LIVE-SUBTITLES.md) | `subtitles.go`、`subtitles_live.go`、`subtitles_translate.go`、`subtitles_correct.go`、`subtitles_speakers.go`、`subtitles_store.go`、`prefs_subtitles.go`、`internal/subtitles/`、`scripts/subtitle_capture.py` |
 | 外接设备按键 | [通用添加、识别与多绑定](DEVICE-BUTTONS.md) | `dictation_controls.go`、`internal/macos/device_buttons_darwin.go`、`internal/macos/button_capabilities.go`、`internal/macos/device_button_interception_darwin.go` |
 | DJI 麦克风按钮 | [设备匹配与原生验收](DJI-BUTTON.md) | `internal/macos/dji_darwin.go` |
-| 听写胶囊 | [显示规则与原生验收](CAPSULE.md) | `overlay.go`、`overlay_v2.go` |
+| 听写胶囊 | [显示规则与原生验收](CAPSULE.md)、[完成提示 3 秒退出](CAPSULE.md#完成提示统一退出2026-10-27) | `overlay.go`、`overlay_v2.go` |
 | 远程桌面输入 | [匹配规则、剪贴板与原生验收](REMOTE-INPUT.md) | `prefs_remote.go`、`internal/macos/remote_darwin.go`、`internal/session/controller.go` |
 | 本地语音模型 | [按需加载、句尾预览与验收](LOCAL-ASR.md)、[识别语言](LOCAL-ASR.md#识别语言)、[Qwen3-ASR 自定义能力与参数](QWEN3-ASR-CUSTOMIZATION.md) | `internal/localasr/`、`internal/session/controller.go` |
 | 云端语音识别 | [Seed ASR 2.0、Agent Plan 与豆包 DDC 验收](../../internal/cloudasr/README.md) | `internal/cloudasr/volc.go`、`internal/providers/providers.go` |
@@ -39,11 +40,13 @@
 
 `spec/` 保存本机前端、设计与验收规格（入口 `spec/README.md`），不入 Git；克隆仓库后不要求该目录存在，公开模块规格仍由本索引维护。
 
+官网候选 `website/approved/`、`website/v2/`、`website/v3/`、`website/q/`、主视觉候选 `website/assets/hero-concepts/` 和 `tmp/` 仅保留本机；已跟踪的根 `website/` 页面另行维护。实时字幕的实现分层见[模块入口](../../internal/subtitles/README.md)，偏好见[配置说明](../../internal/config/README.md#实时字幕设置)，采集助手签名见[打包说明](PACKAGING.md#实时字幕采集助手)。
+
 `docs/sprint/`、拼写兼容路径 `doocs/sprint/` 和 `artifacts/` 都只留在本地。验收步骤不等于已通过验收：实际执行时记录构建提交、环境、输入、预期、实测和证据路径，未执行项标记为未验证。不要提交私人转录、截图或凭证。
 
 - 分段更新：30 秒目标 / 32 秒硬上限与短尾提示防护见 [分段规格](ASR-SEGMENTATION.md)。
 
-- [自动发送与标准选择器](AUTO-SEND.md)：全局默认、按应用覆盖、延迟取消与编辑、五行深色浮层、远程下拉和原生验收。
+- [自动发送与标准选择器](AUTO-SEND.md)：全局默认、添加已安装应用、按应用覆盖、[跨应用焦点交接](AUTO-SEND.md#跨应用输入焦点交接2026-10-27)、延迟取消与编辑、五行深色浮层、远程下拉和原生验收。
 
 文字整理顶部总开关、规则编辑持久化、基础格式联动与组合云服务边界：[原生文字整理总开关](../../internal/cleanup/README.md#原生文字整理总开关2026-10-18)。
 

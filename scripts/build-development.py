@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import subtitle_capture
 
 ROOT = Path(__file__).resolve().parent.parent
 POLICY = json.loads((ROOT / 'internal/distribution/policy.json').read_text())
@@ -41,11 +42,13 @@ config.pop('updates', None)
 config['macos']['signingIdentity'] = identity
 config['macos'].pop('notarize', None)
 (work / 'mygo.json').write_text(json.dumps(config, indent=2) + '\n')
+subtitle_capture.build(work, identity, POLICY['debugBundleID'] + '.audiotap', release=False)
 env = dict(os.environ)
 env.pop('MYGO_UPDATER_PRIVATE_KEY', None)
 subprocess.run(['go', 'tool', 'mygo', 'build', '-platform', 'darwin/arm64', '-skip-dmg', '-sign', identity], cwd=work, env=env, check=True)
 app = ROOT / 'build/development/darwin-arm64/Voicemore Dev.app'
 subprocess.run(['codesign', '--verify', '--deep', '--strict', app], check=True)
+subtitle_capture.verify_bundled(app)
 actual = subprocess.check_output(['plutil', '-extract', 'CFBundleIdentifier', 'raw', app / 'Contents/Info.plist'], text=True).strip()
 if actual != POLICY['debugBundleID']:
     raise SystemExit('Development bundle isolation failed.')
