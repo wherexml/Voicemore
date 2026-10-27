@@ -63,7 +63,10 @@ type overlay struct {
 	levelAt          time.Time
 	// classic is the renderer of this dictation, read from the settings
 	// when it starts, so a change of style never lands mid-dictation.
-	classic      bool
+	classic bool
+	// bubble lays the V2 renderer out as the bubble capsule
+	// (overlay_bubble.go); it is never set with classic.
+	bubble       bool
 	width        int
 	noticeID     uint64
 	noticeView   session.View
@@ -74,7 +77,7 @@ type overlay struct {
 
 func newOverlay(a *app) *overlay {
 	o := &overlay{a: a}
-	o.classic = a.settings.Get().CapsuleStyle == config.CapsuleClassic
+	o.readStyle()
 	o.win = mygo.NewFlyout(mygo.FlyoutOptions{
 		Tray:      a.tray,
 		Width:     overlayW,
@@ -89,6 +92,13 @@ func newOverlay(a *app) *overlay {
 		}
 	})
 	return o
+}
+
+// readStyle takes the capsule style from the settings.
+func (o *overlay) readStyle() {
+	style := o.a.settings.Get().CapsuleStyle
+	o.classic = style == config.CapsuleClassic
+	o.bubble = style == config.CapsuleBubble
 }
 
 // sync shows the controller's state, from any goroutine.
@@ -166,7 +176,7 @@ func (o *overlay) syncView(v session.View) {
 		macos.ConfigureOverlay(o.win.NativeHandle())
 		o.height = 0
 		// A new dictation: the style chosen in Settings applies now.
-		o.classic = o.a.settings.Get().CapsuleStyle == config.CapsuleClassic
+		o.readStyle()
 		o.v2 = v2State{}
 	}
 	o.place()
@@ -250,7 +260,10 @@ func (o *overlay) place() {
 		w = overlayV2W
 		h += v2HintRoom
 	}
-	if k := o.panelKind(); k != panelNone {
+	if o.bubble {
+		// The bubble below the chip, as its last frame measured it.
+		h += o.v2.bubbleH
+	} else if k := o.panelKind(); k != panelNone {
 		if o.classic {
 			h += panelHeight(k) + 8
 		} else {

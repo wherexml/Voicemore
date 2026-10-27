@@ -483,15 +483,18 @@ func (p *prefsWindow) general(c *ui.Context) {
 				p.a.refreshAll()
 			}
 		})
-		// The dictation capsule: the indigo one, or the classic black one
-		// to go back to. The overlay reads it when a dictation starts.
+		// The dictation capsule: the indigo one, the classic black one to
+		// go back to, or the bubble. The overlay reads it when a dictation
+		// starts.
 		setting(c, "capsule", nil, T("sCapsule"), T("sCapsuleHint"), func() {
-			styles := []string{config.CapsuleV2, config.CapsuleClassic}
+			styles := []string{config.CapsuleV2, config.CapsuleClassic, config.CapsuleBubble}
 			i := 0
-			if p.a.settings.Get().CapsuleStyle == config.CapsuleClassic {
-				i = 1
+			for k, style := range styles {
+				if style == p.a.settings.Get().CapsuleStyle {
+					i = k
+				}
 			}
-			if segmented(c.Key("seg"), &i, T("capV2"), T("capClassic")).Changed() {
+			if segmented(c.Key("seg"), &i, T("capV2"), T("capClassic"), T("capBubble")).Changed() {
 				p.change(func(s *config.Settings) { s.CapsuleStyle = styles[i] })
 			}
 		})

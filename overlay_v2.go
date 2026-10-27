@@ -72,6 +72,12 @@ type v2State struct {
 	// scroll is the expanded transcript's; it follows the newest words
 	// unless the user scrolled up from them.
 	scroll ui.ScrollState
+	// The bubble capsule's: what its bubble shows, its row's height for
+	// the window, the pointer over it, and its scroll.
+	bubble       bubbleContent
+	bubbleH      int
+	bubbleHover  bool
+	bubbleScroll ui.ScrollState
 }
 
 // The states of the mock, from the session's view.
@@ -209,7 +215,7 @@ func (o *overlay) viewV2(c *ui.Context) {
 
 	ui.Column(c).Fill().Padding(0, 0, float32(o.room), 0).Justify(ui.End).AlignItems(ui.Center).
 		Gap(v2PanelGap).Opacity(alpha).Translate(0, rise).Children(func() {
-		if pk := o.panelKind(); pk != panelNone && !sending {
+		if pk := o.panelKind(); pk != panelNone && !sending && !o.bubble {
 			o.panelV2(c, pk, kind)
 		}
 		// Close, the pill, and on the right the same room again, so the
@@ -221,7 +227,7 @@ func (o *overlay) viewV2(c *ui.Context) {
 			wrap := ui.Row(c.Key("v2wrap")).AlignItems(ui.Center).Gap(v2CloseGap - v2HitOut)
 			// Keyboard focus shows Close as hovering does; a click, which
 			// focuses without showing it, does not keep it out.
-			hovered := o.v2PointerOver(wrap) || o.v2.keyFocus
+			hovered := o.v2PointerOver(wrap) || o.v2.keyFocus || o.v2.bubbleHover
 			if hovered {
 				o.v2.hoverAt = now
 			}
@@ -231,11 +237,18 @@ func (o *overlay) viewV2(c *ui.Context) {
 			}
 			wrap.Children(func() {
 				closeFocus := o.v2Close(c, reveal, canClose)
-				o.v2Pill(c, kind, label, canExpand)
+				if o.bubble {
+					o.bubbleChip(c, kind, label, canExpand)
+				} else {
+					o.v2Pill(c, kind, label, canExpand)
+				}
 				o.v2.keyFocus = closeFocus
 			})
 			ui.Box(c).Size(v2Hit+v2CloseGap-v2HitOut, v2H)
 		})
+		if o.bubble {
+			o.bubbleRow(c, kind, canExpand)
+		}
 	})
 
 	if !still && (sending || now.Sub(o.v2.motion.changedAt) < v2MorphDuration) {
@@ -384,22 +397,7 @@ func (o *overlay) v2Pill(c *ui.Context, kind int, label string, canExpand bool) 
 	}
 	// Recording uses real, smoothed audio levels; their displayed heights flatten
 	// continuously when finalizing, rather than restarting as a different waveform.
-	dt := now.Sub(o.levelAt).Seconds()
-	o.levelAt = now
-	for i, target := range o.v.Levels {
-		if !session.Voiced(target) {
-			target = 0
-		}
-		tau := .09
-		if target > o.levels[i] {
-			tau = .035
-		}
-		blend := float32(1 - math.Exp(-min(dt, .05)/tau))
-		if still {
-			blend = 1
-		}
-		o.levels[i] += (target - o.levels[i]) * blend
-	}
+	o.smoothLevels(now, still)
 	for i := range m.barHeight {
 		target := float32(6)
 		duration := 360 * time.Millisecond
@@ -466,6 +464,27 @@ func (o *overlay) v2Pill(c *ui.Context, kind int, label string, canExpand bool) 
 		})
 		o.v2SendTools(c, m.toolsWidth, m.toolsAlpha, m.toolsReveal)
 	})
+}
+
+// smoothLevels eases the displayed levels towards the heard ones between
+// audio callbacks: quickly up, more slowly down.
+func (o *overlay) smoothLevels(now time.Time, still bool) {
+	dt := now.Sub(o.levelAt).Seconds()
+	o.levelAt = now
+	for i, target := range o.v.Levels {
+		if !session.Voiced(target) {
+			target = 0
+		}
+		tau := .09
+		if target > o.levels[i] {
+			tau = .035
+		}
+		blend := float32(1 - math.Exp(-min(dt, .05)/tau))
+		if still {
+			blend = 1
+		}
+		o.levels[i] += (target - o.levels[i]) * blend
+	}
 }
 
 // v2DrawMark paints the 27×18 slot: five bars while working, the mint star
@@ -606,7 +625,6 @@ func (o *overlay) v2PanelHeight(kind int) int {
 // centred notice, or a failure's kept words with what can be done.
 func (o *overlay) panelV2(c *ui.Context, pk, kind int) {
 	v := o.v
-	ctrl := o.a.ctrl
 	lineH := func(size float32) float32 {
 		_, h := c.MeasureText(0, ui.Span{Text: "Xg", Size: size})
 		return h
@@ -624,9 +642,6 @@ func (o *overlay) panelV2(c *ui.Context, pk, kind int) {
 	var h float32
 	caption := func(s string) {
 		ui.Text(c, s).FontSize(small).TextColor(v2PanelDim).MaxLines(2)
-	}
-	actions := func(buttons func()) {
-		ui.Row(c).Gap(6).Children(buttons)
 	}
 	switch {
 	case pk == panelNotice && (v.Phase == session.Done || v.Phase == session.Failed):
@@ -675,38 +690,14 @@ func (o *overlay) panelV2(c *ui.Context, pk, kind int) {
 	default:
 		// Kept words: neutral, the full text safe to copy; a failed tidy
 		// offers trying again or the original.
-		capText := T("v2RetainedCap")
-		switch {
-		case v.CleanupFailed:
-			capText = v.Message
-		case v.Notice != "":
-			capText = v.Notice
-		case !v.Retained && v.Message != "":
-			capText = v.Message
-		}
+		capText := o.keptCaption()
 		h = 25 + 2 + textH(capText, small, 2) + 6 + textH(v.Text, body, 3) + 11 + 26
 		card.Padding(12, 14, 13, 14).Children(func() {
 			caption(capText)
 			ui.Box(c).Height(6)
 			ui.Text(c, v.Text).FillWidth().FontSize(body).TextColor(v2PanelText).MaxLines(3)
 			ui.Box(c).Height(11)
-			actions(func() {
-				if v.CleanupFailed {
-					if v2Button(c, "retry", T("v2Retry"), true) {
-						go ctrl.RetryCleanup()
-					}
-					if v2Button(c, "raw", T("v2UseRaw"), false) {
-						go ctrl.InsertOriginal()
-					}
-					if v2Button(c, "copy", T("copyText"), false) {
-						go ctrl.CopyFailed()
-					}
-					return
-				}
-				if v2Button(c, "copy", T("copyText"), true) {
-					go ctrl.CopyFailed()
-				}
-			})
+			o.keptActions(c)
 		})
 	}
 	// Size the window to what the card measured, after this frame.
@@ -714,6 +705,44 @@ func (o *overlay) panelV2(c *ui.Context, pk, kind int) {
 		o.v2.panelH = need
 		go o.win.Update(o.place)
 	}
+}
+
+// keptCaption says why words were kept: a failed tidy's message, why the
+// dictation ended, or that they could not be inserted.
+func (o *overlay) keptCaption() string {
+	v := o.v
+	switch {
+	case v.CleanupFailed:
+		return v.Message
+	case v.Notice != "":
+		return v.Notice
+	case !v.Retained && v.Message != "":
+		return v.Message
+	}
+	return T("v2RetainedCap")
+}
+
+// keptActions are what can be done with kept words: a failed tidy offers
+// trying again or the original; all of them can be copied.
+func (o *overlay) keptActions(c *ui.Context) {
+	ctrl := o.a.ctrl
+	ui.Row(c).Gap(6).Children(func() {
+		if o.v.CleanupFailed {
+			if v2Button(c, "retry", T("v2Retry"), true) {
+				go ctrl.RetryCleanup()
+			}
+			if v2Button(c, "raw", T("v2UseRaw"), false) {
+				go ctrl.InsertOriginal()
+			}
+			if v2Button(c, "copy", T("copyText"), false) {
+				go ctrl.CopyFailed()
+			}
+			return
+		}
+		if v2Button(c, "copy", T("copyText"), true) {
+			go ctrl.CopyFailed()
+		}
+	})
 }
 
 // v2Button is a 26 px action of the card; the first is mint.
@@ -745,7 +774,7 @@ func v2Button(c *ui.Context, key, label string, primary bool) bool {
 func init() {
 	for k, v := range map[string][3]string{
 		"sCapsule":       {"Dictation capsule", "聽寫膠囊", "听写胶囊"},
-		"sCapsuleHint":   {"Classic is the earlier black capsule. A change applies from the next dictation.", "經典為原先的黑色膠囊；變更自下一次聽寫起生效。", "经典为原先的黑色胶囊；更改从下一次听写起生效。"},
+		"sCapsuleHint":   {"Classic is the earlier black capsule; Bubble shows a small companion above your words in a speech bubble. A change applies from the next dictation.", "經典為原先的黑色膠囊；氣泡會在小夥伴下方以對話氣泡顯示你說的話。變更自下一次聽寫起生效。", "经典为原先的黑色胶囊；气泡会在小伙伴下方用对话气泡显示你说的话。更改从下一次听写起生效。"},
 		"capV2":          {"Indigo", "靛藍", "靛蓝"},
 		"capClassic":     {"Classic", "經典", "经典"},
 		"v2Preparing":    {"", "", ""},

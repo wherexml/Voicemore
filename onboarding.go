@@ -453,8 +453,23 @@ func (o *onboardWindow) intro(c *ui.Context, s config.Settings) {
 
 // capsuleMini is the capsule of the chosen style, small: Indigo is
 // overlay_v2.go's pill with five 3 px bars, the last mint, 28 px high;
-// Classic is the black pill of overlay.go with its level wave.
+// Classic is the black pill of overlay.go with its level wave; Bubble is
+// overlay_bubble.go's companion beside a bubble of two lines.
 func capsuleMini(c *ui.Context, s config.Settings) {
+	if s.CapsuleStyle == config.CapsuleBubble {
+		ui.Row(c).Height(28).Gap(4).AlignItems(ui.Center).Children(func() {
+			ui.Box(c).Size(28, 28).Radius(14).Gradient(v2Indigo, v2IndigoEnd, 135).Draw(func(p *ui.Painter, r ui.Rect) {
+				drawBuddy(p, r, faceIdle, markBars, 0, 0, true)
+			})
+			ui.Row(c).Height(22).Padding(0, 9).Gap(4).Radius(11).AlignItems(ui.Center).
+				Gradient(bubbleTop, bubbleEnd, 180).Children(func() {
+				for _, w := range []float32{18, 11} {
+					ui.Box(c).Size(w, 3).Radius(1.5).Background(v2Ink.Alpha(.8))
+				}
+			})
+		})
+		return
+	}
 	if s.CapsuleStyle == config.CapsuleClassic {
 		ui.Row(c).Height(28).Padding(0, 10).Gap(3).Radius(14).AlignItems(ui.Center).Background(ui.RGB(42, 44, 50)).Children(func() {
 			for _, h := range []float32{4, 8, 12, 6, 13, 9, 5} {
