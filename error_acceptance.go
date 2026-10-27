@@ -50,13 +50,14 @@ func (a *app) startErrorAcceptance() {
 			}
 			a.overlay.syncView(session.View{Phase: session.Preparing})
 		})
-		for _, classic := range []bool{false, true} {
-			label := "indigo"
-			if classic {
-				label = "classic"
-			}
+		for _, label := range []string{"indigo", "classic", "bubble"} {
+			classic, bubble := label == "classic", label == "bubble"
 			failed := session.View{Phase: session.Failed, Message: "sub2api ASR_EMPTY_RESULT (task acceptance-" + label + ")"}
-			onUI(func() { a.overlay.syncView(failed); a.overlay.classic = classic; a.overlay.place() })
+			onUI(func() {
+				a.overlay.syncView(failed)
+				a.overlay.classic, a.overlay.bubble = classic, bubble
+				a.overlay.place()
+			})
 			time.Sleep(2 * time.Second)
 			check(label+" visible before deadline", true)
 			onUI(func() { a.overlay.syncView(failed) })
@@ -88,7 +89,7 @@ func (a *app) startErrorAcceptance() {
 				onUI(func() {
 					a.overlay.syncView(session.View{Phase: session.Preparing})
 					a.overlay.syncView(tc.view)
-					a.overlay.classic = classic
+					a.overlay.classic, a.overlay.bubble = classic, bubble
 					a.overlay.place()
 				})
 				time.Sleep(2500 * time.Millisecond)

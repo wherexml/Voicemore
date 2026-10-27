@@ -6,6 +6,7 @@
 - Allow manually adding installed applications to auto-send rules, with searchable selection and persistent per-app overrides.
 - Wait briefly for a newly focused local editor before insertion and recheck the target before dispatching paste; retain the clipboard fallback when focus changes.
 - Dismiss completed and failed capsule notices after three seconds in both styles, protecting the next session from stale timers.
+- Add a third dictation capsule style, Bubble: a small companion shows the state above a speech bubble of the words as they are heard. The bubble opens to six lines on click, and kept words after a failure stay in it with their actions.
 
 Subtitle models and runtimes require separate setup. These source changes are not a new release; limited development acceptance does not establish cross-process prioritization, general speaker accuracy, or unchanged dictation latency.
 

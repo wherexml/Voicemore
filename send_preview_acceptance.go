@@ -81,7 +81,7 @@ func (a *app) startSendPreviewAcceptance() {
 											if !o.win.IsVisible() {
 												o.v2 = v2State{}
 											}
-											o.classic = false
+											o.classic, o.bubble = false, false
 											o.expanded = false
 											o.area = mygo.Screen.DisplayNearestPoint(mygo.Screen.CursorScreenPoint()).WorkArea
 											o.fade(1)

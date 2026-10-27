@@ -172,8 +172,9 @@ type Settings struct {
 	// the work area of the display the recording started on.
 	OverlayBottomOffset int `json:"overlayBottomOffset"`
 	// CapsuleStyle is how the dictation capsule looks: empty is the indigo
-	// capsule (CapsuleV2), CapsuleClassic the earlier black one. A change
-	// applies from the next dictation.
+	// capsule (CapsuleV2), CapsuleClassic the earlier black one,
+	// CapsuleBubble a companion above the words in a speech bubble. A
+	// change applies from the next dictation.
 	CapsuleStyle string `json:"capsuleStyle,omitempty"`
 
 	ClipboardRestoreDelayMs int           `json:"clipboardRestoreDelayMs"`
@@ -211,6 +212,7 @@ type Settings struct {
 const (
 	CapsuleV2      = ""
 	CapsuleClassic = "classic"
+	CapsuleBubble  = "bubble"
 )
 
 func Defaults() Settings {
