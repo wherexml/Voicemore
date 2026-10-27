@@ -5,8 +5,7 @@
 /voiceinput
 /Voicemore
 /mock/
-/docs/*
-!/docs/public/
+/docs/
 # Runtime is a checksummed Release asset, not a Git blob.
 /resources/local-asr/*.tar.gz
 .DS_Store
@@ -35,11 +34,22 @@ __pycache__/
 
 # Local previews, visual concepts and machine-specific investigation evidence.
 /tmp/
-/website/approved/
-/website/v2/
-/website/v3/
-/website/q/
-/website/assets/hero-concepts/
+/website/
 /pelican-bicycle.html
 /sky-stroll.html
 /sky-stroll-preview.png
+
+# Local deployment state, agent instructions, service operations and experiments.
+/.cloudflare/
+/.wrangler/
+/AGENTS.md
+/CLAUDE.md
+/.gitattributes
+/internal/cleanup/README.md
+/internal/cloudasr/README.md
+/internal/config/README.md
+/internal/subtitles/README.md
+/internal/cloudasr/service-patches/
+/tools/system-audio-prototype/
+/scripts/demo-app-icons/
+/scripts/export-demo-app-icons.swift

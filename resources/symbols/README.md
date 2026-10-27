@@ -10,6 +10,6 @@ MyGo 0.4.8 无法直接绘制 `NSSymbolImageRep`，因此保存为 128×128 的�
 swift scripts/export-action-symbols.swift
 ```
 
-导出需要 macOS 和 Apple 命令行开发工具。符号缺失或编码失败时脚本停止，不生成替代图形；普通构建直接使用已保存资源，不依赖导出环境。验收步骤见 [首页与历史规格](../../docs/public/HOME-HISTORY.md#复制与删除系统图标)。
+导出需要 macOS 和 Apple 命令行开发工具。符号缺失或编码失败时脚本停止，不生成替代图形；普通构建直接使用已保存资源，不依赖导出环境。构建与验收入口见 [BUILDING.md](../../BUILDING.md)。
 
-更新侧栏的空闲与重试状态使用 `arrow.clockwise.png`，显示为 16×16 DIP，保持原有点击区域和主题着色。可单独导出而不覆盖其他资源：`swift scripts/export-action-symbols.swift resources/symbols arrow.clockwise`。原生复验见[更新界面规格](../../docs/public/UPDATE-UI.md#refresh-icon)。
+更新侧栏的空闲与重试状态使用 `arrow.clockwise.png`，显示为 16×16 DIP，保持原有点击区域和主题着色。可单独导出而不覆盖其他资源：`swift scripts/export-action-symbols.swift resources/symbols arrow.clockwise`。修改后在原生应用中复核尺寸、主题着色与点击行为。
